@@ -25,15 +25,17 @@ Die Nebenkostenabrechnung für private Vermieter. Kostenlos, und Ihre Daten blei
 
 ## Neuerungen in dieser Version
 
-Version 0.13.0: Vorschlag für die neue Vorauszahlung, alle Zählerstände auf einmal erfassen und Rechnungen wie im Vorjahr vorbelegen. Die Rechenregeln bleiben unverändert.
+Version 0.14.0: Zählerwechsel und Eichfrist, Soll und Ist der Vorauszahlungen, Fristenkalender, geführter Jahreswechsel und Lohnanteile nach § 35a EStG. Die Rechenregeln bleiben unverändert.
 
-- Nach der Abrechnung schlägt NebenkostenFix eine angepasste monatliche Vorauszahlung vor. Ein Platzhalter übernimmt den Vorschlag ins Anschreiben, daraus lässt sich eine Serienbuchung anlegen.
-- Im Tab „Zähler“ erfassen Sie alle Zähler einer Immobilie zum Stichtag in einer Liste, am Handy mit Foto direkt von der Kamera.
-- „Wie im Vorjahr füllen“ legt die Rechnungen des Vorjahres als Zeilen der Tabelle an. Sie tragen nur noch die Beträge ein.
-- Der Assistent „Jahr abrechnen“ markiert Kostenarten, die sich gegenüber dem Vorjahr um mehr als 20 % ändern.
-- Der Hinweis „Nach älterem Regelstand erstellt“ erklärt, was sich geändert hat. Die Korrekturvorschau nennt, ob die Korrektur zugunsten oder zulasten des Mieters ausfällt, und warnt nach Ablauf der Frist.
-- Flächen und Mengen in den Umlagetexten stehen mit Dezimalkomma und „m²“.
-- Eine Korrektur rechnet bei einer Heizungsanlage jetzt mit den Heizkosten. Bisher fehlten sie in der neu berechneten Abrechnung.
+- Zähler lassen sich bearbeiten und tauschen. Beim Zählerwechsel läuft der Verbrauch über beide Zähler weiter, das Ende der Eichfrist wird vorgeschlagen.
+- Je Mieter zeigt „Vorauszahlungen“ Soll und Ist für jeden Monat. Bei Rückstand steht eine Zahlungserinnerung als Vorlage bereit.
+- Der Fristenkalender sammelt Abrechnungs-, Einwendungs- und Eichfristen und lässt sich als Kalenderdatei (.ics) laden.
+- „Neues Jahr beginnen“ führt durch Ablesen, Vorauszahlung und Rechnungen wie im Vorjahr. Vor dem Festsetzen zeigt ein Prüfstand Auffälliges und den Weg zur Behebung.
+- Die Wohnungsauswertung zeigt die Kosten je m² über mehrere Jahre.
+- Lohnanteile nach § 35a EStG lassen sich je Rechnung erfassen. Die Abrechnung weist sie in einer eigenen Tabelle aus.
+- Das Paket zur Belegeinsicht enthält Abrechnung, Rechenweg, Belege und die Ablesefotos der Wohnung.
+- Anrede je Mieter, Anschreiben in Ich- oder Wir-Form. Das PDF ist kürzer und trennt Wörter nicht mehr mitten im Wort.
+- Am Handy erscheinen Zähler als Karten und die Aktionen eines Bereichs in einem Menü.
 
 ## Produktmerkmale
 
