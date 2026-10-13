@@ -10,7 +10,8 @@ from datetime import datetime
 from decimal import Decimal
 from nebenkostenfix import zeit
 from nebenkostenfix.pdf_cover_page import build_cover_page_elements
-from nebenkostenfix.girocode_generator import build_girocode_elements, vermieter_ausweis
+from nebenkostenfix.girocode_generator import (
+    _format_iban_display, build_girocode_elements, vermieter_ausweis)
 from nebenkostenfix.geld import NULL
 from nebenkostenfix import betrkv
 from nebenkostenfix.zeitraum import HINWEIS_TAGESKONVENTION
@@ -726,9 +727,13 @@ class PDFGenerator:
 
         elements.append(Spacer(1, 40))
         
+        # NK-248: Sätze ohne ich/wir; die hinterlegte IBAN steht im Satz.
         if balance > 0:
-            elements.append(Paragraph("Bitte überweisen Sie den ausstehenden Betrag innerhalb von 14 Tagen auf das bekannte Konto.", self.styles['HeaderNormal']))
-        elements.append(Paragraph("Bei Fragen zur Abrechnung stehen wir Ihnen gerne zur Verfügung.", self.styles['HeaderNormal']))
+            iban = vermieter_ausweis()[1]
+            konto = (f"das Konto mit der IBAN {_format_iban_display(iban)}"
+                     if iban else "das bekannte Konto")
+            elements.append(Paragraph(f"Bitte überweisen Sie den ausstehenden Betrag innerhalb von 14 Tagen auf {konto}.", self.styles['HeaderNormal']))
+        elements.append(Paragraph("Rückfragen zur Abrechnung werden gern beantwortet.", self.styles['HeaderNormal']))
         
 
         # NK-245: ohne Zaehlerzeile kein leerer Nachweisteil samt Umbruch.

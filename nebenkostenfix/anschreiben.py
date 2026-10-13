@@ -40,7 +40,7 @@ VORGABE = (
     '{saldo_betrag} ({saldo_art}).\n\n'
     '{aufforderung}\n\n'
     'Sie können Einwendungen gegen diese Abrechnung innerhalb von zwölf '
-    'Monaten nach ihrem Zugang bei mir geltend machen. Die Belege können '
+    'Monaten nach ihrem Zugang geltend machen. Die Belege können '
     'Sie auf Verlangen einsehen.\n\n'
     'Mit freundlichen Grüßen\n'
     '{vermieter_name}'
@@ -100,8 +100,9 @@ def _aufforderung(saldo: Decimal) -> str:
     Lücke ist gewollt (siehe Modul-Dokumentation).
     """
     if saldo > 0:
-        return (f'Wir bitten Sie, den ausstehenden Betrag in Höhe von '
-                f'{euro_text(saldo)} auszugleichen.')
+        # NK-248: ohne ich/wir -- ob Privatperson oder Firma, weiß erst NK-264.
+        return (f'Bitte gleichen Sie den ausstehenden Betrag in Höhe von '
+                f'{euro_text(saldo)} aus.')
     return ''
 
 

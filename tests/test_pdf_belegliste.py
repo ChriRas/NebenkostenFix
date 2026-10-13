@@ -414,3 +414,26 @@ def test_ohne_anbieter_keine_anbieterzeile(unkomprimiert, detailliert):
     geklebt = _geklebt(_pdf(detailliert, [ohne]))
     assert 'Unbekannt' not in geklebt and 'Anbieter:' not in geklebt
     assert 'Anbieter:StadtwerkeMusterstadt' in _geklebt(_pdf(detailliert, [_posten()]))
+
+
+# --- Die Schlusssätze (NK-248) ---------------------------------------------
+
+
+def test_der_schluss_nennt_die_hinterlegte_iban(unkomprimiert, monkeypatch):
+    """NK-248: mit IBAN steht sie im Zahlungssatz, nicht „das bekannte Konto“."""
+    monkeypatch.setenv('VERMIETER_IBAN', 'DE89370400440532013000')
+    geklebt = _geklebt(_pdf(False, [_posten()]))
+    assert ('Bitteüberweisen' in geklebt
+            and 'aufdasKontomitderIBANDE89370400440532013000.' in geklebt)
+    assert 'bekannteKonto' not in geklebt
+    assert 'stehenwir' not in geklebt
+    assert 'RückfragenzurAbrechnungwerdengernbeantwortet.' in geklebt
+
+
+def test_der_schluss_ohne_iban_bleibt_beim_bekannten_konto(unkomprimiert, monkeypatch):
+    """Ohne hinterlegte IBAN bleibt der bisherige Zahlungssatz; ohne ich/wir."""
+    monkeypatch.delenv('VERMIETER_IBAN', raising=False)
+    geklebt = _geklebt(_pdf(False, [_posten()]))
+    assert 'innerhalbvon14TagenaufdasbekannteKonto.' in geklebt
+    assert 'IBAN' not in geklebt
+    assert 'stehenwir' not in geklebt
