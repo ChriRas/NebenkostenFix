@@ -1028,6 +1028,30 @@ async function ablesenPruefen() {
     }
 }
 
+// --- NK-256: Zahlungskarten ohne Nullzeilen -----------------------------
+{
+    const m = appQuelle.match(/function renderPayments\([\s\S]*?\n\}/);
+    if (!m) {
+        pruefe('NK-256: renderPayments gibt es', false);
+    } else {
+        const karten = [];
+        const zahlung = (tenant_id, type, amount) => ({ tenant_id, tenant_name: 'M' + tenant_id, type, amount,
+            payment_date: '2026-01-01' });
+        new Function('paymentsGrid', 'payments', 'document', 'escapeHtml', 'leerzustand', m[0] + '; renderPayments();')(
+            { replaceChildren() {}, appendChild: k => karten.push(k.innerHTML) },
+            [zahlung(1, 'Nebenkostenvorauszahlung', 200), zahlung(2, 'Miete', 700), zahlung(2, 'Nebenkostenvorauszahlung', 150),
+             zahlung(3, 'Kaution', 2100)],
+            { createElement: () => ({}) }, s => String(s), () => '');
+        const [nurNk, beides, nurKaution] = karten;
+        pruefe('NK-256: ohne Mietzahlung keine Zeile „Miete“, mit Zahlung schon',
+            karten.length === 3 && !nurNk.includes('Miete:') && nurNk.includes('Nebenkosten:')
+            && beides.includes('Miete:') && beides.includes('Nebenkosten:') && beides.includes('Gesamt (mtl.)'));
+        pruefe('NK-256: nur Kaution ergibt keine Monatszeilen mit 0,00 €',
+            karten.length === 3 && !nurKaution.includes('Miete:') && !nurKaution.includes('Nebenkosten:')
+            && !nurKaution.includes('Gesamt (mtl.)') && nurKaution.includes('Kaution:'));
+    }
+}
+
 // --- NK-254: Wohnungsvergleich erst ab zwei Wohnungen mit Daten ---------------
 {
     const m = appQuelle.match(/function renderBuildingComparison\([\s\S]*?\n\}/);

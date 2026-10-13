@@ -148,6 +148,13 @@ VERGLEICH_JS = """() => {
   return karte.offsetParent && wohnungen < 2 ? [`Wohnungsvergleich mit ${wohnungen} Wohnung(en) sichtbar`] : [];
 }"""
 
+# NK-256: Zahlungskarten zeigten „Miete: 0,00 €“ für Mieter ohne Mietzahlung.
+ZAHLUNG_NULLZEILEN_JS = """() => [...document.querySelectorAll('#payments-grid .property-card')].flatMap(karte =>
+  [...karte.querySelectorAll('.prop-meta > div')]
+    .filter(z => /(^|[^\\d.])0,00\\s€/.test(z.textContent))
+    .map(z => `Zahlungskarte „${karte.querySelector('.prop-title').textContent}“: `
+      + `${z.textContent.replace(/\\s+/g, ' ').trim()}`))"""
+
 
 def _freier_port() -> int:
     with socket.socket() as s:
@@ -239,6 +246,11 @@ class Rundgang:
         self.seite.wait_for_timeout(1500)
         for befund in self.seite.evaluate(VERGLEICH_JS):
             self.befunde.append(f'{self.breite}px handy/reports: {befund}')
+        self.schritt = 'handy-zahlungen'
+        self.seite.evaluate("(b) => wechsleZuTab(b)", 'payments')
+        self.seite.wait_for_timeout(700)
+        for befund in self.seite.evaluate(ZAHLUNG_NULLZEILEN_JS):
+            self.befunde.append(f'{self.breite}px handy/payments: {befund}')
 
     def bereich(self, name: str, zustand: str):
         self.schritt = f'{zustand}-{name}'

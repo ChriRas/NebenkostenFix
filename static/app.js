@@ -3395,12 +3395,14 @@ function ablesenZeilen(propertyId) {
             const zusatz = [tarif, m.einheit].filter(Boolean).join(', ');
             return escapeHtml(zusatz ? `Stand (${zusatz})` : 'Stand');
         };
-        const ntHtml = m.has_dual_tariff ? `<div class="form-group feld-breit"><label for="ablesen-nt-${m.id}">${stand('NT')}</label>
+        const ntLabelHtml = stand('NT');
+        const wertLabelHtml = stand(m.has_dual_tariff && 'HT');
+        const ntHtml = m.has_dual_tariff ? `<div class="form-group feld-breit"><label for="ablesen-nt-${m.id}">${ntLabelHtml}</label>
                     <input type="number" inputmode="decimal" step="0.01" id="ablesen-nt-${m.id}"></div>` : '';
         return `<div class="glass-panel ablesen-zeile" id="ablesen-zeile-${m.id}" style="padding: 12px; margin-bottom: 12px;">
             <strong>${nameHtml}</strong><br><small style="color: var(--text-muted)">${standHtml}</small>
             <div class="felder-nebeneinander">
-                <div class="form-group feld-breit"><label for="ablesen-wert-${m.id}">${stand(m.has_dual_tariff && 'HT')}</label>
+                <div class="form-group feld-breit"><label for="ablesen-wert-${m.id}">${wertLabelHtml}</label>
                     <input type="number" inputmode="decimal" step="0.01" id="ablesen-wert-${m.id}"></div>
                 ${ntHtml}
             </div>
@@ -7732,6 +7734,19 @@ function renderPayments() {
         if (kautionPayments.length > 0) group.kaution = kautionPayments[0].amount;
         
         const totalMonthly = group.latestMiete + group.latestNK;
+        // NK-256: Zeilen ohne Zahlung dieser Art zeigten „0,00 €“; sie entfallen.
+        const zeile = (zahlungen, text, betrag) => zahlungen.length === 0 ? '' : `
+                <div style="display: flex; justify-content: space-between; width: 100%;">
+                    <span>${text}:</span>
+                    <strong>${betrag.toLocaleString('de-DE', {style: 'currency', currency: 'EUR'})}</strong>
+                </div>`;
+        const mieteHtml = zeile(mietePayments, 'Miete', group.latestMiete);
+        const nkHtml = zeile(nkPayments, 'Nebenkosten', group.latestNK);
+        const gesamtHtml = mietePayments.length + nkPayments.length === 0 ? '' : `<hr style="width: 100%; border: 0; border-top: 1px solid var(--border-color); margin: 4px 0;">
+                <div style="display: flex; justify-content: space-between; width: 100%; color: var(--text-color);">
+                    <span><strong>Gesamt (mtl.):</strong></span>
+                    <strong style="color: var(--primary-color);">${totalMonthly.toLocaleString('de-DE', {style: 'currency', currency: 'EUR'})}</strong>
+                </div>`;
         
         const card = document.createElement('div');
         card.className = 'property-card glass-panel';
@@ -7745,25 +7760,15 @@ function renderPayments() {
             </div>
             <h3 class="prop-title">${escapeHtml(group.tenant_name)}</h3>
             <div class="prop-meta" style="flex-direction: column; align-items: flex-start; gap: 8px;">
-                <div style="display: flex; justify-content: space-between; width: 100%;">
-                    <span>Miete:</span>
-                    <strong>${group.latestMiete.toLocaleString('de-DE', {style: 'currency', currency: 'EUR'})}</strong>
-                </div>
-                <div style="display: flex; justify-content: space-between; width: 100%;">
-                    <span>Nebenkosten:</span>
-                    <strong>${group.latestNK.toLocaleString('de-DE', {style: 'currency', currency: 'EUR'})}</strong>
-                </div>
+                ${mieteHtml}
+                ${nkHtml}
                 ${group.kaution > 0 ? `
                 <div style="display: flex; justify-content: space-between; width: 100%; color: var(--text-muted); font-size: 13px;">
                     <span>Kaution:</span>
                     <span>${group.kaution.toLocaleString('de-DE', {style: 'currency', currency: 'EUR'})}</span>
                 </div>
                 ` : ''}
-                <hr style="width: 100%; border: 0; border-top: 1px solid var(--border-color); margin: 4px 0;">
-                <div style="display: flex; justify-content: space-between; width: 100%; color: var(--text-color);">
-                    <span><strong>Gesamt (mtl.):</strong></span>
-                    <strong style="color: var(--primary-color);">${totalMonthly.toLocaleString('de-DE', {style: 'currency', currency: 'EUR'})}</strong>
-                </div>
+                ${gesamtHtml}
             </div>
         `;
         paymentsGrid.appendChild(card);

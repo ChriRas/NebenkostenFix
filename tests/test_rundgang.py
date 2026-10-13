@@ -79,6 +79,15 @@ def test_rundgang_prueft_am_handy_das_kopfmenue():
                      handy[:handy.index('\n    def ')])
 
 
+def test_rundgang_prueft_die_zahlungskarten_auf_nullzeilen():
+    """NK-256: Mieter ohne Mietzahlung hatten eine Zeile „Miete: 0,00 €“."""
+    assert '#payments-grid .property-card' in rundgang.ZAHLUNG_NULLZEILEN_JS
+    assert '0,00' in rundgang.ZAHLUNG_NULLZEILEN_JS
+    quelle = (WURZEL / 'scripts' / 'rundgang.py').read_text(encoding='utf-8')
+    handy = quelle[quelle.index('    def handy(self):'):]
+    assert 'self.seite.evaluate(ZAHLUNG_NULLZEILEN_JS)' in handy[:handy.index('\n    def ')]
+
+
 def test_leere_zeichenflaeche_bleibt_erhalten():
     """Ein Leerhinweis ersetzt die Zeichenfläche nicht per innerHTML: kommen
     später Daten, fände Chart.js sonst kein <canvas> mehr (Fund des Rundgangs).
