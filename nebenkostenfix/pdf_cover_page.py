@@ -62,6 +62,11 @@ def _create_styles():
         textColor=COLOR_DARK,
         spaceAfter=40,
     )
+
+    # NK-249: Absätze des Anschreibens mit Briefabstand -- 40 pt nach jedem
+    # Absatz schoben die Kennzahlen allein auf eine zweite Seite.
+    styles['Brief'] = ParagraphStyle(
+        'CoverBrief', parent=styles['Greeting'], spaceAfter=4)
     
     styles['MetricLabel'] = ParagraphStyle(
         'CoverMetricLabel',
@@ -215,7 +220,7 @@ def build_cover_page_elements(
     # Vorlage deckt denselben Inhalt ab, das Metrik-Block bleibt darunter.
     if anschreiben:
         for absatz in absaetze(anschreiben):
-            elements.append(Paragraph(absatz, styles['Greeting']))
+            elements.append(Paragraph(absatz, styles['Brief']))
             elements.append(Spacer(1, 6))
         elements.append(Spacer(1, 10))
     else:
@@ -300,56 +305,10 @@ def build_cover_page_elements(
     
     elements.append(Spacer(1, 40))
     
-    # ──────────────────────────────────────────────
-    # LARGE BALANCE HIGHLIGHT
-    # ──────────────────────────────────────────────
-    balance_highlight_label = ParagraphStyle(
-        'BalanceHighlightLabel',
-        fontName='Helvetica-Bold',
-        fontSize=13,
-        leading=18,
-        textColor=balance_color,
-        alignment=1,
-    )
-    balance_highlight_value = ParagraphStyle(
-        'BalanceHighlightValue',
-        fontName='Helvetica-Bold',
-        fontSize=36,
-        leading=48,
-        textColor=balance_color,
-        alignment=1,
-    )
-    
-    highlight_data = [
-        [Paragraph(balance_label, balance_highlight_label)],
-        [Paragraph(_format_currency(display_balance), balance_highlight_value)],
-    ]
-    highlight_table = Table(highlight_data, colWidths=[480])
-    
-    # Determine highlight background color
-    if balance < 0:
-        highlight_bg = colors.HexColor('#ecfdf5')  # green-50
-        highlight_border = colors.HexColor('#a7f3d0')  # green-200
-    elif balance > 0:
-        highlight_bg = colors.HexColor('#fef2f2')  # red-50
-        highlight_border = colors.HexColor('#fecaca')  # red-200
-    else:
-        highlight_bg = COLOR_LIGHT_BG
-        highlight_border = COLOR_BORDER
-    
-    highlight_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, -1), highlight_bg),
-        ('BOX', (0, 0), (-1, -1), 1, highlight_border),
-        ('TOPPADDING', (0, 0), (-1, 0), 20),
-        ('BOTTOMPADDING', (0, -1), (-1, -1), 24),
-        ('LEFTPADDING', (0, 0), (-1, -1), 20),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 20),
-        ('ROUNDEDCORNERS', [8, 8, 8, 8]),
-    ]))
-    elements.append(highlight_table)
-    
-    elements.append(Spacer(1, 50))
-    
+    # NK-249: das Ergebnis steht einmal, in der Kennzahlenzeile; der frühere
+    # große Kasten wiederholte es und schob mit Anschreiben eine fast leere
+    # zweite Seite vor die Aufstellung.
+
     # ──────────────────────────────────────────────
     # FOOTER NOTE
     # ──────────────────────────────────────────────

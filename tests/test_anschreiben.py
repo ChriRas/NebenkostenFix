@@ -250,7 +250,11 @@ def _deckblatt(unkomprimiert, anschreiben=None) -> str:
     puffer = BytesIO()
     doc = SimpleDocTemplate(puffer, pagesize=A4)
     doc.build(elemente)
-    return _blaetter(puffer.getvalue())[0]
+    pdf = puffer.getvalue()
+    # NK-249: das Deckblatt bleibt ein Blatt, auch mit dem Vorgabetext; der
+    # Umbruch am Ende zählt nicht als eigene Seite.
+    assert len(re.findall(rb'/Type /Page(?![sA-Za-z])', pdf)) == 1
+    return _blaetter(pdf)[0]
 
 
 def test_die_vorlage_spricht_auf_dem_deckblatt(unkomprimiert):
@@ -267,6 +271,8 @@ def test_die_vorlage_spricht_auf_dem_deckblatt(unkomprimiert):
     assert 'BittegleichenSiedenausstehendenBetraginHöhevon900,00€aus.' in blatt
     # Der feste Gruß der Software ist verdrängt.
     assert 'ImFolgenden' not in blatt
+    # NK-249: das Ergebnis steht einmal, nicht noch ein zweites Mal im Kasten.
+    assert blatt.count('IhreNachzahlung') == 1
 
 
 def test_ohne_vorlage_bleibt_es_beim_festen_gruß(unkomprimiert):
