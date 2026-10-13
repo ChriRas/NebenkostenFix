@@ -275,7 +275,7 @@ from nebenkostenfix.heizung import (
     HeizungsFehler, pruefe_anteil, pruefe_kostenart, pruefe_versorgungsart,
     pruefe_warmwasserweg,
 )
-from nebenkostenfix.models import db, User, Property, Apartment, Tenant, Haushaltsgroesse, CostCategory, CostInvoice, Meter, MeterReading, TenantCostProfile, InvoiceDocument, Provider, TenantBillingReport, BillingReportCategory, BillingReportVersion, AnschreibenVorlage, Vermieterdaten, Heizungsanlage
+from nebenkostenfix.models import db, User, Property, Apartment, Tenant, Haushaltsgroesse, CostCategory, CostInvoice, Meter, MeterReading, TenantCostProfile, InvoiceDocument, Provider, TenantBillingReport, BillingReportCategory, BillingReportVersion, AnschreibenVorlage, Vermieterdaten, Heizungsanlage, Payment
 from nebenkostenfix.girocode_generator import iban_pruefen, iban_saeubern, vermieter_ausweis
 from nebenkostenfix.abrechnung_version import schnappschuss, json_sicher, SOFTWARE_VERSION, REGEL_VERSION, aenderungen_seit, gleich_gerechnet
 from nebenkostenfix.anschreiben import VORGABE, PLATZHALTER, text_fuer
@@ -1336,7 +1336,7 @@ def get_meters():
             'id': m.id,
             'category_id': m.category_id,
             'category_name': m.category.name,
-            # NK-220 (V3): dieselbe Einheit, mit der die Abrechnung rechnet
+            # NK-220: dieselbe Einheit, mit der die Abrechnung rechnet
             'einheit': einheit_fuer(m.category.name, m.category.betrkv_nr),
             'property_id': m.property_id,
             'property_name': m.property.name,
@@ -1435,7 +1435,7 @@ def _stand_text(wert: float) -> str:
 
 
 def _ablesung_pruefen(meter_id: int, datum: date, wert: float, wert_nt, eigene_id=None):
-    """NK-216 (F1): was nie stimmen kann, ist ein Fehler; was selten stimmt, eine Frage.
+    """NK-216: was nie stimmen kann, ist ein Fehler; was selten stimmt, eine Frage.
 
     Negative Staende und Ablesungen in der Zukunft gibt es nicht (400). Ein
     Stand unter dem vorigen oder ueber dem folgenden und ein zweiter Stand
@@ -2264,7 +2264,6 @@ def _zahlungen_nach_auszug_warnung(tenant, e_date):
     Die Schlussabrechnung zaehlt nur Zahlungen bis zum Auszug; was danach
     gebucht ist, zaehlt in keiner Abrechnung und fiel niemandem auf.
     """
-    from nebenkostenfix.models import Payment
     from nebenkostenfix.rechenkern import euro_text
 
     auszug = tenant.move_out_date
@@ -2460,7 +2459,7 @@ def generate_bill():
     if spaete:
         bill_data['warnings'].append(spaete)
     bill_data['vorauszahlung'] = _vorauszahlung_vorschlag(
-        db.session.get(Tenant, tenant_id), bill_data, category_ids, vz._heute())
+        db.session.get(Tenant, tenant_id), bill_data, category_ids)
 
     return jsonify(bill_data), 200
 
@@ -2543,7 +2542,7 @@ def finalize_bill():
     # auf dem Deckblatt, mit den Zahlen aus diesem Ergebnis.
     mieter = Tenant.query.get(tenant_id)
     anschreiben_text = _anschreiben_fuer(mieter, bill_data, vorauszahlung=(
-        _vorauszahlung_vorschlag(mieter, bill_data, category_ids, vz._heute())))
+        _vorauszahlung_vorschlag(mieter, bill_data, category_ids)))
     pdf_bytes = pdf_gen.generate(
         bill_data['line_items'],
         bill_data['total_amount'],
@@ -3015,13 +3014,12 @@ def zustellung_melden(id):
     }), 200
 
 
-def _vorauszahlung_vorschlag(mieter, bill_data, category_ids, stichtag):
+def _vorauszahlung_vorschlag(mieter, bill_data, category_ids, stichtag=None):
     """Der Vorschlag zur Anpassung der Vorauszahlung (R-VZ-01, NK-226).
 
     Teilauswahl heißt: im Zeitraum gibt es Rechnungen einer Kostenart, die
     die Abrechnung nicht umfasst und die der Mieter nicht ausgenommen hat.
     """
-    from nebenkostenfix.models import Payment
     beginn = datetime.fromisoformat(str(bill_data['start_date'])).date()
     ende = datetime.fromisoformat(str(bill_data['end_date'])).date()
     teilauswahl = False
@@ -3329,7 +3327,7 @@ def get_billing_report_csv(id):
 
 
 def _regelstand_veraltet(report) -> bool:
-    """NK-217 (F2): die gueltige Version stammt von einem aelteren Regelstand.
+    """NK-217: die gueltige Version stammt von einem aelteren Regelstand.
 
     Die Abrechnung bleibt, wie sie zugegangen ist (R-DOC-02); der Vermieter
     soll nur sehen, dass eine Korrektur heute anders rechnen kann. Altbestand
@@ -3392,7 +3390,7 @@ def _je_kostenart(ergebnis) -> dict:
 
 @app.route('/api/billing/reports/<int:id>/korrektur/vorschau', methods=['GET'])
 def korrektur_vorschau(id):
-    """NK-217 (F2): was eine Korrektur aendern wuerde, ohne sie anzulegen.
+    """NK-217: was eine Korrektur aendern wuerde, ohne sie anzulegen.
 
     Rechnet wie die Korrektur, speichert nichts und stellt je Kostenart und
     fuer Summe, Vorauszahlungen und Saldo den alten Wert (Schnappschuss der
@@ -3555,8 +3553,6 @@ def get_interpolation_audit():
 
 @app.route('/api/payments', methods=['GET'])
 def get_payments():
-    # Import here to avoid circular imports if any, or just use the model
-    from nebenkostenfix.models import Payment, Tenant
     payments = (db.session.query(Payment, Tenant)
                 .join(Tenant, Payment.tenant_id == Tenant.id)
                 .filter(Tenant.gesperrt_bis.is_(None)).all())
@@ -3578,7 +3574,6 @@ def get_payments():
 
 @app.route('/api/payments', methods=['POST'])
 def add_payment():
-    from nebenkostenfix.models import Payment
     from datetime import date
     import calendar
     
@@ -3641,7 +3636,6 @@ def add_payment():
 
 @app.route('/api/payments/<int:id>', methods=['DELETE'])
 def delete_payment(id):
-    from nebenkostenfix.models import Payment
     payment = Payment.query.get_or_404(id)
     db.session.delete(payment)
     db.session.commit()
@@ -3650,7 +3644,6 @@ def delete_payment(id):
 
 @app.route('/api/payments/bulk', methods=['DELETE'])
 def bulk_delete_payments():
-    from nebenkostenfix.models import Payment
     eingabe = Eingabe.aus_request()
     ids = eingabe.ganzzahlliste('ids', pflicht=True)
     Payment.query.filter(Payment.id.in_(ids)).delete(synchronize_session=False)
@@ -3689,7 +3682,6 @@ def _map_to_bucket(cat_name):
 
 @app.route('/api/analytics/building/<int:property_id>', methods=['GET'])
 def analytics_building(property_id):
-    from nebenkostenfix.models import CostInvoice, Payment, CostCategory, Meter, Tenant, Apartment, db
     import datetime
     from nebenkostenfix.billing_engine import BillingEngine
     from nebenkostenfix.zeitraumvorschlag import naechster_zeitraum
@@ -3757,7 +3749,6 @@ def analytics_building(property_id):
     general_power_prev = 0
     power_period = ''
     
-    from nebenkostenfix.models import MeterReading
     
     general_power_is_interpolated = False
     
@@ -3885,7 +3876,7 @@ def analytics_building(property_id):
         db.or_(Tenant.move_out_date == None, Tenant.move_out_date >= today)
     ).all()
     
-    # NK-211 (B4): wer ausgezogen ist, braucht eine Endabrechnung bis zum
+    # NK-211: wer ausgezogen ist, braucht eine Endabrechnung bis zum
     # Auszug. Zwei Jahre nach dem Auszug ist auch die Frist des Zeitraums
     # vorbei, in dem er liegt (§ 556 Abs. 3 BGB: zwölf Monate nach dessen
     # Ende) -- aelterer Bestand zaehlt nicht mehr als Aufgabe.
@@ -4101,7 +4092,6 @@ def analytics_building(property_id):
 
 @app.route('/api/analytics/apartment/<int:apartment_id>', methods=['GET'])
 def analytics_apartment(apartment_id):
-    from nebenkostenfix.models import Meter, TenantBillingReport, db
     
     sub_meters = Meter.query.filter_by(apartment_id=apartment_id, is_main_meter=False).all()
     years = set(str(r.reading_date.year) for m in sub_meters for r in m.readings)
@@ -4126,7 +4116,6 @@ def analytics_apartment(apartment_id):
                     'value': round(diff, 2),
                     'unit': _get_unit(cat_name)
                 })
-    from nebenkostenfix.models import Tenant
     tenants = Tenant.query.filter_by(apartment_id=apartment_id).all()
     tenant_ids = [t.id for t in tenants]
     
@@ -4154,7 +4143,6 @@ def analytics_apartment(apartment_id):
 @app.route('/api/analytics/data-quality/<int:property_id>', methods=['GET'])
 def analytics_data_quality(property_id):
     """Data quality dashboard: meter freshness + missing sub-meter warnings."""
-    from nebenkostenfix.models import Meter, MeterReading, Tenant, TenantCostProfile, CostCategory, Apartment
     from datetime import date as date_type
 
     today = date_type.today()

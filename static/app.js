@@ -1684,7 +1684,7 @@ async function deleteApartment(id) {
 }
 
 
-// NK-212 (B5): aktiv wie beim Server (F-118) -- der Auszugstag ist der
+// NK-212: aktiv wie beim Server (F-118) -- der Auszugstag ist der
 // letzte Miettag, wer davor auszog, zählt nicht mehr. ``heute`` als ISO-Tag.
 function istAktiverMieter(t, heute) {
     return !t.ist_beispiel && (!t.move_out_date || t.move_out_date >= heute);
@@ -2471,7 +2471,7 @@ function zaehlerArtName(name) {
 }
 
 function getReadingHtml(r, einheit) {
-    // NK-220 (V3): die Einheit kommt vom Server (einheit_fuer im Rechenkern),
+    // NK-220: die Einheit kommt vom Server (einheit_fuer im Rechenkern),
     // nicht mehr aus dem Namen der Kostenart; Heizung bekam vorher keine.
     const unit = einheit ? ' ' + einheit : '';
 
@@ -2571,7 +2571,7 @@ function renderMeters() {
             const tdNum = document.createElement('td');
             tdNum.style.padding = "12px 8px";
             tdNum.dataset.label = 'Zählernummer';
-            // NK-219 (V2): die Nummer tippt der Nutzer ein, sie kommt maskiert ins HTML.
+            // NK-219: die Nummer tippt der Nutzer ein, sie kommt maskiert ins HTML.
             tdNum.innerHTML = escapeHtml(m.meter_number) + (
                 m.is_official 
                 ? ' <span style="font-size: 13px; padding: 2px 6px; background: var(--primary); color: white; border-radius: 4px; margin-left: 8px;" title="Offizieller Zähler des Versorgers"><i class="ph ph-check-circle"></i> Versorger</span>' 
@@ -2602,7 +2602,7 @@ function renderMeters() {
             tdActions.style.whiteSpace = 'nowrap';
             tdActions.onclick = (e) => e.stopPropagation();
             
-            // NK-219 (V2): der Verlauf war nur über einen Klick auf die Zeile
+            // NK-219: der Verlauf war nur über einen Klick auf die Zeile
             // zu finden; der Stift sagt jetzt, dass er nur den letzten Stand ändert.
             const verlaufBtn = document.createElement('button');
             verlaufBtn.className = 'btn-secondary';
@@ -2669,7 +2669,7 @@ function getCategoryIcon(catName) {
     return 'ph-receipt';
 }
 
-// NK-156 (K4): der Leerzustand „Keine Treffer“ führt zurück zur ganzen Liste.
+// NK-156: der Leerzustand „Keine Treffer“ führt zurück zur ganzen Liste.
 function rechnungsfilterZuruecksetzen() {
     const suche = document.getElementById('invoice-search');
     const kategorie = document.getElementById('invoice-category-filter');
@@ -5550,7 +5550,7 @@ function berichtZustellungsBlock(id, umschlag) {
                 </p>
             </div>`;
     }
-    // NK-221 (V4): das Feld startet leer; ein vorbelegtes Heute wurde
+    // NK-221: das Feld startet leer; ein vorbelegtes Heute wurde
     // ungelesen gespeichert, und die Einwendungsfrist lief ab falschem Tag.
     return `
         <div class="dashboard-card glass-panel" style="margin-bottom: 20px; padding: 16px;">
@@ -5617,7 +5617,7 @@ function berichtVersionenBlock(id, umschlag) {
         </div>`;
 }
 
-// NK-217 (F2): die Abrechnung bleibt, wie sie zugegangen ist. NK-229 (R-DOC-03):
+// NK-217: die Abrechnung bleibt, wie sie zugegangen ist. NK-229 (R-DOC-03):
 // aufgeklappt sagt der Hinweis, was sich geändert hat, wann eine Korrektur
 // sinnvoll ist, und führt zur Vorschau, bevor etwas entsteht.
 function regelstandHinweis(id, aenderungen) {
@@ -5631,7 +5631,7 @@ function regelstandHinweis(id, aenderungen) {
     </details>`;
 }
 
-/* NK-217 (F2): vor dem Bestätigen steht da, was die Korrektur ändert. */
+/* NK-217: vor dem Bestätigen steht da, was die Korrektur ändert. */
 function korrekturVorschauText(v) {
     const zeile = (name, p) => `${name}: ${p.alt === null ? 'bisher ohne Wert' : euroText(p.alt)} → ${euroText(p.neu)}`;
     const zeilen = v.positionen.filter(p => p.alt !== p.neu)
@@ -6188,7 +6188,7 @@ async function generateBillPreview(tenantId, startDate, endDate, categoryIds = n
                         : '';
                     mdStr += `<div><span style="font-weight:bold;">Hauptzähler${escapeHtml(hzZeitraum)}:</span> ${mCons} ${escapeHtml(md.unit)}</div>`;
                     mdStr += `<div><span style="font-weight:bold;">Allgemeinverbrauch:</span> ${aCons} ${escapeHtml(md.unit)}</div>`;
-                    // NK-209 (B2): der Anteil, mit dem gerechnet wurde (Personentage)
+                    // NK-209: der Anteil, mit dem gerechnet wurde (Personentage)
                     if (md.allgemein_quote != null && md.allgemein_anteil != null) {
                         const prozent = (md.allgemein_quote * 100).toLocaleString('de-DE',
                             { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -7104,47 +7104,48 @@ function renderBuildingVitalSigns(kpis) {
     const container = document.getElementById('kpis-container');
     if (!container) return;
     
+    // NK-260: Farben und Hover kommen aus .kpi-karte in style.css, nicht aus dem Markup.
     let trendIcon = kpis.general_power_trend > 0 ? '<i class="ph ph-trend-up"></i>' : '<i class="ph ph-trend-down"></i>';
-    let trendColor = kpis.general_power_trend > 0 ? 'color: var(--danger-color)' : 'color: var(--success-color)';
+    let trendColor = kpis.general_power_trend > 0 ? 'kpi-trend--hoch' : 'kpi-trend--runter';
     if (kpis.general_power_trend === 0) {
         trendIcon = '<i class="ph ph-minus"></i>';
-        trendColor = 'color: var(--text-muted)';
+        trendColor = 'kpi-trend--gleich';
     }
 
     const costsPeriod = kpis.costs_period ? kpis.costs_period : kpis.reference_year;
     const powerPeriod = kpis.power_period ? kpis.power_period : kpis.reference_year;
 
     container.innerHTML = `
-        <div class="dashboard-card glass-panel" style="padding: 20px; border-left: 4px solid var(--primary-color);">
-            <div style="font-size: 0.9em; color: var(--text-muted); margin-bottom: 8px;">Kontobewegung ${new Date().getFullYear()}</div>
-            <div style="font-size: 1.8em; font-weight: 600;">
+        <div class="dashboard-card glass-panel kpi-karte">
+            <div class="kpi-titel">Kontobewegung ${new Date().getFullYear()}</div>
+            <div class="kpi-wert">
                 ${kpis.cashflow_ytd.toLocaleString('de-DE', {style: 'currency', currency: 'EUR'})}
             </div>
         </div>
-        <div class="dashboard-card glass-panel kpi-clickable" id="kpi-costs-card" onclick="openCostsHistory()" style="padding: 20px; border-left: 4px solid var(--primary-color); cursor: pointer; transition: transform 0.15s, box-shadow 0.15s;" onmouseenter="this.style.transform='translateY(-2px)';this.style.boxShadow='0 4px 12px rgba(0,0,0,0.1)'" onmouseleave="this.style.transform='none';this.style.boxShadow='none'">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <div style="font-size: 0.9em; color: var(--text-muted); margin-bottom: 4px;">Betriebskosten</div>
-                <i class="ph ph-clock-counter-clockwise" style="color: var(--text-muted); font-size: 1.1em;" title="Verlauf anzeigen"></i>
+        <div class="dashboard-card glass-panel kpi-karte kpi-clickable" id="kpi-costs-card" onclick="openCostsHistory()">
+            <div class="kpi-kopf">
+                <div class="kpi-titel">Betriebskosten</div>
+                <i class="ph ph-clock-counter-clockwise kpi-verlauf" title="Verlauf anzeigen"></i>
             </div>
-            <div style="font-size: 13px; color: var(--text-muted); margin-bottom: 8px;">${escapeHtml(costsPeriod)}</div>
-            <div style="font-size: 1.8em; font-weight: 600; color: var(--text-color)">
+            <div class="kpi-zeitraum">${escapeHtml(costsPeriod)}</div>
+            <div class="kpi-wert">
                 ${kpis.total_costs_last_year.toLocaleString('de-DE', {style: 'currency', currency: 'EUR'})}
             </div>
         </div>
-        <div class="dashboard-card glass-panel kpi-clickable" id="kpi-power-card" onclick="openPowerHistory()" style="padding: 20px; border-left: 4px solid var(--warning-color); cursor: pointer; transition: transform 0.15s, box-shadow 0.15s;" onmouseenter="this.style.transform='translateY(-2px)';this.style.boxShadow='0 4px 12px rgba(0,0,0,0.1)'" onmouseleave="this.style.transform='none';this.style.boxShadow='none'">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <div style="font-size: 0.9em; color: var(--text-muted); margin-bottom: 4px;">Allgemeinstrom</div>
-                <i class="ph ph-clock-counter-clockwise" style="color: var(--text-muted); font-size: 1.1em;" title="Verlauf anzeigen"></i>
+        <div class="dashboard-card glass-panel kpi-karte kpi-karte--strom kpi-clickable" id="kpi-power-card" onclick="openPowerHistory()">
+            <div class="kpi-kopf">
+                <div class="kpi-titel">Allgemeinstrom</div>
+                <i class="ph ph-clock-counter-clockwise kpi-verlauf" title="Verlauf anzeigen"></i>
             </div>
-            <div style="font-size: 13px; color: var(--text-muted); margin-bottom: 8px;">${escapeHtml(powerPeriod)}</div>
-            <div style="font-size: 1.8em; font-weight: 600; color: var(--text-color); display: flex; align-items: baseline; gap: 8px;">
-                ${window.wrapInterpolated(kpis.general_power.toLocaleString('de-DE'), kpis.general_power_is_interpolated !== false)} <span style="font-size: 13px; font-weight: 400;">kWh</span>
-                <span style="font-size: 13px; ${trendColor}">${trendIcon} ${Math.abs(kpis.general_power_trend).toLocaleString('de-DE')}%</span>
+            <div class="kpi-zeitraum">${escapeHtml(powerPeriod)}</div>
+            <div class="kpi-wert kpi-wert--zeile">
+                ${window.wrapInterpolated(kpis.general_power.toLocaleString('de-DE'), kpis.general_power_is_interpolated !== false)} <span class="kpi-einheit">kWh</span>
+                <span class="kpi-trend ${trendColor}">${trendIcon} ${Math.abs(kpis.general_power_trend).toLocaleString('de-DE')}%</span>
             </div>
         </div>
-        <div class="dashboard-card glass-panel" style="padding: 20px; border-left: 4px solid var(--danger-color);">
-            <div style="font-size: 0.9em; color: var(--text-muted); margin-bottom: 8px;">Ausstehende Abrechnungen</div>
-            <div style="font-size: 1.8em; font-weight: 600; color: ${kpis.open_tasks > 0 ? 'var(--danger-color)' : 'var(--success-color)'}">
+        <div class="dashboard-card glass-panel kpi-karte kpi-karte--offen">
+            <div class="kpi-titel">Ausstehende Abrechnungen</div>
+            <div class="kpi-wert ${kpis.open_tasks > 0 ? 'kpi-wert--offen' : 'kpi-wert--erledigt'}">
                 ${kpis.open_tasks}
             </div>
         </div>

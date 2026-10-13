@@ -109,6 +109,61 @@ body {
     padding: 24px;
 }
 
+/* KPI-Kacheln der Übersicht (NK-260): vorher Inline-Styles und onmouseenter. */
+.kpi-karte {
+    border-left: 4px solid var(--kpi-farbe, var(--primary-color));
+}
+.kpi-karte--strom { --kpi-farbe: var(--warning-color); }
+.kpi-karte--offen { --kpi-farbe: var(--danger-color); }
+.kpi-kopf {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.kpi-titel {
+    font-size: 0.9em;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+}
+.kpi-kopf .kpi-titel { margin-bottom: 4px; }
+.kpi-verlauf {
+    color: var(--text-muted);
+    font-size: 1.1em;
+}
+.kpi-zeitraum {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+}
+.kpi-wert {
+    font-size: 1.8em;
+    font-weight: 600;
+    color: var(--text-color);
+}
+.kpi-wert--zeile {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+}
+.kpi-wert--offen { color: var(--danger-color); }
+.kpi-wert--erledigt { color: var(--success-color); }
+.kpi-einheit {
+    font-size: 13px;
+    font-weight: 400;
+}
+.kpi-trend { font-size: 13px; }
+.kpi-trend--hoch { color: var(--danger-color); }
+.kpi-trend--runter { color: var(--success-color); }
+.kpi-trend--gleich { color: var(--text-muted); }
+.kpi-clickable {
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.15s;
+}
+.kpi-clickable:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
 /* Layout */
 .app-container {
     display: flex;

@@ -607,7 +607,7 @@ async function ausschalterPruefen() {
         && /id="ohne-anmeldung-hinweis" class="hinweis-leiste hinweis-band"/.test(html));
 }
 
-// --- NK-212 (B5): „Aktive Mieter“ zählt keine Ausgezogenen ---------------
+// --- NK-212: „Aktive Mieter“ zählt keine Ausgezogenen ---------------
 // Vorher zählte die Kachel jeden Mieter, auch wer vor Jahren auszog.
 {
     const m = appQuelle.match(/function istAktiverMieter\([\s\S]*?\n\}/);
@@ -623,7 +623,7 @@ async function ausschalterPruefen() {
         /statTenantsCount\.textContent = tenants\.filter\(t => istAktiverMieter\(t, heute\)\)/.test(appQuelle));
 }
 
-// --- NK-219 (V2): Zählerliste mit Knopf „Verlauf“ und klarem Stift --------
+// --- NK-219: Zählerliste mit Knopf „Verlauf“ und klarem Stift --------
 // Vorher war der Verlauf nur per Klick auf die Zeile zu finden, der Stift
 // hieß „Ablesung bearbeiten“ und die Zählernummer kam roh ins HTML.
 {
@@ -652,7 +652,7 @@ async function ausschalterPruefen() {
         /if \(meterReadings\.length > 0\) \{[\s\S]*?editReadBtn[\s\S]*?\} else \{/.test(r));
 }
 
-// --- NK-220 (V3): die Einheit kommt vom Server, auch für die Heizung ------
+// --- NK-220: die Einheit kommt vom Server, auch für die Heizung ------
 // Vorher riet getReadingHtml aus dem Namen; ein Wärmezähler bekam keine.
 {
     const m = appQuelle.match(/function getReadingHtml\([\s\S]*?\n\}/);
@@ -672,7 +672,7 @@ async function ausschalterPruefen() {
         && !/getReadingHtml\([^)]*category_name\)/.test(appQuelle));
 }
 
-// --- NK-221 (V4): „Zugestellt am“ startet leer -----------------------------
+// --- NK-221: „Zugestellt am“ startet leer -----------------------------
 // Vorher stand dort das heutige Datum und wurde ungelesen gespeichert.
 {
     const m = appQuelle.match(/function berichtZustellungsBlock\([\s\S]*?\n\}/);
@@ -793,7 +793,7 @@ async function serienPruefen() {
     pruefe('NK-226: kein Browserdialog', !/confirm\(/.test(funktion('serienbuchungAnlegen')));
 }
 
-// --- NK-216 (F1): unplausibler Zählerstand wird nachgefragt ---------------
+// --- NK-216: unplausibler Zählerstand wird nachgefragt ---------------
 // 409 mit nachfrage: die App fragt im eigenen Dialog und schickt bei Ja
 // dasselbe mit `trotzdem` noch einmal; bei Nein geht nichts mehr hinaus.
 async function nachfragePruefen() {
@@ -1091,6 +1091,35 @@ async function ablesenPruefen() {
             keine.karte.hidden === true && eine.karte.hidden === true && eine.gezeichnet === 0);
         pruefe('NK-254: Wohnungsvergleich bei zwei Wohnungen gezeichnet',
             zwei.karte.hidden === false && zwei.gezeichnet === 1);
+    }
+}
+
+// --- NK-260: KPI-Kacheln ohne Inline-Styles ---------------------------
+// Vorher trugen die Kacheln Farbe, Abstand und Hover (onmouseenter) im Markup.
+{
+    const m = appQuelle.match(/function renderBuildingVitalSigns\([\s\S]*?\n\}/);
+    const lauf = (trend, offen) => {
+        const container = { innerHTML: '' };
+        new Function('document', 'window', 'escapeHtml', 'kpis', m[0] + '; renderBuildingVitalSigns(kpis);')(
+            { getElementById: () => container },
+            { wrapInterpolated: s => s }, s => String(s),
+            { cashflow_ytd: -50, total_costs_last_year: 1200, general_power: 300, general_power_trend: trend,
+              open_tasks: offen, reference_year: 2025 });
+        return container.innerHTML;
+    };
+    if (!m) {
+        pruefe('NK-260: renderBuildingVitalSigns gibt es', false);
+    } else {
+        const hoch = lauf(5, 2), gleich = lauf(0, 0);
+        pruefe('NK-260: Kacheln ohne style= und ohne onmouseenter/onmouseleave',
+            !/style=|onmouse/.test(hoch + gleich) && (hoch.match(/class="dashboard-card glass-panel kpi-karte/g) || []).length === 4);
+        pruefe('NK-260: Trend und offene Abrechnungen färben über Klassen',
+            hoch.includes('kpi-trend kpi-trend--hoch') && hoch.includes('kpi-wert--offen')
+            && gleich.includes('kpi-trend kpi-trend--gleich') && gleich.includes('kpi-wert--erledigt'));
+        const css = fs.readFileSync(path.join(__dirname, '..', 'static', 'style.css'), 'utf8');
+        pruefe('NK-260: Hover der klickbaren Kacheln steht im Stylesheet',
+            /\.kpi-clickable:hover\s*\{[^}]*translateY\(-2px\)/.test(css)
+            && /\.kpi-karte\s*\{[^}]*border-left:\s*4px solid var\(--kpi-farbe/.test(css));
     }
 }
 

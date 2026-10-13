@@ -56,12 +56,16 @@ def bisherige_hoehe(zahlungen) -> Decimal:
 
 
 def vorschlag(kosten, beginn: date, ende: date, auszug: date | None,
-              zahlungen, stichtag: date, teilauswahl: bool = False) -> dict:
+              zahlungen, stichtag: date | None = None,
+              teilauswahl: bool = False) -> dict:
     """Der Vorschlag, oder ``{'grund': ...}``, wenn es keinen gibt.
 
     ``zahlungen`` sind die gebuchten Nebenkostenvorauszahlungen des Mieters
     als (Datum, Betrag); die bis zum Stichtag ergeben die bisherige Höhe.
+    Ohne Stichtag gilt heute.
     """
+    if stichtag is None:
+        stichtag = _heute()
     if teilauswahl:
         return {'grund': 'Die Abrechnung umfasst nicht alle Kostenarten mit '
                          'Rechnungen im Zeitraum, ein Monatsbetrag daraus wäre '

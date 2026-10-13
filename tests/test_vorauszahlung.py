@@ -139,6 +139,9 @@ def _text(vorlage, **zusatz):
 
 
 def test_der_platzhalter_ist_bekannt_aber_nicht_in_der_vorgabe():
+    """Bewusst draußen (NK-260 a): in der Vorgabe erklärte jedes Anschreiben
+    eine Anpassung nach § 560 Abs. 4 BGB, ohne dass der Vermieter sie
+    beschlossen hat. Wer sie will, setzt den Platzhalter in seine Vorlage."""
     assert 'vorauszahlung_anpassung' in PLATZHALTER
     assert '{vorauszahlung_anpassung}' not in VORGABE
 
