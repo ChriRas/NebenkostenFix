@@ -109,6 +109,61 @@ body {
     padding: 24px;
 }
 
+/* KPI-Kacheln der Übersicht (NK-260): vorher Inline-Styles und onmouseenter. */
+.kpi-karte {
+    border-left: 4px solid var(--kpi-farbe, var(--primary-color));
+}
+.kpi-karte--strom { --kpi-farbe: var(--warning-color); }
+.kpi-karte--offen { --kpi-farbe: var(--danger-color); }
+.kpi-kopf {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.kpi-titel {
+    font-size: 0.9em;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+}
+.kpi-kopf .kpi-titel { margin-bottom: 4px; }
+.kpi-verlauf {
+    color: var(--text-muted);
+    font-size: 1.1em;
+}
+.kpi-zeitraum {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+}
+.kpi-wert {
+    font-size: 1.8em;
+    font-weight: 600;
+    color: var(--text-color);
+}
+.kpi-wert--zeile {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+}
+.kpi-wert--offen { color: var(--danger-color); }
+.kpi-wert--erledigt { color: var(--success-color); }
+.kpi-einheit {
+    font-size: 13px;
+    font-weight: 400;
+}
+.kpi-trend { font-size: 13px; }
+.kpi-trend--hoch { color: var(--danger-color); }
+.kpi-trend--runter { color: var(--success-color); }
+.kpi-trend--gleich { color: var(--text-muted); }
+.kpi-clickable {
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.15s;
+}
+.kpi-clickable:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
 /* Layout */
 .app-container {
     display: flex;
@@ -1051,7 +1106,7 @@ input[type="number"] {
        IMMER, d.h. ohne offenes Modal kam eine leere Seite heraus. Die
        allgemeine Regel ist darum an :has gebunden. */
     .sidebar, .top-header, .toast-stapel, .background-blobs,
-    .modal-overlay, .kopf-aktionen, .btn, .filter-pill,
+    .modal-overlay, .kopf-aktionen, .kopf-menue-knopf, .btn, .filter-pill,
     .nav-menu, .feld-hilfe, .no-print {
         display: none !important;
     }
@@ -1442,6 +1497,11 @@ input[type="number"] {
     gap: 12px;
     align-items: center;
     flex-wrap: wrap;
+}
+
+/* NK-253: der Menüknopf für die Kopfaktionen gilt nur am Handy (unten). */
+.kopf-menue-knopf {
+    display: none;
 }
 
 /* Tabellen (F-44): die Klassen, die der Bestand benutzt, ohne dass sie
@@ -1912,6 +1972,39 @@ a.btn-secondary {
    Viertel der Breite nahm. Die Leiste wird zur Leiste unten, Tabellen
    rollen in ihrer Karte statt auf der Seite. */
 @media (max-width: 720px) {
+    /* NK-253: Kopf einzeilig; die Aktionen klappen als Menü unter dem Knopf auf. */
+    .section-header {
+        position: relative;
+    }
+
+    .kopf-menue-knopf {
+        display: inline-flex;
+        justify-content: center;
+        width: var(--knopf-hoehe);
+        padding: 0;
+        margin-left: auto;
+    }
+
+    .kopf-aktionen.mit-menue {
+        display: none;
+        position: absolute;
+        top: 100%;
+        right: 0;
+        z-index: 20;
+        flex-direction: column;
+        align-items: stretch;
+        gap: var(--space-2);
+        padding: var(--space-2);
+        background: white;
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-md);
+        box-shadow: var(--glass-shadow);
+    }
+
+    .kopf-aktionen.mit-menue.offen {
+        display: flex;
+    }
+
     .dashboard-card table,
     .glass-panel table,
     .modal table {
@@ -1922,6 +2015,48 @@ a.btn-secondary {
 
     .dashboard-card {
         padding: 16px;
+    }
+
+    /* NK-252: die Zählertabelle rollte in ihrer Karte, Verlauf, Stift und
+       Papierkorb lagen rechts außerhalb. Jeder Zähler wird eine Karte. */
+    .glass-panel table.zaehler-tabelle,
+    .zaehler-tabelle tbody,
+    .zaehler-tabelle tr,
+    .zaehler-tabelle td {
+        display: block;
+        overflow-x: visible;
+    }
+
+    .zaehler-tabelle .zaehler-kopf {
+        display: none;
+    }
+
+    .zaehler-tabelle tr {
+        padding: 8px 0;
+    }
+
+    .zaehler-tabelle td {
+        padding: 4px 0 !important;
+    }
+
+    /* Die Beschriftung steht links daneben; der Inhalt der Zelle fließt wie bisher. */
+    .zaehler-tabelle td[data-label] {
+        position: relative;
+        padding-left: 8rem !important;
+    }
+
+    .zaehler-tabelle td[data-label]::before {
+        content: attr(data-label);
+        position: absolute;
+        left: 0;
+        width: 7.5rem;
+        font-size: 13px;
+        color: var(--text-muted);
+    }
+
+    /* Mit dem Wechsel-Knopf (NK-258) passen die Aktionen nicht mehr in eine Zeile. */
+    .zaehler-tabelle td.zaehler-aktionen {
+        white-space: normal !important;
     }
 }
 
@@ -2264,6 +2399,44 @@ td .btn-icon,
 .tabellen-rolle {
     max-width: 100%;
     overflow-x: auto;
+}
+
+/* NK-261, NK-262, NK-263: Vorauszahlungen, Fristenkalender, Mehrjahresblick
+   mit Klassen statt Inline-Stilen (Wächter in tests/test_design_einheit.py). */
+.abstand-oben-gross { margin-top: var(--space-5, 24px); }
+.zwischentitel { margin: var(--space-4, 16px) 0 var(--space-2, 8px); }
+.breite-voll { width: 100%; }
+.dialog-vorauszahlung { max-width: 720px; width: 90%; }
+.tabelle-luftig th { padding: var(--space-2, 8px); }
+.tabelle-kompakt th { padding: 6px var(--space-2, 8px); }
+.spalte-knopf { width: 48px; }
+
+.kopf-mit-knopf {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-4, 16px);
+}
+
+.kopf-text { max-width: 640px; }
+
+.kopf-text h3 {
+    margin: 0 0 var(--space-2, 8px);
+    display: flex;
+    align-items: center;
+    gap: var(--space-2, 8px);
+}
+
+.kopf-text p {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 0.92em;
+}
+
+#fristen-liste {
+    margin: var(--space-4, 16px) 0 0;
+    padding-left: 20px;
 }
 
 /* NK-160: Jahresabrechnungs-Assistent. */

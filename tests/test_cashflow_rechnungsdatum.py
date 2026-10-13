@@ -21,6 +21,9 @@ Die Daten sind synthetisch. Die Jahre hängen am heutigen Tag, damit
 from __future__ import annotations
 
 from datetime import date, timedelta
+from pathlib import Path
+
+import pytest
 
 from nebenkostenfix.models import InvoiceDocument, db
 from tests import billing_factories as f
@@ -110,3 +113,37 @@ def test_laufendes_jahr_zaehlt_nach_ausstellungsdatum(auth_client):
     _, kpis = _cashflow(auth_client, haus)
 
     assert kpis["cashflow_ytd"] == -50.0
+
+
+# --- NK-241: die Kachel zeigt die Kontobewegung bis heute -------------------------
+
+def test_kontobewegung_zaehlt_wie_die_jahreszeile(auth_client):
+    """Eine Vorauszahlung nach heute ist noch nicht geflossen.
+
+    Die Kachel zählte sie mit, die Jahreszeile führt sie als Vorschau.
+    Eine Vorjahresrechnung, die dieses Jahr ausgestellt ist, fließt dieses
+    Jahr ab -- das bleibt so.
+    """
+    if HEUTE.month == 12 and HEUTE.day == 31:
+        pytest.skip("nach heute liegt kein Tag mehr im laufenden Jahr")
+    haus = _rechnung(300.0, rechnungsdatum=date(HEUTE.year, 1, 1),
+                     beginn=date(VORJAHR, 1, 1))
+    mieter = f.tenant(f.apt(haus, "EG", 50), "Mieter 1", move_in=date(VORJAHR, 1, 1))
+    f.payment(mieter, 100.0, date(HEUTE.year, 1, 1))
+    f.payment(mieter, 100.0, HEUTE + timedelta(days=1))
+
+    jahre, kpis = _cashflow(auth_client, haus)
+
+    zeile = jahre[str(HEUTE.year)]
+    assert kpis["cashflow_ytd"] == zeile["in_actual"] - zeile["out_actual"] == -200.0
+
+
+def test_kontobewegung_heisst_so_und_wertet_nicht():
+    """Ein Minus heißt hier nur: mehr bezahlt als eingenommen, kein Fehler."""
+    quelle = (Path(__file__).resolve().parents[1] / "static" / "app.js").read_text(encoding="utf-8")
+    wert = quelle.index("kpis.cashflow_ytd.toLocaleString")
+    kachel = quelle[quelle.rindex('<div class="dashboard-card', 0, wert):wert]
+
+    assert "Kontobewegung ${" in kachel
+    assert "Überschuss" not in kachel
+    assert "danger-color" not in kachel

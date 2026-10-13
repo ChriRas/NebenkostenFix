@@ -141,7 +141,7 @@ from __future__ import annotations
 
 import os
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, timedelta
 from decimal import Decimal
 from typing import Mapping, Optional, Sequence
@@ -151,6 +151,7 @@ from nebenkostenfix import betrkv
 from nebenkostenfix import co2
 from nebenkostenfix.geld import NULL, dec, restcent_auf_letzte, runde, runde_einheitspreis, summe
 from nebenkostenfix import heizung
+from nebenkostenfix import lohnausweis
 from nebenkostenfix.haushalt import Stand as Haushaltsstand
 # Zwei Vorgaben mit demselben Namen, aber verschiedenen Dingen: die
 # Abrechnungsart 'qm' fuer Kostenarten ohne Profil (oben), und die
@@ -212,6 +213,24 @@ class Stand:
 
 
 @dataclass(frozen=True)
+class Wechsel:
+    """Ein Zaehlerwechsel in einer Kette (NK-258): am ``datum`` endet der
+    alte Zaehler mit ``endstand``, der neue beginnt mit ``anfangsstand``.
+
+    Beide Staende sind die echten, abgelesenen. ``versatz`` ist, was die
+    Kette auf jeden spaeteren Stand addiert, damit sie stetig weiterlaeuft
+    -- ueber mehrere Wechsel aufsummiert.
+    """
+
+    datum: date
+    alt: str
+    endstand: Decimal
+    neu: str
+    anfangsstand: Decimal
+    versatz: Decimal
+
+
+@dataclass(frozen=True)
 class Zaehler:
     id: int
     nummer: str
@@ -233,6 +252,11 @@ class Zaehler:
     # (Nr. 6) heisst "Warmwasser" und misst trotzdem Kilowattstunden.
     # None heisst: eine Probe ohne Katalog, dann raet der Name.
     kategorie_betrkv_nr: Optional[int] = None
+    # Der Zaehler, den dieser ersetzt hat (NK-258), oder None. Der Kern
+    # verbindet beide in verkette() zu einer Kette.
+    ersetzt_id: Optional[int] = None
+    # Die Wechsel, aus denen verkette() diese Kette gebaut hat, nach Datum.
+    wechsel: tuple = ()
 
 
 @dataclass(frozen=True)
@@ -323,6 +347,10 @@ class Rechnung:
     # Wohnungsrechnung mit Zaehler folgt er den Tagen, nur der Rest dem
     # Zaehler. ``None`` heisst keine Angabe: alles nach Zaehler wie bisher.
     grundpreis: Optional[Decimal] = None
+    # Art und Lohnanteil nach § 35a EStG (NK-268, R-35A-01). Nur fuer den
+    # Ausweis; kein Betrag haengt daran. ``None`` heisst keine Angabe.
+    art_35a: Optional[str] = None
+    lohnanteil: Optional[Decimal] = None
 
     @property
     def ende_grenze(self) -> date:
@@ -481,8 +509,62 @@ class Vorgang:
 # festgelegt statt zufaellig gleich.
 
 
+def _anschliessen(alt: Zaehler, neu: Zaehler) -> Zaehler:
+    """Den neuen Zaehler an den alten haengen: eine Kette mit stetigen Staenden.
+
+    Der erste Stand des neuen ist der Wechseltag. Bis dahin gelten die Staende
+    des alten, danach die des neuen, um den Unterschied von Endstand und
+    Anfangsstand verschoben -- je Zaehlwerk, damit Hoch- und Niedertarif
+    getrennt bleiben (NK-055). Der Verbrauch ueber den Wechsel ist dann die
+    Summe beider Teile, und verbrauch_in() rechnet ohne Sonderfall.
+    """
+    neu_staende = sorted(neu.staende, key=lambda s: s.datum)
+    if not neu_staende:
+        return alt  # ohne Anfangsstand ist der Wechseltag unbekannt
+    wechseltag = neu_staende[0].datum
+    # shortcut: fehlt der Endstand genau am Wechseltag, gilt der letzte davor und
+    # der Verbrauch dazwischen fehlt; der Wechseldialog legt beide Staende zugleich an.
+    vorher = [s for s in sorted(alt.staende, key=lambda s: s.datum) if s.datum <= wechseltag]
+    if not vorher:
+        return neu
+    ende, anfang = vorher[-1], neu_staende[0]
+    d_ht = dec(ende.wert) - dec(anfang.wert)
+    d_nt = dec(ende.wert_nt or 0) - dec(anfang.wert_nt or 0)
+
+    def verschoben(s: Stand) -> Stand:
+        nt = (None if s.wert_nt is None and ende.wert_nt is None
+              else float(dec(s.wert_nt or 0) + d_nt))
+        return replace(s, wert=float(dec(s.wert) + d_ht), wert_nt=nt)
+
+    bisher = alt.wechsel[-1].versatz if alt.wechsel else Decimal(0)
+    wechsel = Wechsel(datum=wechseltag, alt=alt.wechsel[-1].neu if alt.wechsel else alt.nummer,
+                      endstand=ende.gesamt - bisher, neu=neu.nummer,
+                      anfangsstand=anfang.gesamt, versatz=ende.gesamt - anfang.gesamt)
+    return replace(neu, nummer=f'{alt.nummer} / {neu.nummer}',
+                   staende=tuple(vorher) + tuple(verschoben(s) for s in neu_staende[1:]),
+                   wechsel=alt.wechsel + (wechsel,))
+
+
+def verkette(zaehler: Sequence[Zaehler]) -> list:
+    """Jeder ersetzte Zaehler geht in der Kette seines Nachfolgers auf (NK-258).
+
+    Ohne ``ersetzt_id`` bleibt die Liste, wie sie ist. Ein Verweis auf einen
+    Zaehler ausserhalb der Liste zaehlt nicht.
+    """
+    nach_id = {z.id: z for z in zaehler}
+    ersetzt = {z.ersetzt_id for z in zaehler if z.ersetzt_id in nach_id}
+
+    def kette(z: Zaehler, gesehen: frozenset) -> Zaehler:
+        alt = nach_id.get(z.ersetzt_id)
+        if alt is None or alt.id in gesehen:  # ein Kreis endet hier
+            return z
+        return _anschliessen(kette(alt, gesehen | {z.id}), z)
+
+    return [kette(z, frozenset()) for z in zaehler if z.id not in ersetzt]
+
+
 def _nach_id(zaehler: Sequence[Zaehler]) -> list:
-    return sorted(zaehler, key=lambda z: z.id)
+    return sorted(verkette(zaehler), key=lambda z: z.id)
 
 
 def hauptzaehler(vorgang: Vorgang, kategorie_id: int) -> Optional[Zaehler]:
@@ -1099,8 +1181,19 @@ def verbrauch_in(zaehler: Zaehler, von: date, bis: date) -> dict:
     else:
         status = 'warning'
 
+    # NK-258: in einer Kette tragen die Staende nach einem Wechsel dessen
+    # Versatz. Angezeigt wird der echte Stand; am Wechseltag selbst ist das
+    # der Endstand des alten, mit ``ab_dem_tag`` der Anfangsstand des neuen.
+    def versatz(d: date, ab_dem_tag: bool = False) -> Decimal:
+        v = Decimal(0)
+        for w in zaehler.wechsel:
+            if w.datum < d or (ab_dem_tag and w.datum == d):
+                v = w.versatz
+        return v
+
     basis_readings = [
-        {'date': staende[i].datum.isoformat(), 'total': float(staende[i].gesamt),
+        {'date': staende[i].datum.isoformat(),
+         'total': float(staende[i].gesamt - versatz(staende[i].datum)),
          'zwischenablesung': staende[i].art == heizung.ZWISCHENABLESUNG}
         for i in sorted(benutzt)
     ]
@@ -1148,8 +1241,13 @@ def verbrauch_in(zaehler: Zaehler, von: date, bis: date) -> dict:
         'r_start': _stand_angabe(r_start_global),
         'r_end': _stand_angabe(r_end_global),
         'basis_readings': basis_readings,
-        'stand_beginn': float(stand_beginn),
-        'stand_ende': float(stand_beginn + total_consumption),
+        'stand_beginn': float(stand_beginn - versatz(von, ab_dem_tag=True)),
+        'stand_ende': float(stand_beginn + total_consumption - versatz(bis)),
+        'zaehlerwechsel': [
+            {'datum': w.datum.isoformat(), 'alt': w.alt, 'endstand': float(w.endstand),
+             'neu': w.neu, 'anfangsstand': float(w.anfangsstand)}
+            for w in zaehler.wechsel if von < w.datum < bis
+        ],
         'beginn_abgelesen': any(s.datum == von for s in staende),
         'ende_abgelesen': any(s.datum == bis for s in staende),
         'reading_span_days': (r_end_global.datum - r_start_global.datum).days,
@@ -1243,7 +1341,7 @@ def _allgemeinquoten(vorgang: Vorgang, haupt: Zaehler, unter, von: date, bis: da
     """``(Mieter, Vermieter, Abschnitte, negativ)``: die Anteile am Allgemeinverbrauch
     der Rechnung ``[von, bis)``.
 
-    NK-213 (B6): gemessen wird nur, wo abgelesen wurde. Die Rechnung zerfaellt
+    NK-213: gemessen wird nur, wo abgelesen wurde. Die Rechnung zerfaellt
     an jedem Tag, an dem der Haupt- und alle Wohnungszaehler einen Stand
     haben, in Abschnitte. Bis dahin (F-122) schnitt sie an jedem Einzug,
     Auszug und jeder Aenderung der Haushaltsgroesse und schaetzte dort den
@@ -1914,7 +2012,8 @@ def _verteilzeile(vorgang: Vorgang, anlage, rechnungen: Sequence[Rechnung],
                   vermieter_positionen: list, *, zweck: str, ww_anteil,
                   wohnungen: list, ids: set, gesamt_qm,
                   zaehler: dict, trennungsgrund,
-                  co2_aufteilung: Optional[dict] = None) -> Optional[dict]:
+                  co2_aufteilung: Optional[dict] = None,
+                  lohn_35a: Optional[dict] = None) -> Optional[dict]:
     """Eine Abrechnungszeile fuer **einen Zweck** einer Anlage, oder ``None``.
 
     ``None`` heisst: keine der Rechnungen faellt in den Abrechnungszeitraum.
@@ -2080,11 +2179,23 @@ def _verteilzeile(vorgang: Vorgang, anlage, rechnungen: Sequence[Rechnung],
             co2_verbrauchsteil, co2_grundteil = heizung.teile_masse(
                 co2_mieter, satz)
 
-        verbrauchsanteil += heizung.nach_verbrauch(
+        nach_verbrauch = heizung.nach_verbrauch(
             verbrauchsteil, eigen, summe_zaehler)
         grundteil_anteilig = grundteil * time_fraction
-        flaechenanteil += heizung.nach_flaeche(
+        nach_flaeche = heizung.nach_flaeche(
             grundteil_anteilig, vorgang.wohnung.qm or 0, gesamt_qm)
+        verbrauchsanteil += nach_verbrauch
+        flaechenanteil += nach_flaeche
+        # § 35a (R-35A-01): der Lohn wird getrennt wie der Betrag und folgt
+        # dem Anteil des Mieters an der Masse ohne CO2 -- Lohn ist nie CO2.
+        if inv.lohnanteil is not None and lohn_35a is not None:
+            lohn_warm, lohn_heiz = heizung.trenne_verbundene(
+                inv.lohnanteil, ww_anteil)
+            schluessel = (f"{heizung.ZEILENTITEL[zweck]} ({anlage.name})",
+                          inv.art_35a)
+            lohn_35a[schluessel] = lohn_35a.get(schluessel, NULL) + lohnausweis.mieteranteil(
+                lohn_warm if zweck == heizung.WARMWASSER else lohn_heiz,
+                nach_verbrauch + nach_flaeche, betrag)
         co2_verbrauchsanteil += heizung.nach_verbrauch(
             co2_verbrauchsteil, eigen, summe_zaehler)
         co2_flaechenanteil += heizung.nach_flaeche(
@@ -2141,7 +2252,7 @@ def _verteilzeile(vorgang: Vorgang, anlage, rechnungen: Sequence[Rechnung],
             'kostenart': inv.heizkostenart,
             'kostenart_text': heizung.bezeichnung(inv.heizkostenart)
                               if inv.heizkostenart else None,
-            'provider_name': inv.versorger_name or 'Unbekannt',
+            'provider_name': inv.versorger_name or None,  # NK-246: nichts erfinden
             'period': f"{inv.beginn.strftime('%d.%m.%Y')} - {inv.ende.strftime('%d.%m.%Y')}",
             # R-DOC-01 Punkt 8: der Verweis auf den Beleg -- Name und Seiten
             # wie bei den uebrigen Zeilen (beleg_angabe haengt ", Seiten N"
@@ -2301,7 +2412,7 @@ def _verteilzeile(vorgang: Vorgang, anlage, rechnungen: Sequence[Rechnung],
             if einzeln else None),
         'provider_id': einzeln.versorger_id if einzeln else None,
         'provider_name': (
-            einzeln.versorger_name or 'Unbekannt' if einzeln
+            einzeln.versorger_name or None if einzeln
             else f"{len(belege)} Rechnungen"
         ),
         'period': f"{beginn.strftime('%d.%m.%Y')} - {ende.strftime('%d.%m.%Y')}",
@@ -2387,7 +2498,8 @@ def _verteilzeile(vorgang: Vorgang, anlage, rechnungen: Sequence[Rechnung],
 
 def _anlagenzeilen(vorgang: Vorgang, anlage, rechnungen: Sequence[Rechnung],
                    mehrere: bool, vermieter_positionen: list,
-                   co2_aufteilung: Optional[dict] = None) -> list:
+                   co2_aufteilung: Optional[dict] = None,
+                   lohn_35a: Optional[dict] = None) -> list:
     """Die Zeilen einer Anlage -- eine je Zweck, hoechstens zwei.
 
     Eine leere Liste heisst: diese Anlage versorgt den Mieter nicht (er ist
@@ -2426,7 +2538,7 @@ def _anlagenzeilen(vorgang: Vorgang, anlage, rechnungen: Sequence[Rechnung],
             zweck=zweck, ww_anteil=ww_anteil, wohnungen=wohnungen, ids=ids,
             gesamt_qm=gesamt_qm, zaehler=zaehler,
             trennungsgrund=trennungsgrund,
-            co2_aufteilung=co2_aufteilung)
+            co2_aufteilung=co2_aufteilung, lohn_35a=lohn_35a)
         if zeile is not None:
             zeilen.append(zeile)
     return zeilen
@@ -2728,6 +2840,8 @@ def rechne(vorgang: Vorgang) -> dict:
 
     # F-125: geschaetzter Preisfuss je (Kostenart, Zaehler) -> Rechnungszeitraeume
     preis_geschaetzt: dict[tuple[str, str], list[str]] = {}
+    # § 35a (NK-268): Mieteranteil am Lohn je (Kostenart, Art), ungerundet.
+    lohn_35a: dict[tuple[str, str], Decimal] = {}
     for inv in invoices:
         cat = inv.kategorie
         billing_type = abrechnungsart_von(profiles, cat)
@@ -3269,7 +3383,7 @@ def rechne(vorgang: Vorgang) -> dict:
                     'main_consumption': round(main_consumption, 1) if main_meter and main_detail else None,
                     'sum_sub_consumption': round(sum_sub_consumption, 1) if main_meter and main_detail else None,
                     'allgemein_consumption': round(allgemein_consumption, 1) if main_meter and main_detail else None,
-                    # NK-213 (B2): der Anteil des Mieters am Allgemeinverbrauch,
+                    # NK-213: der Anteil des Mieters am Allgemeinverbrauch,
                     # wie er gerechnet wurde -- das Blatt zeigt ihn statt 1/n.
                     'allgemein_quote': (float(round(quote_mieter, 6))
                                         if main_meter and main_detail else None),
@@ -3308,7 +3422,7 @@ def rechne(vorgang: Vorgang) -> dict:
                 'invoice_number': inv.nummer,
                 'rechnungsdatum': rechnungsdatum_angabe(inv.rechnungsdatum),
                 'provider_id': inv.versorger_id,
-                'provider_name': inv.versorger_name if inv.versorger_name else 'Unbekannt',
+                'provider_name': inv.versorger_name or None,
                 'period': f"{inv.beginn.strftime('%d.%m.%Y')} - {inv.ende.strftime('%d.%m.%Y')}",
                 'total_amount': inv.betrag,
                 'prorated_amount': runde(prorated_invoice_amount),
@@ -3329,6 +3443,10 @@ def rechne(vorgang: Vorgang) -> dict:
                 'rechenweg': rechenweg,
             })
             total_amount += runde(tenant_cost)
+            if inv.lohnanteil is not None:
+                lohn_35a[(cat.name, inv.art_35a)] = lohn_35a.get(
+                    (cat.name, inv.art_35a), NULL) + lohnausweis.mieteranteil(
+                        inv.lohnanteil, tenant_cost, inv.betrag)
 
     for (kategorie, zaehler), spannen in preis_geschaetzt.items():
         warnings.append(HINWEIS_PREIS_HOCHGERECHNET.format(
@@ -3349,7 +3467,7 @@ def rechne(vorgang: Vorgang) -> dict:
             raise BillingDataError(area_blocker)
         for zeile in _anlagenzeilen(
                 vorgang, anlage, gruppe, mehrere, vermieter_positionen,
-                co2_aufteilung):
+                co2_aufteilung, lohn_35a):
             line_items.append(zeile)
             total_amount += zeile['tenant_cost']
             details = zeile['heizung_details']
@@ -3446,6 +3564,9 @@ def rechne(vorgang: Vorgang) -> dict:
         # Anteile in Prozent und Euro, Herkunft der Zahlen. None heisst:
         # keine Einstufung -- dann erklaert die blockierende Warnung, warum.
         'co2': co2_ausweis,
+        # Der Ausweis der Lohnanteile nach § 35a EStG (NK-268, R-35A-01).
+        # None heisst: keine Rechnung mit Angabe -- dann keine Tabelle.
+        'ausweis_35a': lohnausweis.ausweis(lohn_35a),
         # Der Satz fuers PDF, wenn Rechnungen im Zeitraum fehlen (F-115).
         'vorbehalt': abdeckungs_vorbehalt(luecken),
         # D-116: dieselbe Meldung nur einmal, in der Reihenfolge des Auftretens.

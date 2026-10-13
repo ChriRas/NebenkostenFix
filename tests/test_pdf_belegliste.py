@@ -383,3 +383,99 @@ def test_die_zeile_des_kerns_traegt_die_belegangaben():
     assert zeile['rechnungsdatum'] == '2024-04-15'
     assert zeile['provider_name'] == 'Stadtwerke Musterstadt'
     assert zeile['doc_name'] == 'rechnung-wasser.pdf, Seiten 3'
+
+
+@pytest.mark.parametrize('detailliert', [False, True], ids=['einfach', 'detailliert'])
+def test_die_belegliste_steht_genau_einmal_da(unkomprimiert, detailliert):
+    """NK-244: die ausführliche Fassung hängte die Liste zweimal an."""
+    pdf = _pdf(detailliert, [_posten()])
+    assert _text(pdf).count('Belegliste') == 1
+    assert ('Zeitanteilig' in _geklebt(pdf)) is detailliert
+
+
+def test_ohne_anbieter_liefert_der_kern_keinen():
+    """NK-246: der Kern setzte „Unbekannt“ ein; jetzt bleibt es None."""
+    from nebenkostenfix.rechenkern import Kategorie, Mieter, Rechnung, Vorgang, Wohnung, rechne
+    meine = Wohnung(id=1, name='EG links', qm=50.0)
+    ich = Mieter(id=1, name='Anna Mieterin', einzug=date(2020, 1, 1), auszug=None, wohnung_id=1)
+    r = Rechnung(id=1, kategorie=Kategorie(id=1, name='Wasserversorgung', braucht_zaehler=False),
+                 betrag=Decimal('1200.00'), beginn=date(2024, 1, 1), ende=date(2024, 12, 31))
+    v = Vorgang(mieter=ich, wohnung=meine, immobilie_id=1, immobilie_name='Hauptstrasse 1',
+                beginn=date(2024, 1, 1), ende=date(2024, 12, 31), wohnungen=(meine,),
+                mieter_der_immobilie=(ich,), profile={}, rechnungen=(r,))
+    assert rechne(v)['line_items'][0]['provider_name'] is None
+
+
+@pytest.mark.parametrize('detailliert', [False, True], ids=['einfach', 'detailliert'])
+def test_ohne_anbieter_keine_anbieterzeile(unkomprimiert, detailliert):
+    """NK-246: ohne Anbieter steht weder „Unbekannt“ noch „Anbieter:“ da."""
+    ohne = _posten()
+    ohne['provider_name'] = None
+    geklebt = _geklebt(_pdf(detailliert, [ohne]))
+    assert 'Unbekannt' not in geklebt and 'Anbieter:' not in geklebt
+    assert 'Anbieter:StadtwerkeMusterstadt' in _geklebt(_pdf(detailliert, [_posten()]))
+
+
+# --- Die Schlusssätze (NK-248) ---------------------------------------------
+
+
+def test_der_schluss_nennt_die_hinterlegte_iban(unkomprimiert, monkeypatch):
+    """NK-248: mit IBAN steht sie im Zahlungssatz, nicht „das bekannte Konto“."""
+    monkeypatch.setenv('VERMIETER_IBAN', 'DE89370400440532013000')
+    geklebt = _geklebt(_pdf(False, [_posten()]))
+    assert ('Bitteüberweisen' in geklebt
+            and 'aufdasKontomitderIBANDE89370400440532013000.' in geklebt)
+    assert 'bekannteKonto' not in geklebt
+    assert 'stehenwir' not in geklebt
+    assert 'RückfragenzurAbrechnungwerdengernbeantwortet.' in geklebt
+
+
+def test_der_schluss_ohne_iban_bleibt_beim_bekannten_konto(unkomprimiert, monkeypatch):
+    """Ohne hinterlegte IBAN bleibt der bisherige Zahlungssatz; ohne ich/wir."""
+    monkeypatch.delenv('VERMIETER_IBAN', raising=False)
+    geklebt = _geklebt(_pdf(False, [_posten()]))
+    assert 'innerhalbvon14TagenaufdasbekannteKonto.' in geklebt
+    assert 'IBAN' not in geklebt
+    assert 'stehenwir' not in geklebt
+
+
+# --- Umbruch an Wortgrenzen (NK-250) -----------------------------------------
+
+
+def _zeilen(pdf: bytes) -> list[str]:
+    """Jedes Textstück des Stroms für sich -- eine gesetzte Zeile je Stück."""
+    stuecke = []
+    for roh in pdf.split(b'stream')[1:]:
+        roh = roh.split(b'endstream')[0]
+        stuecke.extend(_entschluesselt(m) for m in re.findall(
+            r'\(((?:\\.|[^\\)])*)\)', roh.decode('latin-1', 'replace')))
+    return stuecke
+
+
+@pytest.mark.parametrize('detailliert', [False, True], ids=['einfach', 'detailliert'])
+def test_kein_wort_bricht_mitten_in_der_zelle(unkomprimiert, detailliert):
+    """NK-250: lange Kostenart und Spaltenköpfe brechen an Wortgrenzen."""
+    reinigung, heizung = _posten(), _posten()
+    reinigung['category'] = 'Gebäudereinigung und Ungezieferbekämpfung'
+    reinigung['provider_name'] = 'Abfallwirtschaft Musterstadt'
+    heizung['category'] = 'Heizkosten (Zentralheizung)'
+    heizung['provider_name'] = 'Stadt Musterstadt'
+    zeilen = _zeilen(_pdf(detailliert, [reinigung, heizung]))
+    woerter = ['Gebäudereinigung', 'Ungezieferbekämpfung', 'Abfallwirtschaft',
+               '(Zentralheizung)', 'Musterstadt', 'Abrechnungszeitraum']
+    if detailliert:
+        woerter += ['Rechnungsbetrag', 'Zeitanteilig']
+    for wort in woerter:
+        assert any(wort in z for z in zeilen), (wort, [z for z in zeilen if wort[:5] in z])
+
+
+@pytest.mark.parametrize('detailliert', [False, True], ids=['einfach', 'detailliert'])
+def test_allgemeinstrom_steht_bei_den_betriebskosten(unkomprimiert, detailliert):
+    """NK-251: Nr. 11 (Beleuchtung) ist Betriebskostenart, nicht Heizkosten."""
+    strom, gas = _posten(), _posten()
+    strom['category'] = 'Allgemeinstrom'
+    gas['category'] = 'Heizkosten'
+    zeilen = _zeilen(_pdf(detailliert, [strom, gas]))
+    gruppen = [z for z in zeilen if z in ('Energie', 'Betriebskosten')]
+    assert gruppen == ['Energie', 'Betriebskosten'], gruppen
+    assert zeilen.index('Allgemeinstrom') > zeilen.index('Betriebskosten')

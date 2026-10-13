@@ -38,7 +38,11 @@ BASISREVISION = "63738d5329b4"
 # NK-188: ``a4d7e1c9b3f5`` fuegt ``properties.abrechnungsjahr_beginn`` hinzu (D-114).
 # F-137: ``e3c5a7f9b1d2`` fuegt ``cost_invoices.grundpreis`` hinzu.
 # NK-217: ``670627ef0699`` fuegt ``tenant_billing_reports.regelstand_geprueft`` hinzu.
-KOPFREVISION = "670627ef0699"
+# NK-264: ``b4d8e2a61f37`` fuegt ``tenants.anrede`` und ``vermieterdaten.art`` hinzu.
+# NK-258: ``c7e1f94a2b05`` fuegt ``meters.ersetzt_id``, ``geeicht_bis`` und ``ort`` hinzu.
+# NK-261: ``d9a3f2c6e1b4`` legt die Tabelle ``vorauszahlung_soll`` an (R-VZ-02).
+# NK-268: ``a8c4e2f61d93`` fuegt ``cost_invoices.art_35a`` und ``lohnanteil`` hinzu (R-35A-01).
+KOPFREVISION = "a8c4e2f61d93"
 
 
 def _umgebung(dbdatei: Path, tmp_path: Path) -> dict:
@@ -265,18 +269,29 @@ def test_zwei_starts_gleichzeitig_bauen_die_datenbank_nur_einmal(tmp_path):
     datei = tmp_path / "gleichzeitig.db"
     umgebung = _umgebung(datei, tmp_path)
 
-    prozesse = [
-        subprocess.Popen(
-            [sys.executable, "-c", CODE_START],
-            cwd=str(WURZEL),
-            env=umgebung,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-        )
-        for _ in range(2)
-    ]
-    ausgaben = [p.communicate(timeout=180) for p in prozesse]
+    # Ausgaben in Dateien, nicht in Pipes: nacheinander gelesen, stand der
+    # zweite Prozess mit der Sperre am vollen Puffer (Windows: 4 KB, das Log
+    # der Wanderung ist laenger), der erste wartete auf die Sperre.
+    dateien = [(tmp_path / f"start{n}.out", tmp_path / f"start{n}.err") for n in range(2)]
+    prozesse = []
+    try:
+        for aus, fehler in dateien:
+            with open(aus, "wb") as a, open(fehler, "wb") as f:
+                prozesse.append(subprocess.Popen(
+                    [sys.executable, "-c", CODE_START],
+                    cwd=str(WURZEL),
+                    env=umgebung,
+                    stdout=a,
+                    stderr=f,
+                ))
+        for prozess in prozesse:
+            prozess.wait(timeout=180)
+    finally:
+        for prozess in prozesse:
+            if prozess.poll() is None:
+                prozess.kill()
+    ausgaben = [(aus.read_text(errors="replace"), fehler.read_text(errors="replace"))
+                for aus, fehler in dateien]
 
     for prozess, (aus, fehler) in zip(prozesse, ausgaben):
         assert prozess.returncode == 0, f"{aus}\n{fehler}"
@@ -2477,3 +2492,179 @@ print(json.dumps({"tabellen": tabellen}))
 """
     stand = _lauf(code, datei, tmp_path)
     assert "billing_report_versions" not in stand["tabellen"]
+
+
+CODE_ANREDE_WANDERUNG = """
+import json
+from sqlalchemy import text
+from flask_migrate import downgrade, upgrade
+import app as anwendung
+from nebenkostenfix.models import db
+
+
+def spalten(tabelle):
+    return [z[1] for z in db.session.execute(
+        text(f"PRAGMA table_info('{tabelle}')")).all()]
+
+
+with anwendung.app.app_context():
+    downgrade(revision="670627ef0699")
+    db.session.execute(text(
+        "INSERT INTO properties (id, name, is_standalone) VALUES (1, 'Altbau', 0)"))
+    db.session.execute(text(
+        "INSERT INTO apartments (id, property_id, name, sqm, is_active)"
+        " VALUES (1, 1, 'EG links', 60.0, 1)"))
+    db.session.execute(text(
+        "INSERT INTO tenants (id, apartment_id, name, move_in_date)"
+        " VALUES (1, 1, 'Altmieter', '2024-01-01')"))
+    db.session.execute(text("INSERT INTO vermieterdaten (id, name) VALUES (1, 'Erika')"))
+    db.session.commit()
+    vorher = spalten("tenants") + spalten("vermieterdaten")
+
+    upgrade()
+    nachher = spalten("tenants") + spalten("vermieterdaten")
+    werte = [list(db.session.execute(text("SELECT name, anrede FROM tenants")).one()),
+             list(db.session.execute(text("SELECT name, art FROM vermieterdaten")).one())]
+    stand = db.session.execute(text("SELECT version_num FROM alembic_version")).scalar()
+
+    downgrade(revision="670627ef0699")
+    zurueck = spalten("tenants") + spalten("vermieterdaten")
+    namen = [db.session.execute(text("SELECT name FROM tenants")).scalar(),
+             db.session.execute(text("SELECT name FROM vermieterdaten")).scalar()]
+
+print(json.dumps({"vorher": vorher, "nachher": nachher, "werte": werte,
+                  "stand": stand, "zurueck": zurueck, "namen": namen}))
+"""
+
+
+def test_die_anredewanderung_legt_die_spalten_leer_an(tmp_path):
+    """NK-264: Anrede und Art kommen leer dazu -- leer ist der bisherige
+    Stand (neutraler Gruss, neutrale Saetze); der Rueckweg nimmt sie
+    wieder weg und laesst die Zeilen stehen."""
+    stand = _lauf(CODE_ANREDE_WANDERUNG, tmp_path / "anrede.db", tmp_path)
+
+    assert "anrede" not in stand["vorher"] and "art" not in stand["vorher"]
+    assert "anrede" in stand["nachher"] and "art" in stand["nachher"]
+    assert stand["werte"] == [["Altmieter", None], ["Erika", None]]
+    assert stand["stand"] == KOPFREVISION
+    assert "anrede" not in stand["zurueck"] and "art" not in stand["zurueck"]
+    assert stand["namen"] == ["Altmieter", "Erika"]
+
+
+CODE_WECHSEL_WANDERUNG = """
+import json
+from sqlalchemy import text
+from flask_migrate import downgrade, upgrade
+import app as anwendung
+from nebenkostenfix.models import db
+
+
+def spalten():
+    return [z[1] for z in db.session.execute(
+        text("PRAGMA table_info('meters')")).all()]
+
+
+with anwendung.app.app_context():
+    downgrade(revision="b4d8e2a61f37")
+    db.session.execute(text(
+        "INSERT INTO properties (id, name, is_standalone) VALUES (1, 'Altbau', 0)"))
+    kategorie = db.session.execute(text("SELECT MIN(id) FROM cost_categories")).scalar()
+    db.session.execute(text(
+        "INSERT INTO meters (id, property_id, category_id, meter_number,"
+        " is_main_meter, has_dual_tariff, is_official)"
+        " VALUES (1, 1, :k, 'W-1', 0, 0, 0)"), {"k": kategorie})
+    db.session.commit()
+    vorher = spalten()
+
+    upgrade()
+    nachher = spalten()
+    werte = list(db.session.execute(text(
+        "SELECT meter_number, ersetzt_id, geeicht_bis, ort FROM meters")).one())
+    stand = db.session.execute(text("SELECT version_num FROM alembic_version")).scalar()
+
+    downgrade(revision="b4d8e2a61f37")
+    zurueck = spalten()
+    nummer = db.session.execute(text("SELECT meter_number FROM meters")).scalar()
+
+print(json.dumps({"vorher": vorher, "nachher": nachher, "werte": werte,
+                  "stand": stand, "zurueck": zurueck, "nummer": nummer}))
+"""
+
+
+def test_die_wechselwanderung_legt_die_spalten_leer_an(tmp_path):
+    """NK-258: Wechselverweis, Eichfrist und Ort kommen leer dazu -- leer
+    heisst: jeder Zaehler steht fuer sich, wie bisher. Der Rueckweg nimmt
+    sie wieder weg und laesst den Zaehler stehen."""
+    stand = _lauf(CODE_WECHSEL_WANDERUNG, tmp_path / "wechsel.db", tmp_path)
+
+    neu = {"ersetzt_id", "geeicht_bis", "ort"}
+    assert not neu & set(stand["vorher"])
+    assert neu <= set(stand["nachher"])
+    assert stand["werte"] == ["W-1", None, None, None]
+    assert stand["stand"] == KOPFREVISION
+    assert not neu & set(stand["zurueck"])
+    assert stand["nummer"] == "W-1"
+
+
+CODE_SOLL_WANDERUNG = """
+import json
+from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
+from flask_migrate import downgrade, upgrade
+import app as anwendung
+from nebenkostenfix.models import db
+
+
+def tabellen():
+    return [z[0] for z in db.session.execute(
+        text("SELECT name FROM sqlite_master WHERE type='table'")).all()]
+
+
+with anwendung.app.app_context():
+    downgrade(revision="c7e1f94a2b05")
+    vorher = tabellen()
+    upgrade()
+    nachher = tabellen()
+    db.session.execute(text(
+        "INSERT INTO properties (id, name, is_standalone) VALUES (1, 'Altbau', 0)"))
+    db.session.execute(text(
+        "INSERT INTO apartments (id, property_id, name, sqm, is_active)"
+        " VALUES (1, 1, 'EG', 50, 1)"))
+    db.session.execute(text(
+        "INSERT INTO tenants (id, apartment_id, name, move_in_date)"
+        " VALUES (1, 1, 'Mieter', '2024-01-01')"))
+    db.session.execute(text(
+        "INSERT INTO vorauszahlung_soll (tenant_id, gueltig_ab, betrag)"
+        " VALUES (1, '2024-01-01', 80)"))
+    db.session.commit()
+    abgewiesen = []
+    for tag, betrag in (("2024-02-01", -1), ("2024-01-01", 90)):
+        try:
+            db.session.execute(text(
+                "INSERT INTO vorauszahlung_soll (tenant_id, gueltig_ab, betrag)"
+                " VALUES (1, :t, :b)"), {"t": tag, "b": betrag})
+            db.session.commit()
+        except IntegrityError:
+            db.session.rollback()
+            abgewiesen.append(tag)
+    stand = db.session.execute(text("SELECT version_num FROM alembic_version")).scalar()
+    downgrade(revision="c7e1f94a2b05")
+    zurueck = tabellen()
+
+print(json.dumps({"vorher": "vorauszahlung_soll" in vorher,
+                  "nachher": "vorauszahlung_soll" in nachher,
+                  "abgewiesen": abgewiesen, "stand": stand,
+                  "zurueck": "vorauszahlung_soll" in zurueck}))
+"""
+
+
+def test_die_sollwanderung_legt_die_tabelle_mit_pruefungen_an(tmp_path):
+    """NK-261: die Tabelle kommt leer dazu -- ohne Soll kein Rueckstand, wie
+    bisher. Negativer Betrag und doppelter Stichtag scheitern schon in der
+    Datenbank; der Rueckweg nimmt die Tabelle wieder weg."""
+    stand = _lauf(CODE_SOLL_WANDERUNG, tmp_path / "soll.db", tmp_path)
+
+    assert stand["vorher"] is False and stand["nachher"] is True
+    assert stand["abgewiesen"] == ["2024-02-01", "2024-01-01"]
+    assert stand["stand"] == KOPFREVISION
+    assert stand["zurueck"] is False

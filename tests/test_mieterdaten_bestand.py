@@ -25,6 +25,15 @@ def _abrechnung(mieter, beginn, ende):
     db.session.commit()
 
 
+def _abrechnungsjahr_ab(haus, tag):
+    """Das Abrechnungsjahr des Hauses beginnt am ``tag``; einen 29.02. gibt es nicht."""
+    if (tag.month, tag.day) == (2, 29):
+        tag -= timedelta(days=1)
+    haus.abrechnungsjahr_beginn = f'{tag.month:02d}-{tag.day:02d}'
+    db.session.commit()
+    return tag
+
+
 def _rechne(mieter, beginn=B, ende=E):
     return BillingEngine(mieter.id, beginn.isoformat(), ende.isoformat()).calculate_bill()
 
@@ -59,6 +68,8 @@ def test_uebersicht_zaehlt_abgerechnete_mieter_nicht_als_offen(auth_client, app_
     mieter = f.tenant(f.apt(haus, 'EG', 50), 'Mieter 1', move_in=heute - timedelta(days=2000))
     mieter.last_billed_until = heute - timedelta(days=1000)
     _abrechnung(mieter, heute - timedelta(days=375), heute - timedelta(days=10))
+    # Der nächste Zeitraum läuft noch -- auch in den ersten Januartagen.
+    _abrechnungsjahr_ab(haus, heute - timedelta(days=9))
 
     kpis = auth_client.get(f'/api/analytics/building/{haus.id}').get_json()['kpis']
 
@@ -79,7 +90,7 @@ def test_uebersicht_zaehlt_den_auszugstag_noch_mit(auth_client, app_ctx):
 
 
 def test_uebersicht_zaehlt_fehlende_endabrechnungen(auth_client, app_ctx):
-    """NK-211 (B4): ausgezogen und nicht bis zum Auszug abgerechnet ist offen.
+    """NK-211: ausgezogen und nicht bis zum Auszug abgerechnet ist offen.
 
     Vorher zaehlten nur Mieter, die heute wohnen -- die Endabrechnung nach
     einem Auszug fehlte in der Kachel. Wer vor mehr als zwei Jahren auszog,
@@ -100,10 +111,72 @@ def test_uebersicht_zaehlt_fehlende_endabrechnungen(auth_client, app_ctx):
     alt = f.tenant(wohnung, 'Alt', move_in=lang)
     alt.move_out_date = heute - timedelta(days=731)
     db.session.commit()
+    _abrechnungsjahr_ab(haus, heute - timedelta(days=9))
 
     kpis = auth_client.get(f'/api/analytics/building/{haus.id}').get_json()['kpis']
 
     assert kpis['open_tasks'] == 1
+
+
+def test_uebersicht_zaehlt_laufende_zeitraeume_nicht(auth_client, app_ctx):
+    """NK-240: offen ist, was der Zeitraumvorschlag schon abrechnen ließe.
+
+    Vorher zählte jeder Mieter ohne Abrechnung, auch wer vor drei Monaten
+    einzog und dessen erstes Abrechnungsjahr noch läuft.
+    """
+    heute = date.today()
+    haus = f.house()
+    start = _abrechnungsjahr_ab(haus, heute - timedelta(days=90))
+    f.tenant(f.apt(haus, 'EG', 50), 'Neu', move_in=start)
+    bezahlt = f.tenant(f.apt(haus, 'OG', 50), 'Bis Jahresende', move_in=heute - timedelta(days=2000))
+    bezahlt.last_billed_until = start - timedelta(days=1)
+    db.session.commit()
+
+    kpis = auth_client.get(f'/api/analytics/building/{haus.id}').get_json()['kpis']
+
+    assert kpis['open_tasks'] == 0
+
+
+def test_uebersicht_zaehlt_abgelaufene_zeitraeume(auth_client, app_ctx):
+    """NK-240: auch der Rest eines Jahres, das nur zum Teil abgerechnet ist.
+
+    Vorher galt „abgerechnet in den letzten 365 Tagen“ als erledigt.
+    """
+    heute = date.today()
+    haus = f.house()
+    start = _abrechnungsjahr_ab(haus, heute - timedelta(days=90))
+    vorjahr = date(start.year - 1, start.month, start.day)
+    lang = heute - timedelta(days=2000)
+    teil = f.tenant(f.apt(haus, 'EG', 50), 'Teilweise', move_in=lang)
+    teil.last_billed_until = vorjahr + timedelta(days=100)
+    alt = f.tenant(f.apt(haus, 'OG', 50), 'Vorjahr fehlt', move_in=lang)
+    alt.last_billed_until = vorjahr - timedelta(days=1)
+    db.session.commit()
+
+    kpis = auth_client.get(f'/api/analytics/building/{haus.id}').get_json()['kpis']
+
+    assert kpis['open_tasks'] == 2
+
+
+def test_uebersicht_zaehlt_gesperrte_mieter_nicht(auth_client, app_ctx):
+    """NK-269: ein gesperrter Mieter ist geloescht bis auf den Anker (R-DSGVO-02).
+
+    Er steht in keiner Liste und laesst sich nicht abrechnen -- als offene
+    Aufgabe bliebe er stehen, ohne dass sie sich erledigen liesse.
+    """
+    heute = date.today()
+    haus = f.house()
+    lang = heute - timedelta(days=2000)
+    wohnt = f.tenant(f.apt(haus, 'EG', 50), 'Wohnt', move_in=lang)
+    weg = f.tenant(f.apt(haus, 'OG', 50), 'Ausgezogen', move_in=lang)
+    weg.move_out_date = heute - timedelta(days=50)
+    for mieter in (wohnt, weg):
+        mieter.gesperrt_bis = date(heute.year + 10, 12, 31)
+    db.session.commit()
+
+    kpis = auth_client.get(f'/api/analytics/building/{haus.id}').get_json()['kpis']
+
+    assert kpis['open_tasks'] == 0
 
 
 # --- H8:ohne Kostenprofil, ohne Rechnungen -----------------------------------------

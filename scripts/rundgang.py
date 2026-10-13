@@ -110,6 +110,64 @@ PRUEFUNG_JS = """
 """
 
 
+ZAEHLER_AKTIONEN_JS = """() => {
+  const knoepfe = [...document.querySelectorAll('#meters-container button')].filter(k => k.offsetParent);
+  if (knoepfe.length === 0) return ['keine Zähleraktion sichtbar'];
+  return knoepfe.filter(k => { const r = k.getBoundingClientRect();
+      return r.left < 0 || r.right > window.innerWidth; })
+    .map(k => `Aktion „${k.title || k.textContent.trim()}“ liegt außerhalb des Bilds`);
+}"""
+
+# NK-253: am Handy stapelten sich die Kopfknöpfe; ein Menüknopf neben dem Titel
+# trägt sie. Prüft den Kopf eines Bereichs mit mindestens zwei Aktionen.
+KOPF_MENUE_JS = """(bereich) => {
+  const kopf = document.querySelector(`#tab-${bereich} .section-header:has(.kopf-aktionen)`);
+  const aktionen = kopf && [...kopf.querySelectorAll('.kopf-aktionen button')];
+  if (!kopf || aktionen.length < 2) return [];
+  const titel = kopf.querySelector('h2').getBoundingClientRect();
+  const knopf = kopf.querySelector('.kopf-menue-knopf');
+  if (!knopf || !knopf.offsetParent) return [`Kopf mit ${aktionen.length} Aktionen ohne Menüknopf`];
+  const befunde = [];
+  const k = knopf.getBoundingClientRect();
+  if (k.top >= titel.bottom || k.bottom <= titel.top) befunde.push('Menüknopf steht nicht neben dem Titel');
+  if (aktionen.some(a => a.offsetParent)) befunde.push('Aktionen stehen vor dem Öffnen im Kopf');
+  knopf.click();
+  const fehlen = aktionen.filter(a => { const r = a.getBoundingClientRect();
+    return !a.offsetParent || r.left < 0 || r.right > window.innerWidth; });
+  if (fehlen.length) befunde.push(`offenes Menü zeigt ${aktionen.length - fehlen.length} von ${aktionen.length} Aktionen`);
+  knopf.click();
+  if (aktionen.some(a => a.offsetParent)) befunde.push('Menü schließt beim zweiten Tippen nicht');
+  return befunde;
+}"""
+
+# NK-254: ein Vergleich mit nur einer Wohnung sagt nichts; dann keine Karte.
+VERGLEICH_JS = """() => {
+  const karte = document.getElementById('chart-comparison-title').closest('.dashboard-card');
+  const diagramm = Chart.getChart(document.getElementById('chart-building-comparison'));
+  const wohnungen = diagramm ? diagramm.data.labels.length : 0;
+  return karte.offsetParent && wohnungen < 2 ? [`Wohnungsvergleich mit ${wohnungen} Wohnung(en) sichtbar`] : [];
+}"""
+
+# NK-256: Zahlungskarten zeigten „Miete: 0,00 €“ für Mieter ohne Mietzahlung.
+ZAHLUNG_NULLZEILEN_JS = """() => [...document.querySelectorAll('#payments-grid .property-card')].flatMap(karte =>
+  [...karte.querySelectorAll('.prop-meta > div')]
+    .filter(z => /(^|[^\\d.])0,00\\s€/.test(z.textContent))
+    .map(z => `Zahlungskarte „${karte.querySelector('.prop-title').textContent}“: `
+      + `${z.textContent.replace(/\\s+/g, ' ').trim()}`))"""
+
+# NK-257: ein Zähler ohne Ablesung hatte keinen Weg zum ersten Stand außer
+# über den Kopf; mit Ablesung bleibt der Stift.
+ERSTER_STAND_JS = """() => [...document.querySelectorAll('#meters-container tr:not(.zaehler-kopf)')].flatMap(z => {
+  const art = z.querySelector('[data-label="Kategorie"]').textContent.trim();
+  const ohne = z.querySelector('[data-label="Letzter Stand"]').textContent.trim() === '-';
+  const erster = [...z.querySelectorAll('button')].some(k => k.textContent.includes('Ersten Stand erfassen'));
+  const stift = !!z.querySelector('button[title="Letzten Stand bearbeiten"]');
+  if (ohne && (!erster || stift)) return [`Zähler ${art} ohne Ablesung ohne „Ersten Stand erfassen“`];
+  if (!ohne && (erster || !stift)) return [`Zähler ${art} mit Ablesung ohne Stift`];
+  return [];
+})"""
+
+
 def _freier_port() -> int:
     with socket.socket() as s:
         s.bind(('127.0.0.1', 0))
@@ -180,6 +238,33 @@ class Rundgang:
     def pruefen(self, wo: str, bereich: str | None = None):
         for befund in self.seite.evaluate(PRUEFUNG_JS, bereich):
             self.befunde.append(f'{self.breite}px {wo}: {befund}')
+
+    def handy(self):
+        """Funde der Bestandsaufnahme 0.13.0 am Handy (NK-252 ff.), mit Beispielhaus."""
+        self.schritt = 'handy-zaehler'
+        self.seite.evaluate("(b) => wechsleZuTab(b)", 'meters')
+        self.seite.wait_for_timeout(700)
+        # NK-252: die Tabelle rollte in ihrer Karte, die Aktionen lagen rechts außerhalb.
+        for befund in self.seite.evaluate(ZAEHLER_AKTIONEN_JS):
+            self.befunde.append(f'{self.breite}px handy/zaehler: {befund}')
+        for befund in self.seite.evaluate(ERSTER_STAND_JS):
+            self.befunde.append(f'{self.breite}px handy/zaehler: {befund}')
+        for bereich in BEREICHE:
+            self.schritt = f'handy-kopf-{bereich}'
+            self.seite.evaluate("(b) => wechsleZuTab(b)", bereich)
+            self.seite.wait_for_timeout(300)
+            for befund in self.seite.evaluate(KOPF_MENUE_JS, bereich):
+                self.befunde.append(f'{self.breite}px handy/{bereich}: {befund}')
+        self.schritt = 'handy-vergleich'
+        self.seite.evaluate("(b) => wechsleZuTab(b)", 'reports')
+        self.seite.wait_for_timeout(1500)
+        for befund in self.seite.evaluate(VERGLEICH_JS):
+            self.befunde.append(f'{self.breite}px handy/reports: {befund}')
+        self.schritt = 'handy-zahlungen'
+        self.seite.evaluate("(b) => wechsleZuTab(b)", 'payments')
+        self.seite.wait_for_timeout(700)
+        for befund in self.seite.evaluate(ZAHLUNG_NULLZEILEN_JS):
+            self.befunde.append(f'{self.breite}px handy/payments: {befund}')
 
     def bereich(self, name: str, zustand: str):
         self.schritt = f'{zustand}-{name}'
@@ -256,6 +341,8 @@ def rundgang(chromium: str | None, ausgabe: Path) -> list[str]:
                     seite.wait_for_timeout(1500)
                 for bereich in BEREICHE:
                     gang.bereich(bereich, 'gefuellt')
+                if breite < 720:
+                    gang.handy()
                 # NK-158: die Hilfe hat keinen Eintrag in der Seitenleiste.
                 gang.schritt = 'hilfe'
                 seite.evaluate("() => zeigeHilfe()")

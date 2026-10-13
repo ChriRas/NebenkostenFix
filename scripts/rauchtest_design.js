@@ -403,6 +403,12 @@ pruefe('K4: leere Rechnungsliste blendet die Filterleiste aus',
     html.includes('id="invoice-filter"')
     && app.includes("leiste.hidden = invoices.length === 0;")
     && css.includes('.controls-bar[hidden]'));
+// NK-268: Art und Lohnanteil nach § 35a EStG gehen nur gemeinsam an den Server.
+pruefe('NK-268: Rechnungsdialog trägt Art und Lohnanteil nach § 35a, nur gemeinsam',
+    html.includes('id="invoice-art-35a"') && html.includes('id="invoice-lohnanteil"')
+    && app.includes("if ((art35a === '') !== (lohnanteil === '')) {")
+    && app.includes("formData.append('art_35a', art35a)")
+    && app.includes("formData.append('lohnanteil', lohnanteil)"));
 
 // --- NK-103: Erste Schritte neu gesetzt (K5) ---
 pruefe('B7: die Liste trägt ihre Klasse — die Regeln greifen',
@@ -520,6 +526,341 @@ async function haushaltPruefen() {
         && gut.liste.zeilen.length === 1 && gut.meldungen.length === 0);
 }
 
+// --- NK-261: Soll und Ist der Vorauszahlungen -------------------------------
+// Der Wächter ruft ladeVorauszahlungen und saveVorauszahlungSoll mit
+// gestubbtem fetch auf: ohne Soll kein Rückstand und keine Erinnerung, der
+// jüngste Monat steht oben, ein Rückstand zeigt die Erinnerung, Speichern
+// schickt Stichtag und Betrag und lädt neu.
+async function vorauszahlungPruefen() {
+    const funktion = name => {
+        const m = appQuelle.match(new RegExp(`async function ${name}\\([^)]*\\) \\{[\\s\\S]*?\\n\\}`));
+        if (!m) throw new Error(`${name} nicht gefunden`);
+        return m[0];
+    };
+    const quelltext = funktion('ladeVorauszahlungen') + funktion('saveVorauszahlungSoll');
+    const lauf = (felder, antworten) => {
+        const aufrufe = [];
+        const meldungen = [];
+        const dokument = {
+            getElementById(id) {
+                if (!(id in felder)) felder[id] = { value: '', innerHTML: '', textContent: '', hidden: false };
+                return felder[id];
+            },
+        };
+        const holen = (url, opt = {}) => {
+            aufrufe.push({ url, methode: opt.method || 'GET', koerper: opt.body });
+            const daten = antworten.shift() ?? {};
+            return Promise.resolve({ ok: true, json: () => Promise.resolve(daten) });
+        };
+        const fns = new Function('document', 'fetch', 'showError', 'serverFehler', 'meldungZu',
+            'escapeHtml', 'datumText', 'euroText',
+            quelltext + '; return { ladeVorauszahlungen, saveVorauszahlungSoll };')(
+            dokument, holen, m => meldungen.push(m), async () => new Error('Server'),
+            (e, ersatz) => ersatz, t => String(t).replace(/</g, '&lt;'), iso => 'D' + iso,
+            v => Number(v).toFixed(2) + ' €');
+        return { fns, aufrufe, meldungen, felder };
+    };
+
+    const leer = lauf({}, [{ soll: [], monate: [
+        { monat: '2024-01', soll: null, ist: '80.00', differenz: null, rueckstand: false, laufend: false },
+    ], saldo: '0.00', erinnerung: null }]);
+    await leer.fns.ladeVorauszahlungen(7);
+    pruefe('NK-261: ohne Soll kein Rückstand und keine Erinnerung',
+        leer.aufrufe[0].url === '/api/tenants/7/vorauszahlungen'
+        && /Noch kein Soll/.test(leer.felder['vz-soll-liste'].innerHTML)
+        && /kein Soll/.test(leer.felder['vz-monate'].innerHTML)
+        && leer.felder['vz-saldo'].textContent === 'Kein Rückstand.'
+        && leer.felder['vz-erinnerung-block'].hidden === true);
+
+    const offen = lauf({}, [{ soll: [{ id: 4, gueltig_ab: '2024-01-01', betrag: '80.00' }], monate: [
+        { monat: '2024-01', soll: '80.00', ist: '0.00', differenz: '80.00', rueckstand: true, laufend: false },
+        { monat: '2024-02', soll: '80.00', ist: '0.00', differenz: '80.00', rueckstand: false, laufend: true },
+    ], saldo: '80.00', erinnerung: 'Sehr geehrte …' }]);
+    await offen.fns.ladeVorauszahlungen(7);
+    const zeilen = offen.felder['vz-monate'].innerHTML;
+    pruefe('NK-261: der jüngste Monat oben, Rückstand markiert, Erinnerung sichtbar',
+        zeilen.indexOf('02/2024') < zeilen.indexOf('01/2024')
+        && /dq-status-badge red">Rückstand/.test(zeilen) && /laufend/.test(zeilen)
+        && /D2024-01-01/.test(offen.felder['vz-soll-liste'].innerHTML)
+        && /Offen sind insgesamt 80\.00 €/.test(offen.felder['vz-saldo'].textContent)
+        && offen.felder['vz-erinnerung'].value === 'Sehr geehrte …'
+        && offen.felder['vz-erinnerung-block'].hidden === false);
+
+    const ohneTag = lauf({ 'vz-tenant-id': { value: '7' }, 'vz-betrag': { value: '80' } }, []);
+    await ohneTag.fns.saveVorauszahlungSoll();
+    pruefe('NK-261: ohne Stichtag geht nichts hinaus',
+        ohneTag.aufrufe.length === 0 && ohneTag.meldungen.length === 1);
+
+    const gut = lauf({
+        'vz-tenant-id': { value: '7' },
+        'vz-gueltig-ab': { value: '2024-01-01' },
+        'vz-betrag': { value: '80' },
+    }, [{ id: 4 }, { soll: [], monate: [], saldo: '0.00', erinnerung: null }]);
+    await gut.fns.saveVorauszahlungSoll();
+    const post = gut.aufrufe[0] || {};
+    pruefe('NK-261: Speichern schickt POST mit Stichtag und Betrag, lädt dann neu',
+        post.methode === 'POST' && post.url === '/api/tenants/7/vorauszahlung_soll'
+        && post.koerper === JSON.stringify({ gueltig_ab: '2024-01-01', betrag: '80' })
+        && gut.aufrufe.length === 2 && gut.aufrufe[1].url === '/api/tenants/7/vorauszahlungen'
+        && gut.meldungen.length === 0);
+
+    pruefe('NK-261: Mieterzeile hat den Knopf, die Seite den Dialog',
+        appQuelle.includes('vzBtn.onclick = () => openVorauszahlungModal(t);')
+        && html.includes('id="vorauszahlung-modal"'));
+}
+
+// --- NK-262: Fristenkalender in der Datenqualität ----------------------------
+async function fristenPruefen() {
+    const m = appQuelle.match(/async function ladeFristen\(\) \{[\s\S]*?\n\}/);
+    if (!m) throw new Error('ladeFristen nicht gefunden');
+    const lauf = async (antwort) => {
+        const liste = { innerHTML: '' };
+        const aufrufe = [];
+        const holen = url => {
+            aufrufe.push(url);
+            return Promise.resolve({ ok: antwort !== null, json: () => Promise.resolve(antwort) });
+        };
+        await new Function('document', 'fetch', 'serverFehler', 'meldungZu', 'escapeHtml', 'datumText',
+            m[0] + '; return ladeFristen();')(
+            { getElementById: id => (id === 'fristen-liste' ? liste : null) }, holen,
+            async () => new Error('Server'), (e, ersatz) => ersatz,
+            t => String(t).replace(/</g, '&lt;'), iso => 'D' + iso);
+        return { liste: liste.innerHTML, aufrufe };
+    };
+    const voll = await lauf({ termine: [
+        { datum: '2025-04-01', art: 'vorauszahlung', titel: 'Neue <b>Vorauszahlung', uid: 'v-1@n' },
+        { datum: '2025-12-31', art: 'eichfrist', titel: 'Eichfrist endet: W', uid: 'e-1@n' },
+    ] });
+    pruefe('NK-262: Termine in Reihenfolge, Datum formatiert, Titel maskiert',
+        voll.aufrufe[0] === '/api/fristen'
+        && voll.liste.indexOf('D2025-04-01') < voll.liste.indexOf('D2025-12-31')
+        && voll.liste.includes('Neue &lt;b>Vorauszahlung') && !voll.liste.includes('<b>'));
+    const leer = await lauf({ termine: [] });
+    pruefe('NK-262: ohne Termine ein Hinweis statt einer leeren Liste',
+        /Keine anstehenden Termine/.test(leer.liste));
+    const kaputt = await lauf(null);
+    pruefe('NK-262: Ladefehler bleibt in der Karte',
+        /ließen sich nicht laden/.test(kaputt.liste));
+    pruefe('NK-262: Karte mit Download-Link, die Datenqualität lädt die Fristen',
+        html.includes('id="fristen-karte"') && html.includes('href="/api/fristen.ics" download')
+        && /viewDQ\.style\.display = 'flex';\s*ladeFristen\(\);/.test(appQuelle));
+}
+
+// --- NK-263: Mehrjahresblick je Wohnung --------------------------------------
+async function mehrjahresblickPruefen() {
+    const m = appQuelle.match(/function renderMehrjahresblick\(jahre\) \{[\s\S]*?\n\}/);
+    if (!m) throw new Error('renderMehrjahresblick nicht gefunden');
+    const lauf = (jahre) => {
+        const el = { 'mjb-kopf': { innerHTML: 'alt' }, 'mjb-zeilen': { innerHTML: '' } };
+        new Function('document', 'escapeHtml', 'euroText', m[0] + '; renderMehrjahresblick(arguments[3]);')(
+            { getElementById: id => el[id] }, t => String(t).replace(/</g, '&lt;'), b => 'E' + b, jahre);
+        return { kopf: el['mjb-kopf'].innerHTML, zeilen: el['mjb-zeilen'].innerHTML };
+    };
+    const voll = lauf([
+        { jahr: '2023/24', belegte_tage: 366, jahrestage: 366, je_qm: { '<b>Wasser': '10.00' },
+          je_qm_gesamt: '10.00', vorauszahlung: '700.00' },
+        { jahr: '2024/25', belegte_tage: 0, jahrestage: 365, je_qm: {}, je_qm_gesamt: null,
+          vorauszahlung: '0.00' },
+    ]);
+    pruefe('NK-263: Jahre als Spalten in Reihenfolge, Kostenart maskiert',
+        voll.kopf.indexOf('2023/24') < voll.kopf.indexOf('2024/25')
+        && voll.zeilen.includes('&lt;b>Wasser') && !voll.zeilen.includes('<b>'));
+    pruefe('NK-263: Werte, Gesamt und Vorauszahlung, das leere Jahr als Lücke',
+        voll.zeilen.includes('E10.00') && voll.zeilen.includes('E700.00')
+        && voll.zeilen.includes('366 von 366 Tagen') && voll.zeilen.includes('>leer<')
+        && /Gesamt<\/th><td[^>]*>E10\.00<\/td><td[^>]*>–</.test(voll.zeilen));
+    const leer = lauf([]);
+    pruefe('NK-263: ohne Abrechnung ein Hinweis, der alte Kopf verschwindet',
+        leer.kopf === '' && /Noch keine Abrechnung/.test(leer.zeilen));
+    pruefe('NK-263: Karte in der Wohnungsansicht, die Auswertung füllt sie',
+        html.includes('id="mehrjahresblick-karte"')
+        && /renderAptCostsChart\(dataA\.cost_distribution\);\s*renderMehrjahresblick\(dataA\.mehrjahresblick\);/.test(appQuelle));
+}
+
+// --- NK-267: Jahreswechsel als geführter Ablauf --------------------------------
+// Der Block läuft mit einer Attrappe aus Elementen, Speicher und den
+// vorhandenen Wegen (Ablesen, Details, Vorjahr); geprüft werden Ablauf,
+// Abbrechen und Wiederaufnehmen.
+async function jahreswechselPruefen() {
+    const m = appQuelle.match(/\n\/\/ --- NK-267[\s\S]*?(?=\n\/\/ --- )/);
+    if (!m) throw new Error('NK-267-Block nicht gefunden');
+    const element = () => ({ value: '', innerHTML: '', textContent: '', hidden: false, checked: false,
+        disabled: false, dataset: {}, attr: {}, klassen: new Set(),
+        get classList() {
+            const k = this.klassen;
+            return { add: n => k.add(n), remove: n => k.delete(n), contains: n => k.has(n),
+                     toggle: (n, an) => (an ? k.add(n) : k.delete(n)) };
+        },
+        setAttribute(n, w) { this.attr[n] = w; }, removeAttribute(n) { delete this.attr[n]; } });
+    const seite = (speicher, haeuser) => {
+        const el = {};
+        const abschnitte = [1, 2, 3, 4].map(n => Object.assign(element(), { dataset: { jwSchritt: String(n) } }));
+        const punkte = [1, 2, 3, 4].map(n => Object.assign(element(), { dataset: { schritt: String(n) } }));
+        const aufrufe = [];
+        const document = {
+            getElementById: id => (el[id] = el[id] || element()),
+            querySelectorAll: sel => sel === '[data-jw-schritt]' ? abschnitte : sel === '#jw-schritte li' ? punkte : [],
+        };
+        const berichte = [
+            { id: 1, tenant_id: 7, property_id: 5, tenant_name: 'A', apartment_name: 'EG', start_date: '2024-01-01', end_date: '2024-12-31' },
+            { id: 2, tenant_id: 7, property_id: 5, tenant_name: 'A', apartment_name: 'EG', start_date: '2025-01-01', end_date: '2025-12-31' },
+            { id: 3, tenant_id: 8, property_id: 5, tenant_name: '<b>B', apartment_name: 'OG', start_date: '2025-01-01', end_date: '2025-12-31' },
+            { id: 4, tenant_id: 9, property_id: 6, tenant_name: 'C', apartment_name: 'DG', start_date: '2025-01-01', end_date: '2025-12-31' },
+        ];
+        const umgebung = {
+            document, localStorage: speicher, window: {}, properties: haeuser,
+            fetchProperties: async () => {}, showError: t => aufrufe.push('fehler:' + t),
+            escapeHtml: t => String(t).replace(/</g, '&lt;'), datumText: iso => 'D' + iso,
+            fetch: async () => ({ ok: true, json: async () => berichte }),
+            serverFehler: async () => new Error('x'), meldungZu: (e, t) => t,
+            openAblesen: () => aufrufe.push('ablesen'), ablesenListe: () => aufrufe.push('liste'),
+            openReportDetails: id => aufrufe.push('details:' + id),
+            rechnungenWieVorjahr: async (haus, jahr) => aufrufe.push(`vorjahr:${haus}:${jahr}`),
+        };
+        const namen = Object.keys(umgebung);
+        const f = new Function(...namen, m[0] + `; return { oeffneJahreswechsel, jwAuswahl, jwSchritt, jwHaken,
+            jwAblesen, jwVorjahr, jwAbbrechen, jwAbschliessen };`)(...namen.map(n => umgebung[n]));
+        const sichtbar = () => abschnitte.filter(a => !a.hidden).map(a => a.dataset.jwSchritt).join();
+        return { f, el, aufrufe, sichtbar, punkte, offen: () => el['jahreswechsel-modal'].klassen.has('active') };
+    };
+    const speicher = () => { const d = {}; return { d, getItem: k => (k in d ? d[k] : null),
+        setItem: (k, w) => { d[k] = String(w); }, removeItem: k => { delete d[k]; } }; };
+    const warte = () => new Promise(r => setTimeout(r, 0));
+    const haeuser = [{ id: 5, name: 'Haus A', abrechnungsjahr_beginn: '01.07.' }, { id: 6, name: 'Haus B' }];
+    const jahr = new Date().getFullYear();
+
+    const sp = speicher();
+    const a = seite(sp, haeuser);
+    await a.f.oeffneJahreswechsel();
+    a.f.jwAblesen();
+    pruefe('NK-267: Start bei Schritt 1, Ablesen zum Tag vor dem Jahresbeginn',
+        a.offen() && a.sichtbar() === '1' && a.el['jw-wieder'].hidden
+        && a.aufrufe.join() === 'ablesen,liste' && a.el['ablesen-property'].value === '5'
+        && a.el['ablesen-datum'].value === `${jahr}-06-30` && a.el['jw-stichtag'].textContent === `D${jahr}-06-30`
+        && a.el['jw-zurueck'].disabled && a.punkte[0].attr['aria-current'] === 'step');
+    a.f.jwHaken('ablesen', true);
+    a.f.jwSchritt(1);
+    await warte();
+    const liste = a.el['jw-abrechnungen'].innerHTML;
+    pruefe('NK-267: Schritt 2 zeigt je Mieter der Immobilie die letzte Abrechnung',
+        a.sichtbar() === '2' && a.punkte[0].klassen.has('erledigt')
+        && liste.includes('openReportDetails(2)') && liste.includes('openReportDetails(3)')
+        && !liste.includes('openReportDetails(1)') && !liste.includes('openReportDetails(4)')
+        && liste.includes('&lt;b>B') && !liste.includes('<b>'));
+    a.f.jwSchritt(1);
+    await a.f.jwVorjahr();
+    pruefe('NK-267: Schritt 3 füllt die Rechnungen des neuen Jahres wie im Vorjahr',
+        a.sichtbar() === '3' && a.aufrufe.includes(`vorjahr:5:${jahr}`));
+    a.f.jwAbbrechen();
+    const gemerkt = JSON.parse(sp.d['nk-jahreswechsel'] || '{}');
+    pruefe('NK-267: Abbrechen schließt den Dialog und behält den Stand',
+        !a.offen() && gemerkt.schritt === 3 && gemerkt.erledigt.ablesen === true);
+
+    const b = seite(sp, haeuser);
+    await b.f.oeffneJahreswechsel();
+    pruefe('NK-267: Wiederaufnehmen nach dem Neuladen an derselben Stelle',
+        b.offen() && b.sichtbar() === '3' && !b.el['jw-wieder'].hidden
+        && b.el['jw-erledigt-ablesen'].checked && !b.el['jw-erledigt-vorjahr'].checked
+        && b.el['jw-immobilie'].value === '5');
+    b.f.jwSchritt(1);
+    const check = b.el['jw-checkliste'].innerHTML;
+    pruefe('NK-267: Checkliste mit Erledigtem und dem Weg zurück zu Offenem',
+        b.sichtbar() === '4' && b.el['jw-weiter'].hidden && !b.el['jw-fertig'].hidden
+        && /class="erledigt"[^<]*<i[^>]*><\/i> Zähler zum Stichtag abgelesen/.test(check)
+        && check.includes('jwGehe(2)') && check.includes('jwGehe(3)') && !check.includes('jwGehe(1)'));
+    b.f.jwAbschliessen();
+    const verworfen = !('nk-jahreswechsel' in sp.d);
+    const c = seite(sp, haeuser);
+    await c.f.oeffneJahreswechsel();
+    pruefe('NK-267: Schließen verwirft den Stand, der nächste Wechsel beginnt vorn',
+        verworfen && !b.offen() && c.sichtbar() === '1' && c.el['jw-wieder'].hidden);
+
+    c.f.jwHaken('ablesen', true);
+    c.el['jw-immobilie'].value = '6';
+    c.f.jwAuswahl();
+    const verloren = speicher();
+    verloren.d['nk-jahreswechsel'] = JSON.stringify({ property_id: '99', jahr, schritt: 3, erledigt: {} });
+    const d = seite(verloren, haeuser);
+    await d.f.oeffneJahreswechsel();
+    const gesperrt = { getItem() { throw new Error('gesperrt'); }, setItem() { throw new Error('gesperrt'); },
+        removeItem() { throw new Error('gesperrt'); } };
+    const e = seite(gesperrt, haeuser);
+    await e.f.oeffneJahreswechsel();
+    e.f.jwSchritt(1);
+    e.f.jwAbschliessen();
+    pruefe('NK-267: neue Auswahl beginnt neu, fremder oder gesperrter Speicher stört nicht',
+        c.sichtbar() === '1' && !c.el['jw-erledigt-ablesen'].checked && JSON.parse(sp.d['nk-jahreswechsel']).property_id === '6'
+        && d.sichtbar() === '1' && d.el['jw-immobilie'].value === '5'
+        && e.sichtbar() === '2' && !e.offen());
+    pruefe('NK-267: Dialog und Einstieg neben „Jahr abrechnen“',
+        html.includes('id="jahreswechsel-modal"')
+        && /onclick="oeffneJahreswechsel\(\)"[^>]*>[\s\S]{0,80}Jahreswechsel öffnen\s*<\/button>/.test(html));
+}
+
+// --- NK-265: Prüfstand vor dem Festsetzen -------------------------------------
+// Der Block läuft mit der echten Kappung (D-116) und Attrappen der Öffner;
+// geprüft werden Seite, Knöpfe und dass jeder Knopf die richtige Stelle öffnet.
+async function pruefstandPruefen() {
+    const m = appQuelle.match(/\n\/\/ --- NK-265[\s\S]*?(?=\n\/\/ --- )/);
+    const kappen = appQuelle.match(/function hinweiseKappen\(zeilen\) \{[\s\S]*?\n\}/);
+    const anzahl = appQuelle.match(/function anzahlText\([^)]*\) \{[\s\S]*?\n\}/);
+    if (!m || !kappen || !anzahl) throw new Error('NK-265-Block oder Helfer nicht gefunden');
+    const seite = (befunde) => {
+        const el = {};
+        const aufrufe = [];
+        const umgebung = {
+            document: { getElementById: id => (el[id] = el[id] || { value: '', innerHTML: '' }) },
+            window: {}, jahrStand: { pruefstand: befunde }, jahrAktuell: 5,
+            jahrZeigen: () => aufrufe.push('zeigen'),
+            escapeHtml: t => String(t).replace(/</g, '&lt;'),
+            openAddInvoiceModal: id => aufrufe.push('rechnung:' + id),
+            openHistoryModal: id => aufrufe.push('zaehler:' + id),
+            openAddReadingModal: id => aufrufe.push('ablesung:' + id),
+            openAddTenantModal: () => aufrufe.push('mieter'),
+            openAddPaymentModal: () => aufrufe.push('zahlung'),
+            toggleBillingReportField: () => aufrufe.push('umschalten'),
+        };
+        const namen = Object.keys(umgebung);
+        const f = new Function(...namen, kappen[0] + anzahl[0] + m[0]
+            + '; return { jahrPruefstandZeigen, jahrPruefstandOeffnen, schritt: () => jahrAktuell };')(
+            ...namen.map(n => umgebung[n]));
+        f.jahrPruefstandZeigen();
+        return { f, el, aufrufe, html: () => el['jahr-pruefstand'].innerHTML };
+    };
+    const befund = (art, aktion, id) => ({ art, text: `<b>${art}`, tun: `Prüfen Sie ${art}.`, ziel: { aktion, id } });
+    const alle = [befund('kosten_je_qm', 'rechnungen', null), befund('zaehlersprung', 'zaehler', 11),
+        befund('ohne_beleg', 'rechnung', 21), befund('wechsel_ablesung', 'ablesung', 12),
+        befund('leerstand', 'mieter', 31), befund('ohne_vorauszahlung', 'zahlung', 41)];
+    const voll = seite(alle);
+    const liste = voll.html();
+    const sichtbar = liste.split('<details')[0];
+    pruefe('NK-265: drei Warnungen sichtbar, drei aufklappbar, Text maskiert, blockiert nichts',
+        (sichtbar.match(/jahrPruefstandOeffnen\(/g) || []).length === 3
+        && /<summary>3 weitere Hinweise<\/summary>/.test(liste)
+        && liste.includes('6 Hinweise vor dem Festsetzen') && liste.includes('Sie können trotzdem festsetzen')
+        && liste.includes('&lt;b>leerstand') && !liste.includes('<b>')
+        && (liste.match(/<strong>Was tun:<\/strong>/g) || []).length === 6);
+    pruefe('NK-265: jede Warnung hat ihren Knopf',
+        ['Rechnungen prüfen', 'Zählerstände ansehen', 'Rechnung öffnen', 'Ablesung erfassen',
+         'Mieter erfassen', 'Zahlung erfassen'].every(k => liste.includes(`>${k}</button>`)));
+    alle.forEach((_, i) => voll.f.jahrPruefstandOeffnen(i));
+    pruefe('NK-265: jeder Knopf öffnet die Stelle, die die Warnung behebt',
+        voll.f.schritt() === 2
+        && voll.aufrufe.join() === 'zeigen,zaehler:11,rechnung:21,ablesung:12,mieter,zahlung,umschalten'
+        && voll.el['tenant-apartment'].value === '31' && voll.el['payment-tenant'].value === '41'
+        && voll.el['payment-type'].value === 'Nebenkostenvorauszahlung');
+    const eine = seite([alle[2]]).html();
+    pruefe('NK-265: eine Warnung in der Einzahl, ohne Aufklappen',
+        eine.includes('1 Hinweis vor dem Festsetzen') && !eine.includes('<details'));
+    const leer = seite([]).html();
+    pruefe('NK-265: ohne Befund die Entwarnung',
+        /nichts Auffälliges/.test(leer) && !leer.includes('<li'));
+    pruefe('NK-265: Prüfstand in Schritt 5, beim Laden und beim Schritt auf 5 gefüllt',
+        /data-jahr-schritt="5"[\s\S]{0,300}id="jahr-pruefstand"/.test(html)
+        && /jahrFristZeigen\(\);\s*jahrPruefstandZeigen\(\);/.test(appQuelle)
+        && /richtung > 0 && jahrAktuell === 4\) await jahrNeuLaden\(\)/.test(appQuelle));
+}
+
 // --- NK-201: Warnleiste im offenen Modus -------------------------------------
 // Der Rauchtest gibt die Antwort von /api/auth/me vor: offen in Docker zeigt
 // die Warnleiste, offen in der Windows-App bleibt sie verborgen.
@@ -607,7 +948,7 @@ async function ausschalterPruefen() {
         && /id="ohne-anmeldung-hinweis" class="hinweis-leiste hinweis-band"/.test(html));
 }
 
-// --- NK-212 (B5): „Aktive Mieter“ zählt keine Ausgezogenen ---------------
+// --- NK-212: „Aktive Mieter“ zählt keine Ausgezogenen ---------------
 // Vorher zählte die Kachel jeden Mieter, auch wer vor Jahren auszog.
 {
     const m = appQuelle.match(/function istAktiverMieter\([\s\S]*?\n\}/);
@@ -623,7 +964,7 @@ async function ausschalterPruefen() {
         /statTenantsCount\.textContent = tenants\.filter\(t => istAktiverMieter\(t, heute\)\)/.test(appQuelle));
 }
 
-// --- NK-219 (V2): Zählerliste mit Knopf „Verlauf“ und klarem Stift --------
+// --- NK-219: Zählerliste mit Knopf „Verlauf“ und klarem Stift --------
 // Vorher war der Verlauf nur per Klick auf die Zeile zu finden, der Stift
 // hieß „Ablesung bearbeiten“ und die Zählernummer kam roh ins HTML.
 {
@@ -641,7 +982,18 @@ async function ausschalterPruefen() {
         /tdActions\.style\.whiteSpace = 'nowrap'/.test(r));
 }
 
-// --- NK-220 (V3): die Einheit kommt vom Server, auch für die Heizung ------
+// --- NK-257: Zähler ohne Ablesung bekommt „Ersten Stand erfassen“ ------
+// Vorher fehlte der Stift ersatzlos; der erste Stand ging nur über den Kopf.
+{
+    const m = appQuelle.match(/function renderMeters\([\s\S]*?\n\}/);
+    const r = m ? m[0] : '';
+    pruefe('NK-257: ohne Ablesung der Knopf „Ersten Stand erfassen“ für diesen Zähler',
+        /\} else \{[\s\S]*?ersterBtn\.innerHTML = '[^']*> Ersten Stand erfassen'[\s\S]*?ersterBtn\.onclick = \(\) => openAddReadingModal\(m\.id\)/.test(r));
+    pruefe('NK-257: mit Ablesung bleibt der Stift',
+        /if \(meterReadings\.length > 0\) \{[\s\S]*?editReadBtn[\s\S]*?\} else \{/.test(r));
+}
+
+// --- NK-220: die Einheit kommt vom Server, auch für die Heizung ------
 // Vorher riet getReadingHtml aus dem Namen; ein Wärmezähler bekam keine.
 {
     const m = appQuelle.match(/function getReadingHtml\([\s\S]*?\n\}/);
@@ -661,7 +1013,7 @@ async function ausschalterPruefen() {
         && !/getReadingHtml\([^)]*category_name\)/.test(appQuelle));
 }
 
-// --- NK-221 (V4): „Zugestellt am“ startet leer -----------------------------
+// --- NK-221: „Zugestellt am“ startet leer -----------------------------
 // Vorher stand dort das heutige Datum und wurde ungelesen gespeichert.
 {
     const m = appQuelle.match(/function berichtZustellungsBlock\([\s\S]*?\n\}/);
@@ -782,7 +1134,7 @@ async function serienPruefen() {
     pruefe('NK-226: kein Browserdialog', !/confirm\(/.test(funktion('serienbuchungAnlegen')));
 }
 
-// --- NK-216 (F1): unplausibler Zählerstand wird nachgefragt ---------------
+// --- NK-216: unplausibler Zählerstand wird nachgefragt ---------------
 // 409 mit nachfrage: die App fragt im eigenen Dialog und schickt bei Ja
 // dasselbe mit `trotzdem` noch einmal; bei Nein geht nichts mehr hinaus.
 async function nachfragePruefen() {
@@ -935,7 +1287,14 @@ async function ablesenPruefen() {
     pruefe('NK-227: NT-Feld nur beim Doppeltarif',
         zeilen.includes('id="ablesen-nt-1"') && !zeilen.includes('id="ablesen-nt-2"'));
     pruefe('NK-227: das Foto kommt direkt von der Kamera',
-        /<input type="file" id="ablesen-foto-1" accept="image\/\*" capture="environment">/.test(zeilen));
+        /<input type="file" id="ablesen-foto-1" accept="image\/\*" capture="environment"[\s>]/.test(zeilen));
+    pruefe('NK-255: die Einheit des Zählers steht am Feld',
+        zeilen.includes('>Stand (HT, kWh)</label>') && zeilen.includes('>Stand (NT, kWh)</label>')
+        && zeilen.includes('>Stand (m³)</label>')
+        && baue({}, 'ablesenZeilen')({}, meters, readings)(9).includes('>Stand</label>'));
+    pruefe('NK-255: das Foto-Feld trägt den Stil der App',
+        zeilen.includes('<div class="file-upload-wrapper">')
+        && zeilen.includes('<label for="ablesen-foto-1" class="file-upload-label">'));
 
     const lauf = async (werte, antworten) => {
         const el = {}, gesendet = [], fehler = [];
@@ -994,6 +1353,115 @@ async function ablesenPruefen() {
         && zeilen[0].includes('Anschreiben (Schritt 5)')
         && zeilen[1].includes('−30 % gegenüber dem Vorjahr')
         && !zeilen[2].includes('jahr-sprung') && !zeilen[2].includes('gegenüber dem Vorjahr'));
+}
+
+// --- NK-255: Einheit am Feld auch im Einzel-Ablesedialog ----------------
+{
+    const m = appQuelle.match(/function handleReadingMeterChange\([\s\S]*?\n\}/);
+    const lauf = (zaehler) => {
+        const el = {};
+        const hole = id => (el[id] = el[id] || { id, value: '', textContent: '', style: {} });
+        hole('reading-meter').value = '1';
+        new Function('document', 'meters', m[0] + '; handleReadingMeterChange();')(
+            { getElementById: hole }, [zaehler]);
+        return el;
+    };
+    if (!m) {
+        pruefe('NK-255: handleReadingMeterChange gibt es', false);
+    } else {
+        const doppelt = lauf({ id: 1, einheit: 'kWh', has_dual_tariff: true });
+        const einfach = lauf({ id: 1, einheit: 'm³', has_dual_tariff: false });
+        const ohne = lauf({ id: 1, has_dual_tariff: false });
+        pruefe('NK-255: der Ablesedialog nennt die Einheit des Zählers am Feld',
+            doppelt['label-reading-value'].textContent === 'Zählerstand (HT, kWh)'
+            && doppelt['label-reading-value-nt'].textContent === 'Zählerstand (NT, kWh)'
+            && einfach['label-reading-value'].textContent === 'Zählerstand (m³)'
+            && ohne['label-reading-value'].textContent === 'Zählerstand');
+    }
+}
+
+// --- NK-256: Zahlungskarten ohne Nullzeilen -----------------------------
+{
+    const m = appQuelle.match(/function renderPayments\([\s\S]*?\n\}/);
+    if (!m) {
+        pruefe('NK-256: renderPayments gibt es', false);
+    } else {
+        const karten = [];
+        const zahlung = (tenant_id, type, amount) => ({ tenant_id, tenant_name: 'M' + tenant_id, type, amount,
+            payment_date: '2026-01-01' });
+        new Function('paymentsGrid', 'payments', 'document', 'escapeHtml', 'leerzustand', m[0] + '; renderPayments();')(
+            { replaceChildren() {}, appendChild: k => karten.push(k.innerHTML) },
+            [zahlung(1, 'Nebenkostenvorauszahlung', 200), zahlung(2, 'Miete', 700), zahlung(2, 'Nebenkostenvorauszahlung', 150),
+             zahlung(3, 'Kaution', 2100)],
+            { createElement: () => ({}) }, s => String(s), () => '');
+        const [nurNk, beides, nurKaution] = karten;
+        pruefe('NK-256: ohne Mietzahlung keine Zeile „Miete“, mit Zahlung schon',
+            karten.length === 3 && !nurNk.includes('Miete:') && nurNk.includes('Nebenkosten:')
+            && beides.includes('Miete:') && beides.includes('Nebenkosten:') && beides.includes('Gesamt (mtl.)'));
+        pruefe('NK-256: nur Kaution ergibt keine Monatszeilen mit 0,00 €',
+            karten.length === 3 && !nurKaution.includes('Miete:') && !nurKaution.includes('Nebenkosten:')
+            && !nurKaution.includes('Gesamt (mtl.)') && nurKaution.includes('Kaution:'));
+    }
+}
+
+// --- NK-254: Wohnungsvergleich erst ab zwei Wohnungen mit Daten ---------------
+{
+    const m = appQuelle.match(/function renderBuildingComparison\([\s\S]*?\n\}/);
+    const lauf = daten => {
+        const karte = { hidden: false };
+        const el = {
+            'chart-building-comparison': { getContext: () => ({ canvas: {} }) },
+            'chart-comparison-title': { closest: () => karte },
+            'chart-building-comparison-leer': {},
+        };
+        let gezeichnet = 0;
+        new Function('document', 'Chart', 'DIAGRAMM_FARBE', 'chartBuildingComparisonInstance', 'daten',
+            m[0] + '; renderBuildingComparison(daten);')(
+            { getElementById: id => el[id] },
+            class { constructor() { gezeichnet++; } destroy() {} }, {}, null, daten);
+        return { karte, gezeichnet };
+    };
+    if (!m) {
+        pruefe('NK-254: renderBuildingComparison gibt es', false);
+    } else {
+        const zeile = (apartment, category) => ({ apartment, category, consumption: 10, unit: 'kWh' });
+        const keine = lauf([]);
+        const eine = lauf([zeile('WE 1', 'Strom'), zeile('WE 1', 'Wasser')]);
+        const zwei = lauf([zeile('WE 1', 'Strom'), zeile('WE 2', 'Strom')]);
+        pruefe('NK-254: Wohnungsvergleich bei keiner und einer Wohnung ausgeblendet',
+            keine.karte.hidden === true && eine.karte.hidden === true && eine.gezeichnet === 0);
+        pruefe('NK-254: Wohnungsvergleich bei zwei Wohnungen gezeichnet',
+            zwei.karte.hidden === false && zwei.gezeichnet === 1);
+    }
+}
+
+// --- NK-260: KPI-Kacheln ohne Inline-Styles ---------------------------
+// Vorher trugen die Kacheln Farbe, Abstand und Hover (onmouseenter) im Markup.
+{
+    const m = appQuelle.match(/function renderBuildingVitalSigns\([\s\S]*?\n\}/);
+    const lauf = (trend, offen) => {
+        const container = { innerHTML: '' };
+        new Function('document', 'window', 'escapeHtml', 'kpis', m[0] + '; renderBuildingVitalSigns(kpis);')(
+            { getElementById: () => container },
+            { wrapInterpolated: s => s }, s => String(s),
+            { cashflow_ytd: -50, total_costs_last_year: 1200, general_power: 300, general_power_trend: trend,
+              open_tasks: offen, reference_year: 2025 });
+        return container.innerHTML;
+    };
+    if (!m) {
+        pruefe('NK-260: renderBuildingVitalSigns gibt es', false);
+    } else {
+        const hoch = lauf(5, 2), gleich = lauf(0, 0);
+        pruefe('NK-260: Kacheln ohne style= und ohne onmouseenter/onmouseleave',
+            !/style=|onmouse/.test(hoch + gleich) && (hoch.match(/class="dashboard-card glass-panel kpi-karte/g) || []).length === 4);
+        pruefe('NK-260: Trend und offene Abrechnungen färben über Klassen',
+            hoch.includes('kpi-trend kpi-trend--hoch') && hoch.includes('kpi-wert--offen')
+            && gleich.includes('kpi-trend kpi-trend--gleich') && gleich.includes('kpi-wert--erledigt'));
+        const css = fs.readFileSync(path.join(__dirname, '..', 'static', 'style.css'), 'utf8');
+        pruefe('NK-260: Hover der klickbaren Kacheln steht im Stylesheet',
+            /\.kpi-clickable:hover\s*\{[^}]*translateY\(-2px\)/.test(css)
+            && /\.kpi-karte\s*\{[^}]*border-left:\s*4px solid var\(--kpi-farbe/.test(css));
+    }
 }
 
 // --- NK-230: Wie im Vorjahr füllen ---------------------------------------
@@ -1068,6 +1536,88 @@ async function vorjahrPruefen() {
         && status(2).includes('nicht gespeichert') && !status(1).includes('nicht gespeichert'));
 }
 
+async function zaehlerPflegePruefen() {
+    const funktion = name => (appQuelle.match(new RegExp('(?:async )?function ' + name + '\\([\\s\\S]*?\\n\\}')) || [''])[0];
+    const namen = ['eichfristVorschlag', 'saveMeter', 'openWechselModal', 'saveWechsel'];
+    if (namen.some(n => !funktion(n))) {
+        pruefe('NK-258: ' + namen.join(', ') + ' gibt es', false);
+        return;
+    }
+    pruefe('NK-258: Zählerliste hat Bearbeiten und Wechsel, der Wechsel nur am eingebauten Zähler',
+        /onclick = \(\) => openEditMeterModal\(m\.id\)/.test(appQuelle)
+        && /if \(!m\.ersetzt_durch\) \{[\s\S]{0,800}openWechselModal\(m\.id\)/.test(appQuelle));
+    // Felder entstehen beim ersten Zugriff; .value, .checked und .hidden sind frei setzbar.
+    const el = {};
+    const feld = id => (el[id] = el[id] || { value: '', checked: false, hidden: false, textContent: '',
+        classList: { add() { this.aktiv = true; }, remove() { this.aktiv = false; } } });
+    const nt = [feld('nt-1'), feld('nt-2')];
+    const doc = { getElementById: feld, querySelectorAll: sel => sel === '#wechsel-modal .wechsel-nt' ? nt : [] };
+    const aufrufe = [], antworten = [], meldungen = [];
+    const holen = async (url, opt = {}) => { aufrufe.push({ url, opt }); return antworten.shift(); };
+    const nachfrage = async (url, method, fd) => { aufrufe.push({ url, opt: { method, body: fd } }); return antworten.shift(); };
+    const geladen = [];
+    const zaehlerListe = [{ id: 7, meter_number: 'W-7', ort: 'Keller', has_dual_tariff: true }];
+    class Formular { constructor() { this.felder = {}; } append(k, v) { this.felder[k] = v; } }
+    const t = new Function('document', 'fetch', 'sendeMitNachfrage', 'serverFehler', 'meldungZu', 'showError',
+        'closeAddMeterModal', 'closeWechselModal', 'fetchMeters', 'fetchReadings', 'meters', 'FormData',
+        namen.map(funktion).join('\n') + '; return { ' + namen.join(', ') + ' };')(
+        doc, holen, nachfrage, async () => new Error('kaputt'), (e, x) => x, x => meldungen.push(x),
+        () => {}, () => feld('wechsel-modal').classList.remove(), () => geladen.push('zaehler'),
+        () => geladen.push('staende'), zaehlerListe, Formular);
+
+    feld('meter-eichjahr').value = '2020';
+    await t.eichfristVorschlag();
+    pruefe('R-EICH-01: ohne Zählerart kein Vorschlag', aufrufe.length === 0);
+    feld('meter-eichart').value = 'kaltwasser';
+    antworten.push({ ok: true, json: async () => ({ geeicht_bis: '2026-12-31' }) });
+    await t.eichfristVorschlag();
+    pruefe('R-EICH-01: der Vorschlag kommt vom Server und landet in „geeicht bis“',
+        aufrufe[0].url === '/api/eichfrist?eichjahr=2020&art=kaltwasser'
+        && el['meter-geeicht-bis'].value === '2026-12-31');
+
+    Object.assign(feld('meter-category'), { value: '3' });
+    Object.assign(feld('meter-property'), { value: '1' });
+    Object.assign(feld('meter-number'), { value: ' W-7a ' });
+    Object.assign(feld('meter-ort'), { value: 'Bad' });
+    Object.assign(feld('meter-id'), { value: '7' });
+    antworten.push({ ok: true });
+    await t.saveMeter();
+    const put = JSON.parse(aufrufe[1].opt.body);
+    pruefe('NK-258: Bearbeiten speichert per PUT ohne Immobilie und Wohnung',
+        aufrufe[1].url === '/api/meters/7' && aufrufe[1].opt.method === 'PUT'
+        && put.meter_number === 'W-7a' && put.ort === 'Bad' && put.geeicht_bis === '2026-12-31'
+        && !('property_id' in put) && !('apartment_id' in put));
+    feld('meter-id').value = '';
+    antworten.push({ ok: true });
+    await t.saveMeter();
+    const post = JSON.parse(aufrufe[2].opt.body);
+    pruefe('NK-258: Anlegen bleibt ein POST mit Immobilie',
+        aufrufe[2].url === '/api/meters' && aufrufe[2].opt.method === 'POST' && post.property_id === 1);
+
+    pruefe('NK-258: nach dem Speichern lädt die Zählerliste neu', geladen.join() === 'zaehler,zaehler');
+    geladen.length = 0;
+    t.openWechselModal(7);
+    pruefe('NK-258: der Wechseldialog zeigt beim Zweitarif die NT-Felder und übernimmt den Ort',
+        el['wechsel-meter-id'].value === 7 && el['wechsel-ort'].value === 'Keller'
+        && nt.every(n => !n.hidden) && el['wechsel-modal'].classList.aktiv);
+    Object.assign(feld('wechsel-datum'), { value: '2024-07-01' });
+    Object.assign(feld('wechsel-endstand'), { value: '400' });
+    Object.assign(feld('wechsel-nummer'), { value: 'W-8' });
+    antworten.push(null);
+    await t.saveWechsel();
+    pruefe('NK-258: bei Nein auf die Rückfrage bleibt der Dialog offen',
+        el['wechsel-modal'].classList.aktiv && geladen.length === 0);
+    antworten.push({ ok: true, status: 201 });
+    await t.saveWechsel();
+    const wechsel = aufrufe[4];
+    pruefe('NK-258: der Wechsel geht über sendeMitNachfrage und lädt Zähler und Stände neu',
+        wechsel.url === '/api/meters/7/wechsel' && wechsel.opt.method === 'POST'
+        && wechsel.opt.body.felder.meter_number === 'W-8' && wechsel.opt.body.felder.endstand === '400'
+        && wechsel.opt.body.felder.ort === 'Keller'
+        && !el['wechsel-modal'].classList.aktiv && geladen.join() === 'zaehler,staende');
+    pruefe('NK-258: keine Fehlermeldung im glatten Lauf', meldungen.length === 0);
+}
+
 warnLeistePruefen()
     .catch(e => pruefe('NK-201: Warnleisten-Prüfung lief durch — ' + e.message, false))
     .then(() => ausschalterPruefen()
@@ -1084,4 +1634,16 @@ warnLeistePruefen()
                             .catch(e => pruefe('NK-227: Ablesen-Prüfung lief durch — ' + e.message, false))
                             .then(() => vorjahrPruefen()
                                 .catch(e => pruefe('NK-230: Vorjahr-Prüfung lief durch — ' + e.message, false))
-                                .then(() => process.exit(fehler ? 1 : 0)))))))));
+                                .then(() => zaehlerPflegePruefen()
+                                    .catch(e => pruefe('NK-258: Zählerpflege-Prüfung lief durch — ' + e.message, false))
+                                    .then(() => vorauszahlungPruefen()
+                                        .catch(e => pruefe('NK-261: Vorauszahlung-Prüfung lief durch — ' + e.message, false))
+                                        .then(() => fristenPruefen()
+                                            .catch(e => pruefe('NK-262: Fristen-Prüfung lief durch — ' + e.message, false))
+                                            .then(() => mehrjahresblickPruefen()
+                                                .catch(e => pruefe('NK-263: Mehrjahresblick-Prüfung lief durch — ' + e.message, false))
+                                                .then(() => jahreswechselPruefen()
+                                                    .catch(e => pruefe('NK-267: Jahreswechsel-Prüfung lief durch — ' + e.message, false))
+                                                    .then(() => pruefstandPruefen()
+                                                        .catch(e => pruefe('NK-265: Prüfstand-Prüfung lief durch — ' + e.message, false))
+                                                        .then(() => process.exit(fehler ? 1 : 0)))))))))))))));

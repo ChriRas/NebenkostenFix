@@ -120,16 +120,16 @@ def test_die_aufforderung_steht_nur_bei_nachzahlung():
         zeitraum='2025', gesamtsumme=Decimal('1200.00'),
         vorauszahlungen=Decimal('300.00'))
     nachzahlung = text_fuer(VORGABE, saldo=Decimal('900.00'), **kwargs)
-    assert 'Wir bitten Sie, den ausstehenden Betrag in Höhe von 900,00 €' in nachzahlung
+    assert 'Bitte gleichen Sie den ausstehenden Betrag in Höhe von 900,00 € aus.' in nachzahlung
     assert 'Nachzahlung' in nachzahlung
 
     guthaben = text_fuer(VORGABE, saldo=Decimal('-150.00'), **kwargs)
-    assert 'Wir bitten Sie' not in guthaben
+    assert 'Bitte gleichen' not in guthaben
     assert 'Guthaben' in guthaben
     assert '150,00 €' in guthaben
 
     ausgeglichen = text_fuer(VORGABE, saldo=Decimal('0.00'), **kwargs)
-    assert 'Wir bitten Sie' not in ausgeglichen
+    assert 'Bitte gleichen' not in ausgeglichen
     assert 'Ausgleich' in ausgeglichen
 
 
@@ -250,7 +250,11 @@ def _deckblatt(unkomprimiert, anschreiben=None) -> str:
     puffer = BytesIO()
     doc = SimpleDocTemplate(puffer, pagesize=A4)
     doc.build(elemente)
-    return _blaetter(puffer.getvalue())[0]
+    pdf = puffer.getvalue()
+    # NK-249: das Deckblatt bleibt ein Blatt, auch mit dem Vorgabetext; der
+    # Umbruch am Ende zählt nicht als eigene Seite.
+    assert len(re.findall(rb'/Type /Page(?![sA-Za-z])', pdf)) == 1
+    return _blaetter(pdf)[0]
 
 
 def test_die_vorlage_spricht_auf_dem_deckblatt(unkomprimiert):
@@ -262,17 +266,19 @@ def test_die_vorlage_spricht_auf_dem_deckblatt(unkomprimiert):
         saldo=Decimal('900.00'))
     blatt = _deckblatt(unkomprimiert, anschreiben)
 
-    assert 'Sehrgeehrte/rAnnaMieterin,' in blatt
+    assert 'GutenTagAnnaMieterin,' in blatt and 'geehrte' not in blatt
     assert 'DieAbrechnungergibtbeiGesamtkostenvon1200,00€' in blatt
-    assert 'WirbittenSie,denausstehendenBetraginHöhevon900,00€auszugleichen.' in blatt
+    assert 'BittegleichenSiedenausstehendenBetraginHöhevon900,00€aus.' in blatt
     # Der feste Gruß der Software ist verdrängt.
     assert 'ImFolgenden' not in blatt
+    # NK-249: das Ergebnis steht einmal, nicht noch ein zweites Mal im Kasten.
+    assert blatt.count('IhreNachzahlung') == 1
 
 
 def test_ohne_vorlage_bleibt_es_beim_festen_gruß(unkomprimiert):
     """Kein Anschreiben hinterlegt: der Deckblatt-Gruß wie bisher."""
     blatt = _deckblatt(unkomprimiert)
-    assert 'Sehrgeehrte/rAnnaMieterin,' in blatt
+    assert 'GutenTagAnnaMieterin,' in blatt and 'geehrte' not in blatt
     assert 'ImFolgenden' in blatt
 
 
@@ -338,7 +344,7 @@ def test_die_festsetzung_druckt_das_anschreiben_des_objekts(
     blatt = _geklebt(pdf)
     assert 'Liebe/rAnnaMieterin,' in blatt
     assert 'IhreAbrechnungfür01.01.2025bis31.12.2025liegtbei.' in blatt
-    assert 'WirbittenSie,denausstehendenBetraginHöhevon900,00€auszugleichen.' in blatt
+    assert 'BittegleichenSiedenausstehendenBetraginHöhevon900,00€aus.' in blatt
     assert 'IhrVermieter' in blatt
     # Der Platzhalter der Aufforderung ist gefüllt, nicht sichtbar stehen
     # geblieben -- bei einer Nachzahlung gibt es etwas zu fordern.
@@ -352,12 +358,12 @@ def test_ohne_eigene_vorlage_druckt_die_vorgabe(auth_client, app_ctx, unkomprimi
 
     pdf = (Path(os.environ['NAS_MOUNT_PATH']) / report.document_path).read_bytes()
     blatt = _geklebt(pdf)
-    assert 'Sehrgeehrte/rAnnaMieterin,' in blatt
+    assert 'GutenTagAnnaMieterin,' in blatt and 'geehrte' not in blatt
     assert 'WohnungEGlinks' in blatt
     assert 'Gesamtkostenvon1200,00€' in blatt
     assert 'Vorauszahlungenvon300,00€' in blatt
     assert '900,00€(Nachzahlung)' in blatt
-    assert 'WirbittenSie,denausstehendenBetraginHöhevon900,00€auszugleichen.' in blatt
+    assert 'BittegleichenSiedenausstehendenBetraginHöhevon900,00€aus.' in blatt
 
 
 def test_die_korrektur_wickelt_dieselbe_vorlage(auth_client, app_ctx, unkomprimiert):
@@ -386,3 +392,27 @@ def test_die_korrektur_wickelt_dieselbe_vorlage(auth_client, app_ctx, unkomprimi
     pdf = (Path(os.environ['NAS_MOUNT_PATH']) / frisch.document_path).read_bytes()
     blatt = _geklebt(pdf)
     assert 'KorrigierterGrußanAnnaMieterin.' in blatt
+
+
+def test_anrede_steht_an_einer_stelle():
+    """NK-247: neutral statt „Sehr geehrte/r“, für Vorlage und Deckblatt gleich."""
+    from nebenkostenfix import anschreiben, pdf_cover_page
+    # NK-264: die Anrede ist ein Platzhalter, gefüllt aus anrede().
+    assert anschreiben.VORGABE.startswith('{anrede}')
+    assert anschreiben.anrede('Anna Mieterin') == 'Guten Tag Anna Mieterin,'
+    quelle = Path(pdf_cover_page.__file__).read_text(encoding='utf-8')
+    assert 'geehrte' not in quelle and 'anrede(' in quelle
+
+
+# ich/wir als ganze Wörter; „Ihnen“/„Sie“ an den Mieter bleiben erlaubt.
+ICH_WIR = re.compile(r'\b(ich|mir|mich|mein\w*|wir|uns|unser\w*)\b', re.IGNORECASE)
+
+
+def test_die_vorgabe_spricht_ohne_ich_und_wir():
+    """NK-248: die festen Sätze sagen weder „ich“ noch „wir“ (bis NK-264 wählt)."""
+    text = text_fuer(VORGABE, mieter_name='Anna', wohnung_name='EG links',
+                     objekt_name='Haus', zeitraum='2025',
+                     gesamtsumme=Decimal('1200.00'),
+                     vorauszahlungen=Decimal('300.00'), saldo=Decimal('900.00'))
+    assert 'Bitte gleichen Sie den ausstehenden Betrag' in text
+    assert ICH_WIR.findall(text) == []

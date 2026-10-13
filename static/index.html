@@ -286,6 +286,9 @@
                             onclick="openFreieAbrechnung()"><i class="ph ph-files"></i>
                             Abrechnung frei erstellen</button>
                         <!-- NK-160: der geführte Weg für ein ganzes Jahr. -->
+                        <!-- NK-267: Ablesen, Vorauszahlung, Vorjahr zum Beginn eines Jahres. -->
+                        <button class="btn-secondary" onclick="oeffneJahreswechsel()"><i class="ph ph-calendar-plus"></i>
+                            Jahreswechsel öffnen</button>
                         <button class="btn-primary" onclick="oeffneJahrAssistent()"><i class="ph ph-calendar-check"></i>
                             Jahr abrechnen</button>
                     </div>
@@ -352,6 +355,16 @@
                             <label for="vermieter-iban">IBAN</label>
                             <input type="text" id="vermieter-iban" maxlength="34" placeholder="z. B. DE02 1203 0000 0000 2020 51">
                             <small class="text-muted" id="vermieter-quelle"></small>
+                        </div>
+                        <!-- NK-264: ich/wir in Anschreiben und Abrechnung. -->
+                        <div class="form-group">
+                            <label for="vermieter-art">Sie schreiben als</label>
+                            <select id="vermieter-art">
+                                <option value="">Neutral (ohne ich/wir)</option>
+                                <option value="privat">Privatperson (ich)</option>
+                                <option value="firma">Firma oder Verwaltung (wir)</option>
+                            </select>
+                            <small class="feld-hilfe">Bestimmt Sätze wie „Rückfragen beantworte ich gern“ im Anschreiben und auf der Abrechnung.</small>
                         </div>
                         <!-- NK-155: optionales Logo oben rechts auf dem Deckblatt. -->
                         <div class="form-group">
@@ -920,8 +933,6 @@
                         <h3 id="chart-comparison-title" style="margin-bottom: 24px;">Wohnungsvergleich</h3>
                         <div class="diagramm-flaeche">
                             <canvas id="chart-building-comparison"></canvas>
-                            <p id="chart-building-comparison-leer" class="text-muted" hidden>
-                                Keine Verbrauchsdaten für den Vergleich vorhanden.</p>
                         </div>
                     </div>
                 </div>
@@ -956,6 +967,20 @@
                             </div>
                         </div>
                     </div>
+                    <div class="dashboard-card glass-panel abstand-oben-gross" id="mehrjahresblick-karte">
+                        <div class="karten-kopf">
+                            <h3>Mehrjahresblick</h3>
+                        </div>
+                        <p class="karten-text text-muted">Euro je m² und Jahr aus den festgesetzten Abrechnungen, mit der Fläche, auf der jede stand. Leerstand ist herausgerechnet.</p>
+                        <div class="tabellen-rolle">
+                            <table class="tabelle tabular-nums">
+                                <thead>
+                                    <tr id="mjb-kopf"></tr>
+                                </thead>
+                                <tbody id="mjb-zeilen"></tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Ansicht: Datenqualität -->
@@ -978,6 +1003,28 @@
                                 <i class="ph ph-sparkle"></i> Beispielimmobilie anlegen
                             </button>
                         </div>
+                    </div>
+
+                    <!-- Fristenkalender (NK-262, R-FRIST-05) -->
+                    <div class="dashboard-card glass-panel" id="fristen-karte">
+                        <div class="kopf-mit-knopf">
+                            <div class="kopf-text">
+                                <h3>
+                                    <i class="ph ph-calendar-dots text-primaer" aria-hidden="true"></i>
+                                    Fristenkalender
+                                </h3>
+                                <p>
+                                    Die kommenden Termine aller Immobilien: Abrechnungs- und Einwendungsfristen,
+                                    Ablesestichtage, neue Vorauszahlungen und Eichfristen. Die Einwendungsfrist
+                                    steht erst hier, wenn der Zugang der Abrechnung erfasst ist.
+                                </p>
+                            </div>
+                            <a class="btn-secondary" href="/api/fristen.ics" download
+                                title="Alle Termine als .ics-Datei für Ihren Kalender (ganztägige Termine)">
+                                <i class="ph ph-calendar-plus" aria-hidden="true"></i> Kalender herunterladen
+                            </a>
+                        </div>
+                        <ul id="fristen-liste"></ul>
                     </div>
 
                     <!-- Warnings Section -->
@@ -1149,6 +1196,9 @@
                     <div id="jahr-vorschau"></div>
                 </section>
                 <section data-jahr-schritt="5" hidden>
+                    <!-- NK-265: Prüfstand vor dem Festsetzen; blockiert nichts. -->
+                    <h3 class="abstand-unten-klein">Prüfstand</h3>
+                    <div id="jahr-pruefstand"></div>
                     <p class="karten-text" id="jahr-frist"></p>
                     <p class="karten-text">Das Anschreiben steht auf dem Deckblatt jeder Abrechnung; prüfen
                         Sie es vor dem Erstellen. Danach erstellt NebenkostenFix je Mieter die Abrechnung
@@ -1165,6 +1215,73 @@
             <div class="modal-footer">
                 <button type="button" class="btn-secondary" id="jahr-zurueck" onclick="jahrSchritt(-1)">Zurück</button>
                 <button type="button" class="btn-primary" id="jahr-weiter" onclick="jahrSchritt(1)">Weiter</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- NK-267: geführter Jahreswechsel über die vorhandenen Wege. -->
+    <div class="modal-overlay" id="jahreswechsel-modal">
+        <div class="modal glass-panel dialog-breit">
+            <div class="modal-header">
+                <h2>Neues Jahr beginnen</h2>
+                <button class="btn-icon" aria-label="Schließen" onclick="jwAbbrechen()"><i class="ph ph-x"></i></button>
+            </div>
+            <ol class="assistent-schritte" id="jw-schritte">
+                <li data-schritt="1">Ablesen</li>
+                <li data-schritt="2">Vorauszahlung</li>
+                <li data-schritt="3">Vorjahr</li>
+                <li data-schritt="4">Checkliste</li>
+            </ol>
+            <div class="modal-body">
+                <p class="karten-text" id="jw-wieder" hidden>Sie machen dort weiter, wo Sie aufgehört haben.</p>
+                <section data-jw-schritt="1">
+                    <div class="felder-nebeneinander">
+                        <div class="form-group feld-breit">
+                            <label for="jw-immobilie">Immobilie</label>
+                            <select id="jw-immobilie" onchange="jwAuswahl()"></select>
+                        </div>
+                        <div class="form-group">
+                            <label for="jw-jahr">Neues Jahr</label>
+                            <input type="number" id="jw-jahr" min="2000" max="2100" onchange="jwAuswahl()">
+                        </div>
+                    </div>
+                    <p class="karten-text">Lesen Sie alle Zähler zum Stichtag <strong id="jw-stichtag"></strong> ab,
+                        dem letzten Tag des alten Abrechnungsjahres.</p>
+                    <div class="knopf-zeile">
+                        <button type="button" class="btn-secondary" onclick="jwAblesen()">
+                            <i class="ph ph-camera" aria-hidden="true"></i> Ablesung erfassen</button>
+                    </div>
+                    <label class="abstand-oben"><input type="checkbox" id="jw-erledigt-ablesen"
+                        onchange="jwHaken('ablesen', this.checked)"> Erledigt</label>
+                </section>
+                <section data-jw-schritt="2" hidden>
+                    <p class="karten-text">Die letzte Abrechnung jedes Mieters schlägt die neue Vorauszahlung
+                        vor. Öffnen Sie sie und legen Sie dort die Serienbuchung an.</p>
+                    <ul id="jw-abrechnungen"></ul>
+                    <label class="abstand-oben"><input type="checkbox" id="jw-erledigt-vorauszahlung"
+                        onchange="jwHaken('vorauszahlung', this.checked)"> Erledigt</label>
+                </section>
+                <section data-jw-schritt="3" hidden>
+                    <p class="karten-text">Die Rechnungen des Vorjahres stehen als Zeilen für das neue Jahr
+                        bereit, ohne Beträge. Zeilen ohne Betrag werden nicht gespeichert.</p>
+                    <div class="knopf-zeile">
+                        <button type="button" class="btn-secondary" onclick="jwVorjahr()">
+                            <i class="ph ph-copy" aria-hidden="true"></i> Wie im Vorjahr füllen</button>
+                    </div>
+                    <label class="abstand-oben"><input type="checkbox" id="jw-erledigt-vorjahr"
+                        onchange="jwHaken('vorjahr', this.checked)"> Erledigt</label>
+                </section>
+                <section data-jw-schritt="4" hidden>
+                    <ul id="jw-checkliste"></ul>
+                    <p class="karten-text">Abbrechen behält den Stand. „Jahreswechsel schließen“ beendet den
+                        Ablauf; offene Punkte holen Sie dann auf den gewohnten Wegen nach.</p>
+                </section>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-secondary" onclick="jwAbbrechen()">Abbrechen</button>
+                <button type="button" class="btn-secondary" id="jw-zurueck" onclick="jwSchritt(-1)">Zurück</button>
+                <button type="button" class="btn-primary" id="jw-weiter" onclick="jwSchritt(1)">Weiter</button>
+                <button type="button" class="btn-primary" id="jw-fertig" onclick="jwAbschliessen()" hidden>Jahreswechsel schließen</button>
             </div>
         </div>
     </div>
@@ -1483,6 +1600,12 @@
                     <label for="tenant-name">Name des Mieters</label>
                     <input type="text" id="tenant-name">
                 </div>
+                <!-- NK-264: eigene Anrede, leer = „Guten Tag <Name>,“ -->
+                <div class="form-group">
+                    <label for="tenant-anrede">Anrede im Anschreiben (optional)</label>
+                    <input type="text" id="tenant-anrede" maxlength="200" placeholder="z. B. Sehr geehrte Frau Muster">
+                    <small class="feld-hilfe">Leer lassen für „Guten Tag“ mit dem Namen des Mieters.</small>
+                </div>
                 <div class="form-group">
                     <label for="tenant-apartment">Zugeordnete Wohnung</label>
                     <select id="tenant-apartment">
@@ -1590,14 +1713,77 @@
         </div>
     </div>
 
+    <!-- NK-261 (R-VZ-02): Soll und Ist der Vorauszahlungen -->
+    <div class="modal-overlay" id="vorauszahlung-modal">
+        <div class="modal glass-panel dialog-vorauszahlung">
+            <div class="modal-header">
+                <h2>Vorauszahlungen: <span id="vz-tenant-name"></span></h2>
+                <button class="btn-icon" aria-label="Schließen" onclick="closeVorauszahlungModal()"><i class="ph ph-x"></i></button>
+            </div>
+            <div class="modal-body">
+                <p class="karten-text">
+                    Das Soll ist der vereinbarte Monatsbetrag; er gilt ab seinem Stichtag bis zum nächsten.
+                    Eine Serienbuchung hinterlegt ihn selbst. Gezählt werden nur erfasste Zahlungen.
+                </p>
+                <input type="hidden" id="vz-tenant-id">
+                <table class="tabelle tabelle-luftig abstand-unten-klein">
+                    <thead>
+                        <tr>
+                            <th>Gültig ab</th>
+                            <th class="text-right">Soll je Monat</th>
+                            <th class="spalte-knopf"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="vz-soll-liste"></tbody>
+                </table>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="vz-gueltig-ab">Gültig ab</label>
+                        <input type="date" id="vz-gueltig-ab">
+                    </div>
+                    <div class="form-group">
+                        <label for="vz-betrag">Soll je Monat (€)</label>
+                        <input type="number" id="vz-betrag" step="0.01" min="0">
+                    </div>
+                </div>
+                <h3 class="zwischentitel">Soll und Ist je Monat</h3>
+                <p id="vz-saldo" class="karten-text"></p>
+                <div class="tabellen-rolle">
+                    <table class="tabelle tabelle-kompakt">
+                        <thead>
+                            <tr>
+                                <th>Monat</th>
+                                <th class="text-right">Soll</th>
+                                <th class="text-right">Ist</th>
+                                <th class="text-right">Differenz</th>
+                                <th>Stand</th>
+                            </tr>
+                        </thead>
+                        <tbody id="vz-monate"></tbody>
+                    </table>
+                </div>
+                <div id="vz-erinnerung-block" hidden>
+                    <h3 class="zwischentitel">Zahlungserinnerung</h3>
+                    <label for="vz-erinnerung" class="karten-text">Vorlage zum Anpassen; zum Übernehmen in Ihr Schreiben markieren und kopieren (Strg+A, Strg+C)</label>
+                    <textarea id="vz-erinnerung" rows="12" class="breite-voll"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-secondary" onclick="closeVorauszahlungModal()">Schließen</button>
+                <button type="button" class="btn-primary" onclick="saveVorauszahlungSoll()">Soll speichern</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Add Meter Modal -->
     <div class="modal-overlay" id="meter-modal">
         <div class="modal glass-panel">
             <div class="modal-header">
-                <h2>Neuer Zähler</h2>
+                <h2 id="meter-modal-title">Neuer Zähler</h2>
                 <button class="btn-icon" aria-label="Schließen" onclick="closeAddMeterModal()"><i class="ph ph-x"></i></button>
             </div>
             <div class="modal-body">
+                <input type="hidden" id="meter-id">
                 <div class="form-group">
                     <label>Kategorie</label>
                     <select id="meter-category" required></select>
@@ -1615,6 +1801,34 @@
                 <div class="form-group">
                     <label>Zählernummer</label>
                     <input type="text" id="meter-number" required>
+                </div>
+                <div class="form-group">
+                    <label for="meter-ort">Einbauort (optional)</label>
+                    <input type="text" id="meter-ort" maxlength="100" placeholder="z. B. Keller, Bad">
+                </div>
+                <div class="felder-nebeneinander">
+                    <div class="form-group">
+                        <label for="meter-eichjahr">Eichjahr</label>
+                        <input type="number" id="meter-eichjahr" min="1900" step="1" onchange="eichfristVorschlag()">
+                    </div>
+                    <div class="form-group feld-breit">
+                        <label for="meter-eichart">Zählerart <i class="ph ph-question feld-hilfe" title="Eichfrist nach § 34 MessEV, Anlage 7. Sie endet am 31.12. des Jahres, in dem sie rechnerisch abläuft (R-EICH-01)."></i></label>
+                        <select id="meter-eichart" onchange="eichfristVorschlag()">
+                            <option value="">— für einen Vorschlag wählen —</option>
+                            <option value="kaltwasser">Kaltwasserzähler – 6 Jahre</option>
+                            <option value="warmwasser">Warmwasserzähler – 6 Jahre</option>
+                            <option value="waerme">Wärmezähler – 6 Jahre</option>
+                            <option value="gas_balgen">Gaszähler (Balgen bis 10 m³/h) – 8 Jahre</option>
+                            <option value="gas">Gaszähler, sonstige – 5 Jahre</option>
+                            <option value="strom_elektronisch">Stromzähler, elektronisch – 8 Jahre</option>
+                            <option value="strom_ferraris">Stromzähler, Ferraris – 16 Jahre</option>
+                            <option value="sonstige">Sonstiges Messgerät – 2 Jahre</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="meter-geeicht-bis">Geeicht bis <i class="ph ph-question feld-hilfe" title="Ein Vorschlag aus Eichjahr und Zählerart, den Sie überschreiben können. Ist die Frist abgelaufen, zeigt die Zählerliste einen Hinweis; gerechnet wird trotzdem."></i></label>
+                    <input type="date" id="meter-geeicht-bis">
                 </div>
                 <div class="form-group">
                     <label>Heizungsanlage <i class="ph ph-question feld-hilfe" title="Welche Anlage dieser Immobilie der Zähler misst (D-45). Leer lassen bei Strom, Wasser und allem, was keine Wärme erfasst."></i></label>
@@ -1638,6 +1852,62 @@
             <div class="modal-footer">
                 <button class="btn-secondary" onclick="closeAddMeterModal()">Abbrechen</button>
                 <button class="btn-primary" onclick="saveMeter()">Zähler speichern</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Zählerwechsel (NK-258) -->
+    <div class="modal-overlay" id="wechsel-modal">
+        <div class="modal glass-panel">
+            <div class="modal-header">
+                <h2 id="wechsel-modal-title">Zählerwechsel</h2>
+                <button class="btn-icon" aria-label="Schließen" onclick="closeWechselModal()"><i class="ph ph-x"></i></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="wechsel-meter-id">
+                <p class="karten-text">Endstand des alten und Anfangsstand des neuen Zählers stehen am selben Tag. Die Abrechnung zählt beide Teile zusammen.</p>
+                <div class="form-group">
+                    <label for="wechsel-datum">Wechseltag</label>
+                    <input type="date" id="wechsel-datum" required>
+                </div>
+                <div class="felder-nebeneinander">
+                    <div class="form-group feld-breit">
+                        <label for="wechsel-endstand">Endstand alter Zähler</label>
+                        <input type="text" inputmode="decimal" id="wechsel-endstand" required>
+                    </div>
+                    <div class="form-group feld-breit wechsel-nt">
+                        <label for="wechsel-endstand-nt">Endstand NT</label>
+                        <input type="text" inputmode="decimal" id="wechsel-endstand-nt">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="wechsel-nummer">Nummer des neuen Zählers</label>
+                    <input type="text" id="wechsel-nummer" maxlength="100" required>
+                </div>
+                <div class="felder-nebeneinander">
+                    <div class="form-group feld-breit">
+                        <label for="wechsel-anfangsstand">Anfangsstand neuer Zähler</label>
+                        <input type="text" inputmode="decimal" id="wechsel-anfangsstand" required>
+                    </div>
+                    <div class="form-group feld-breit wechsel-nt">
+                        <label for="wechsel-anfangsstand-nt">Anfangsstand NT</label>
+                        <input type="text" inputmode="decimal" id="wechsel-anfangsstand-nt">
+                    </div>
+                </div>
+                <div class="felder-nebeneinander">
+                    <div class="form-group feld-breit">
+                        <label for="wechsel-ort">Einbauort (optional)</label>
+                        <input type="text" id="wechsel-ort" maxlength="100">
+                    </div>
+                    <div class="form-group feld-breit">
+                        <label for="wechsel-geeicht-bis">Geeicht bis (optional)</label>
+                        <input type="date" id="wechsel-geeicht-bis">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" onclick="closeWechselModal()">Abbrechen</button>
+                <button class="btn-primary" onclick="saveWechsel()">Wechsel speichern</button>
             </div>
         </div>
     </div>
@@ -1695,7 +1965,7 @@
                             <input type="number" id="reading-value" step="0.01" required>
                         </div>
                         <div class="form-group" id="group-reading-value-nt" style="flex: 1; display: none;">
-                            <label>Zählerstand (NT)</label>
+                            <label id="label-reading-value-nt">Zählerstand (NT)</label>
                             <input type="number" id="reading-value-nt" step="0.01">
                         </div>
                     </div>
@@ -1846,6 +2116,21 @@
                             Nur bei Rechnungen einer Wohnung mit Zähler: Dieser Teil wird
                             nach Tagen verteilt, der Rest nach Verbrauch. Den Anteil der
                             leeren Tage trägt der Vermieter.
+                        </small>
+                    </div>
+                    <!-- NK-268 (R-35A-01): der Lohnanteil nach § 35a EStG, umgelegt wie die Rechnung. -->
+                    <div class="form-group">
+                        <label for="invoice-art-35a">Lohnanteil nach § 35a EStG (optional)</label>
+                        <select id="invoice-art-35a">
+                            <option value="">keine Angabe</option>
+                            <option value="haushaltsnah">Haushaltsnahe Dienstleistungen</option>
+                            <option value="handwerker">Handwerkerleistungen</option>
+                        </select>
+                        <input type="number" id="invoice-lohnanteil" step="0.01" min="0"
+                            placeholder="davon Lohnanteil (€), z. B. 400,00" aria-label="Lohnanteil (€)">
+                        <small class="text-muted">
+                            Der Lohnanteil laut Rechnung. Er wird wie die Rechnung umgelegt und
+                            steht als Tabelle in der Abrechnung, ohne steuerliche Prüfung.
                         </small>
                     </div>
                     <div class="form-group">

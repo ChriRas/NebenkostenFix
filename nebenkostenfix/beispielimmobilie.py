@@ -36,17 +36,13 @@ class BeispielExistiert(Exception):
         self.property_id = property_id
 
 
-def _heute_minus(tage: int) -> date:
-    return date.today() - timedelta(days=tage)
-
-
 def ist_beispiel(haus) -> bool:
     """Ob eine Immobilie das Beispielhaus ist (fester Name, siehe oben)."""
     return haus is not None and haus.name == NAME
 
 
-def vorjahr() -> tuple[date, date]:
-    jahr = date.today().year - 1
+def vorjahr(heute: date | None = None) -> tuple[date, date]:
+    jahr = (heute or date.today()).year - 1
     return date(jahr, 1, 1), date(jahr, 12, 31)
 
 
@@ -60,8 +56,16 @@ RECHNUNGEN = (
 VORAUSZAHLUNG = '60.00'
 
 
-def anlegen():
-    """Legt das Beispielhaus an und gibt den Bericht fuer die Antwort zurueck."""
+def anlegen(heute: date | None = None):
+    """Legt das Beispielhaus an und gibt den Bericht fuer die Antwort zurueck.
+
+    Alle Daten zählen von ``heute`` aus (für Tests injizierbar).
+    """
+    heute = heute or date.today()
+
+    def _heute_minus(tage: int) -> date:
+        return heute - timedelta(days=tage)
+
     from nebenkostenfix.models import (Apartment, CostCategory, Meter, MeterReading,
                         Property, Tenant, TenantCostProfile, db)
 
@@ -91,7 +95,7 @@ def anlegen():
     # Anna wohnt seit der Mitte des vorletzten Jahres dort: das ganze Vorjahr
     # ist ihr Abrechnungszeitraum (NK-159).
     anna = Tenant(apartment_id=eg.id, name=MIETER[0],
-                  move_in_date=date(date.today().year - 2, 7, 1))
+                  move_in_date=date(heute.year - 2, 7, 1))
     ben = Tenant(apartment_id=og.id, name=MIETER[1],
                  move_in_date=_heute_minus(200))
     db.session.add_all([anna, ben])
@@ -134,10 +138,12 @@ def anlegen():
     # NK-159: die Rechnungen des Vorjahres und Annas Vorauszahlungen. Ben
     # zog erst später ein: sein Teil des Vorjahres ist Leerstand und bleibt
     # beim Vermieter -- auch das zeigt die Abrechnung.
+    # NK-243: Vorauszahlungen jedes Mieters monatlich ab Einzug (frühestens
+    # Vorjahresbeginn) bis heute, sonst zeigt das laufende Jahr ein Minus.
     from decimal import Decimal
 
     from nebenkostenfix.models import CostInvoice, Payment
-    von, bis = vorjahr()
+    von, bis = vorjahr(heute)
     kostenarten = []
     for nummer, (kat_name, betrag, beschreibung, kuerzel) in enumerate(RECHNUNGEN, 1):
         kat = kategorie(kat_name)
@@ -146,10 +152,13 @@ def anlegen():
             property_id=haus.id, category_id=kat.id, amount=Decimal(betrag),
             start_date=von, end_date=bis, rechnungsdatum=date(von.year + 1, 1, 10 + nummer),
             invoice_number=f'{kuerzel}-{von.year}', description=beschreibung))
-    for monat in range(1, 13):
-        db.session.add(Payment(tenant_id=anna.id, amount=Decimal(VORAUSZAHLUNG),
-                               payment_date=date(von.year, monat, 3),
-                               type='Nebenkostenvorauszahlung'))
+    for mieter in (anna, ben):
+        tag = date(von.year, 1, 3)
+        while tag <= heute:
+            if tag >= mieter.move_in_date:
+                db.session.add(Payment(tenant_id=mieter.id, amount=Decimal(VORAUSZAHLUNG),
+                                       payment_date=tag, type='Nebenkostenvorauszahlung'))
+            tag = date(tag.year + tag.month // 12, tag.month % 12 + 1, 3)
 
     db.session.commit()
     return {

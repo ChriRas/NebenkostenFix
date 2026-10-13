@@ -81,6 +81,36 @@ def test_ablesungen_zum_stichtag_und_beim_wechsel(auth_client, haus):
     assert zeile['wechsel_fehlen'] == [] and zeile['stichtag_ok'] is True
 
 
+def test_ein_zaehlerwechsel_verlangt_keinen_stand_am_alten_oder_vor_dem_neuen(auth_client, haus):
+    # NK-258: Der alte Zähler endet mit dem Wechsel, der neue beginnt dort.
+    from nebenkostenfix.models import Apartment, CostCategory, Meter, MeterReading, Tenant, db
+    jahr = date.today().year - 1
+    ben = Tenant.query.filter_by(name='Ben Beispiel').one()
+    ben.move_in_date = date(jahr, 3, 1)
+    og = Apartment.query.get(ben.apartment_id)
+    wasser = CostCategory.query.filter_by(name='Wasserversorgung').one()
+    alt = Meter(property_id=haus, category_id=wasser.id, apartment_id=og.id,
+                meter_number='H-OG-alt', is_main_meter=False)
+    db.session.add(alt)
+    db.session.flush()
+    neu = Meter(property_id=haus, category_id=wasser.id, apartment_id=og.id,
+                meter_number='H-OG-neu', is_main_meter=False, ersetzt_id=alt.id)
+    db.session.add(neu)
+    db.session.flush()
+    for zaehler, tag, wert in ((alt, date(jahr - 1, 12, 31), 10), (alt, date(jahr, 3, 1), 20),
+                               (alt, date(jahr, 6, 30), 50), (neu, date(jahr, 6, 30), 0),
+                               (neu, date(jahr, 12, 31), 40)):
+        db.session.add(MeterReading(meter_id=zaehler.id, reading_date=tag, value=wert))
+    db.session.commit()
+
+    zeilen = {z['nummer']: z for z in _stand(auth_client, haus, jahr).get_json()['ablesungen']}
+    assert zeilen['H-OG-alt']['stichtag_ok'] and zeilen['H-OG-alt']['wechsel_fehlen'] == []
+    assert zeilen['H-OG-neu']['stichtag_ok'] and zeilen['H-OG-neu']['wechsel_fehlen'] == []
+    # Im Jahr nach dem Wechsel ist der alte Zähler nicht mehr abzulesen.
+    folgejahr = _stand(auth_client, haus, jahr + 1).get_json()['ablesungen']
+    assert 'H-OG-alt' not in {z['nummer'] for z in folgejahr}
+
+
 def test_ungueltige_anfragen(auth_client, haus):
     assert _stand(auth_client, haus, date.today().year + 1).status_code == 400
     assert _stand(auth_client, 99999, 2025).status_code == 400

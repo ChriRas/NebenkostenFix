@@ -614,3 +614,25 @@ def test_die_ausfuhr_nimmt_die_haushaltsgroessen_mit(auth_client, app_ctx):
             for z in ausfuhr['haushaltsgroessen']] == [('2024-01-01', 3)]
     # Und die drei Stammdaten der Wohnung haengen an der Wohnung.
     assert 'nutzungsart' in ausfuhr['apartments'][0]
+
+
+def test_die_ausfuhr_nimmt_jede_tabelle_mit_ausser_den_konten(auth_client, app_ctx):
+    """NK-269: Zahlungen, Soll und Versionen fehlten -- „alle Daten“ waren es nicht.
+
+    Nur die Anmeldekonten bleiben draussen: ein Passwort-Hash gehoert in
+    keine Datei, die den Rechner verlaesst.
+    """
+    from nebenkostenfix.models import Payment, VorauszahlungSoll, db
+
+    mieter = _mieter_mit_haushalt()
+    db.session.add(Payment(tenant_id=mieter.id, amount=95, payment_date=date(2024, 2, 1),
+                           type='Nebenkostenvorauszahlung'))
+    db.session.add(VorauszahlungSoll(tenant_id=mieter.id, gueltig_ab=date(2024, 1, 1), betrag=95))
+    db.session.commit()
+
+    antwort = auth_client.get('/api/export')
+    ausfuhr = _json(antwort)
+    assert set(ausfuhr) == {t.name for t in db.metadata.sorted_tables} - {'users'}
+    assert [z['payment_date'] for z in ausfuhr['payments']] == ['2024-02-01']
+    assert [z['gueltig_ab'] for z in ausfuhr['vorauszahlung_soll']] == ['2024-01-01']
+    assert 'password_hash' not in antwort.get_data(as_text=True)

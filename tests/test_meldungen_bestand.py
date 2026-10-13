@@ -98,7 +98,7 @@ def _funktionsrumpf(name: str) -> str:
 @pytest.mark.parametrize(('anzahl', 'sichtbar', 'weitere'), [(3, 3, None), (5, 3, '2 weitere Hinweise')])
 def test_hoechstens_drei_hinweise_sichtbar(anzahl, sichtbar, weitere):
     warnungen = [f'Meldung {i} ist offen. Prüfen Sie Punkt {i}.' for i in range(anzahl)]
-    code = ''.join(_funktionsrumpf(n) for n in ('escapeHtml', 'warnungenBuendeln', 'warnungenHtml'))
+    code = ''.join(_funktionsrumpf(n) for n in ('escapeHtml', 'warnungenBuendeln', 'hinweiseKappen', 'warnungenHtml'))
     html = subprocess.run(['node', '-e', code + f'console.log(JSON.stringify(warnungenHtml({json.dumps(warnungen)})));'],
                           capture_output=True, text=True, check=True).stdout
     html = json.loads(html)

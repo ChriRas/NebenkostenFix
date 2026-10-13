@@ -6,6 +6,7 @@ from nebenkostenfix.abrechnungsart import GUELTIG, VORGABE
 from nebenkostenfix.betrkv import NUMMERN as BETRKV_NUMMERN
 from nebenkostenfix.geld import Einheitspreis, Geld
 from nebenkostenfix.haushalt import personen_am
+from nebenkostenfix.lohnausweis import ARTEN as ARTEN_35A
 from nebenkostenfix.heizung import (
     ANTEIL_MAX, ANTEIL_MIN, ANTEIL_VORGABE, ABLESUNG, HEIZUNG, VERBUNDEN,
     WW_KALTWASSER_GRAD, ZWISCHENABLESUNG, ABLESUNGSARTEN,
@@ -95,12 +96,18 @@ class Tenant(db.Model):
     # Anker gesperrt (aus allen Listen ausgeblendet), danach loescht der Start
     # sie ganz.
     gesperrt_bis = db.Column(db.Date, nullable=True)
+    # NK-264: eigene Anrede („Sehr geehrte Frau Muster“); leer = „Guten Tag <Name>,“.
+    anrede = db.Column(db.String(200), nullable=True)
     
     cost_profiles = db.relationship('TenantCostProfile', backref='tenant', lazy=True, cascade="all, delete-orphan")
     payments = db.relationship('Payment', backref='tenant', lazy=True, cascade="all, delete-orphan")
     haushaltsgroessen = db.relationship(
         'Haushaltsgroesse', backref='tenant', lazy=True,
         cascade="all, delete-orphan", order_by='Haushaltsgroesse.gueltig_ab')
+    # NK-261: der vereinbarte Monatsbetrag ab Stichtag (R-VZ-02).
+    vorauszahlung_soll = db.relationship(
+        'VorauszahlungSoll', backref='tenant', lazy=True,
+        cascade="all, delete-orphan", order_by='VorauszahlungSoll.gueltig_ab')
 
     def personenanzahl_am(self, stichtag: date) -> int:
         """Wie viele Personen an diesem Tag in der Einheit wohnten.
@@ -149,6 +156,27 @@ class Haushaltsgroesse(db.Model):
                             name='uq_haushaltsgroessen_tenant_gueltig_ab'),
         db.CheckConstraint('personenanzahl >= 1',
                            name='ck_haushaltsgroessen_personenanzahl'),
+    )
+
+
+class VorauszahlungSoll(db.Model):
+    """Die vereinbarte Nebenkostenvorauszahlung je Monat ab einem Stichtag (NK-261).
+
+    Eine Serienbuchung legt die Zahlungen im Voraus an; sie sind damit Ist,
+    kein Soll. Gegen diesen Betrag laesst sich sagen, ob ein Monat offen ist
+    (R-VZ-02). Ein Eintrag gilt ab gueltig_ab bis zum naechsten.
+    """
+
+    __tablename__ = 'vorauszahlung_soll'
+    id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(db.Integer, db.ForeignKey('tenants.id'), nullable=False)
+    gueltig_ab = db.Column(db.Date, nullable=False)
+    betrag = db.Column(Geld, nullable=False)
+
+    __table_args__ = (
+        db.UniqueConstraint('tenant_id', 'gueltig_ab',
+                            name='uq_vorauszahlung_soll_tenant_gueltig_ab'),
+        db.CheckConstraint('betrag >= 0', name='ck_vorauszahlung_soll_betrag'),
     )
 
 class TenantCostProfile(db.Model):
@@ -380,6 +408,12 @@ class CostInvoice(db.Model):
     # BGB). NULL heisst keine Angabe: dann wie bisher alles nach Zaehler.
     grundpreis = db.Column(Geld, nullable=True)
 
+    # Der Lohnanteil nach § 35a EStG und seine Art (NK-268, R-35A-01): nur
+    # ausgewiesen, nie gerechnet. Die Art haengt an der Rechnung, nicht an
+    # der Kostenart -- wie die Heizkostenart (D-44). NULL heisst keine Angabe.
+    art_35a = db.Column(db.String(20), nullable=True)
+    lohnanteil = db.Column(Geld, nullable=True)
+
     __table_args__ = (
         db.CheckConstraint(
             'heizkostenart IS NULL OR heizkostenart IN (%s)' % ', '.join(
@@ -420,6 +454,18 @@ class CostInvoice(db.Model):
         db.CheckConstraint(
             'grundpreis IS NULL OR (grundpreis >= 0 AND grundpreis <= amount)',
             name='ck_cost_invoices_grundpreis_im_betrag'),
+        # § 35a (R-35A-01): Art und Lohn beides oder keines, und der Lohn ist
+        # ein Teil des Betrags.
+        db.CheckConstraint(
+            'art_35a IS NULL OR art_35a IN (%s)' % ', '.join(
+                "'%s'" % a for a in sorted(ARTEN_35A)),
+            name='ck_cost_invoices_art_35a'),
+        db.CheckConstraint(
+            '(art_35a IS NULL) = (lohnanteil IS NULL)',
+            name='ck_cost_invoices_35a_vollstaendig'),
+        db.CheckConstraint(
+            'lohnanteil IS NULL OR (lohnanteil >= 0 AND lohnanteil <= amount)',
+            name='ck_cost_invoices_lohnanteil_im_betrag'),
     )
 
 class InvoiceDocument(db.Model):
@@ -459,6 +505,14 @@ class Meter(db.Model):
 
     # NK-125: fuer die Zaehlerliste (Name der Anlage, die der Zaehler misst).
     heizungsanlage = db.relationship('Heizungsanlage', foreign_keys=[heizungsanlage_id])
+
+    # NK-258: der Zaehler, den dieser beim Wechsel abgeloest hat. Der Kern
+    # haengt beide zu einer Kette zusammen; Verbrauch ist die Summe der Teile.
+    ersetzt_id = db.Column(db.Integer, db.ForeignKey('meters.id'), nullable=True)
+    # NK-258 (R-EICH-01): Ende der Eichfrist und Einbauort. Beides nur
+    # Auskunft; die Berechnung haengt nicht daran.
+    geeicht_bis = db.Column(db.Date, nullable=True)
+    ort = db.Column(db.String(100), nullable=True)
 
     readings = db.relationship('MeterReading', backref='meter', lazy=True, cascade="all, delete-orphan")
 
@@ -597,6 +651,8 @@ class Vermieterdaten(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(200), nullable=True)
     iban = db.Column(db.String(34), nullable=True)
+    # NK-264: 'privat' (ich) oder 'firma' (wir); leer = neutrale Sätze (NK-248).
+    art = db.Column(db.String(10), nullable=True)
     aktualisiert_am = db.Column(db.Date)
 
     @classmethod

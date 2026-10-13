@@ -7,3 +7,22 @@ useDefault = true
 description = "Testpasswoerter"
 regexTarget = "line"
 regexes = ['''(lang|rundgang)-passwort-\d''']
+
+# Der Vorname des Herausgebers gehoert weder in Code noch in Tests. Zwei
+# fruehe Commits trugen ihn schon; sie bleiben in der Historie stehen.
+[[rules]]
+id = "name-herausgeber"
+description = "Vorname des Herausgebers"
+regex = '''(?i)\bfabi(?:an)?\b'''
+keywords = ["fabi"]
+
+[[rules.allowlists]]
+description = "Commits vor dieser Regel"
+commits = [
+    "25a2216e5774e806be32bb78d6ef4e6d6e2566a2",
+    "3f343a4269d60d3da2158682f8c9639442e7c2a2",
+]
+
+[[rules.allowlists]]
+description = "Diese Datei nennt das Muster"
+paths = ['''^\.gitleaks\.toml$''']

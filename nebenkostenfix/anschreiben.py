@@ -21,24 +21,71 @@ from xml.sax.saxutils import escape  # nosec B406
 
 from nebenkostenfix.rechenkern import euro_text
 
-# Die Vorlage, solange der Vermieter nichts Eigenes hinterlegt hat.
-VORGABE = (
-    'Sehr geehrte/r {mieter_name},\n\n'
-    'anbei erhalten Sie die Nebenkostenabrechnung für die Wohnung '
-    '{wohnung_name} für den Zeitraum {zeitraum}.\n\n'
-    'Die Abrechnung ergibt bei Gesamtkosten von {gesamtsumme} und '
-    'Vorauszahlungen von {vorauszahlungen} einen Saldo in Höhe von '
-    '{saldo_betrag} ({saldo_art}).\n\n'
-    '{aufforderung}\n\n'
-    'Sie können Einwendungen gegen diese Abrechnung innerhalb von zwölf '
-    'Monaten nach ihrem Zugang bei mir geltend machen. Die Belege können '
-    'Sie auf Verlangen einsehen.\n\n'
-    'Mit freundlichen Grüßen\n'
-    '{vermieter_name}'
-)
+# NK-247: neutrale Anrede statt „Sehr geehrte/r“ -- eine Stelle für die
+# Vorlage und den festen Gruß des Deckblatts. NK-264: eine eigene Anrede
+# je Mieter geht vor; der neutrale Gruß bleibt der Rückfall.
+ANREDE = 'Guten Tag {mieter_name},'
+
+
+def anrede(mieter_name: str, eigene: str | None = None) -> str:
+    eigene = (eigene or '').strip()
+    if not eigene:
+        return ANREDE.format(mieter_name=mieter_name)
+    return eigene if eigene[-1] in ',!' else eigene + ','
+
+
+# NK-264: ich/wir nach der Art des Vermieters (Einstellungen); ohne Angabe
+# die neutralen Sätze aus NK-248. Anschreiben und PDF lesen von hier.
+ARTEN = ('privat', 'firma')
+_SAETZE = {
+    None: {
+        'belege': 'Die Belege können Sie auf Verlangen einsehen.',
+        'konto': 'das Konto',
+        'bekanntes_konto': 'das bekannte Konto',
+        'rueckfragen': 'Rückfragen zur Abrechnung werden gern beantwortet.',
+    },
+    'privat': {
+        'belege': 'Die Belege können Sie auf Verlangen bei mir einsehen.',
+        'konto': 'mein Konto',
+        'bekanntes_konto': 'mein bekanntes Konto',
+        'rueckfragen': 'Rückfragen zur Abrechnung beantworte ich gern.',
+    },
+    'firma': {
+        'belege': 'Die Belege können Sie auf Verlangen bei uns einsehen.',
+        'konto': 'unser Konto',
+        'bekanntes_konto': 'unser bekanntes Konto',
+        'rueckfragen': 'Rückfragen zur Abrechnung beantworten wir gern.',
+    },
+}
+
+
+def saetze(art: str | None) -> dict:
+    return _SAETZE.get(art, _SAETZE[None])
+
+
+def vorgabe(art: str | None = None) -> str:
+    """Die Vorlage, solange der Vermieter nichts Eigenes hinterlegt hat."""
+    return (
+        '{anrede}\n\n'
+        'anbei erhalten Sie die Nebenkostenabrechnung für die Wohnung '
+        '{wohnung_name} für den Zeitraum {zeitraum}.\n\n'
+        'Die Abrechnung ergibt bei Gesamtkosten von {gesamtsumme} und '
+        'Vorauszahlungen von {vorauszahlungen} einen Saldo in Höhe von '
+        '{saldo_betrag} ({saldo_art}).\n\n'
+        '{aufforderung}\n\n'
+        'Sie können Einwendungen gegen diese Abrechnung innerhalb von zwölf '
+        'Monaten nach ihrem Zugang geltend machen. ' + saetze(art)['belege'] + '\n\n'
+        'Mit freundlichen Grüßen\n'
+        '{vermieter_name}'
+    )
+
+
+VORGABE = vorgabe()
 
 # Was es zu füllen gibt -- die Route nennt dem Vermieter dieselbe Liste.
 PLATZHALTER = {
+    'anrede': ('Anrede des Mieters -- die eigene aus dem Mieterdialog, '
+               'sonst „Guten Tag <Name>,“'),
     'mieter_name': 'Name des Mieters',
     'wohnung_name': 'Name der Wohnung',
     'objekt_name': 'Name des Objekts',
@@ -91,8 +138,9 @@ def _aufforderung(saldo: Decimal) -> str:
     Lücke ist gewollt (siehe Modul-Dokumentation).
     """
     if saldo > 0:
-        return (f'Wir bitten Sie, den ausstehenden Betrag in Höhe von '
-                f'{euro_text(saldo)} auszugleichen.')
+        # NK-248: ohne ich/wir -- der Satz passt für Privatperson und Firma.
+        return (f'Bitte gleichen Sie den ausstehenden Betrag in Höhe von '
+                f'{euro_text(saldo)} aus.')
     return ''
 
 
@@ -101,7 +149,8 @@ def text_fuer(vorlage: str, *, mieter_name: str, wohnung_name: str,
               vorauszahlungen: Decimal, saldo: Decimal,
               einwendungsfrist: str | None = None,
               vermieter_name: str = '',
-              vorauszahlung: dict | None = None) -> str:
+              vorauszahlung: dict | None = None,
+              mieter_anrede: str | None = None) -> str:
     """Füllt die Vorlage aus dem Ergebnis einer Abrechnung.
 
     ``vermieter_name`` unterschreibt den Gruß (NK-210). Ohne Namen bleibt
@@ -114,8 +163,11 @@ def text_fuer(vorlage: str, *, mieter_name: str, wohnung_name: str,
 
     ``vorauszahlung`` ist der Vorschlag aus ``vorauszahlung.vorschlag``
     (NK-226). Ohne Änderung bleibt der Satz gewollt leer.
+
+    ``mieter_anrede`` ist die eigene Anrede des Mieters (NK-264).
     """
     return fuelle(vorlage, {
+        'anrede': anrede(mieter_name, mieter_anrede),
         'mieter_name': mieter_name,
         'wohnung_name': wohnung_name,
         'objekt_name': objekt_name,

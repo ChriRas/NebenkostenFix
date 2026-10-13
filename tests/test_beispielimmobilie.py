@@ -87,9 +87,10 @@ def test_beispiel_bringt_rechnungen_zahlungen_und_eine_fertige_abrechnung(app_ct
     assert bericht['abrechnung'] is True and bericht['rechnungen'] == len(demo.RECHNUNGEN)
     haus = Property.query.filter_by(name=demo.NAME).one()
     assert CostInvoice.query.filter_by(property_id=haus.id).count() == len(demo.RECHNUNGEN)
-    assert Payment.query.count() == 12
     abrechnung = TenantBillingReport.query.one()
     von, bis = demo.vorjahr()
+    assert Payment.query.filter(Payment.tenant_id == abrechnung.tenant_id,
+                                Payment.payment_date.between(von, bis)).count() == 12
     assert (abrechnung.start_date, abrechnung.end_date) == (von, bis)
     assert abrechnung.document_path_detailed
     assert (datenordner.belegordner() / abrechnung.document_path_detailed).is_file()
@@ -127,3 +128,32 @@ def test_beispiel_loeschen_nimmt_alles_mit(app_ctx, auth_client):
 def test_beispiel_loeschen_braucht_anmeldung(app_ctx, anon_client):
     assert anon_client.delete('/api/analytics/beispiel-immobilie').status_code == 401
 
+
+
+def test_vorauszahlungen_reichen_bis_heute(app_ctx):
+    """NK-243: jeder Mieter zahlt monatlich bis zum Monat von „heute“, nie danach."""
+    from datetime import date
+
+    from nebenkostenfix.models import Payment, Tenant
+    heute = date(2026, 5, 20)
+    demo.anlegen(heute=heute)
+    for name in demo.MIETER:
+        mieter = Tenant.query.filter_by(name=name).one()
+        tage = sorted(z.payment_date for z in Payment.query.filter_by(tenant_id=mieter.id))
+        assert tage, name
+        assert tage[-1] == date(2026, 5, 3), name
+        assert tage[0] >= mieter.move_in_date, name
+        monate = [(t.year, t.month) for t in tage]
+        assert len(monate) == len(set(monate)) == (2026 - tage[0].year) * 12 + 5 - tage[0].month + 1, name
+    # Ben zog 200 Tage vor „heute“ ein (14.10.2025): erste Zahlung im November.
+    ben = Tenant.query.filter_by(name=demo.MIETER[1]).one()
+    assert min(z.payment_date for z in Payment.query.filter_by(tenant_id=ben.id)) == date(2025, 11, 3)
+
+
+def test_keine_vorauszahlung_vor_dem_faelligkeitstag(app_ctx):
+    """NK-243: am 2. des Monats ist die Zahlung vom 3. noch Zukunft."""
+    from datetime import date
+
+    from nebenkostenfix.models import Payment
+    demo.anlegen(heute=date(2026, 5, 2))
+    assert max(z.payment_date for z in Payment.query) == date(2026, 4, 3)

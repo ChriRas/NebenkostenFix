@@ -149,6 +149,11 @@ Stammdaten -- Immobilie, Wohnung, Mieter, Anbieter, Kostenart
   POST        /api/tenants/<int:tenant_id>/haushaltsgroessen -> save_haushaltsgroesse
   GET         /api/tenants/<int:tenant_id>/zeitraumvorschlag -> get_zeitraumvorschlag
   DELETE      /api/haushaltsgroessen/<int:id>              -> delete_haushaltsgroesse
+  GET         /api/tenants/<int:tenant_id>/vorauszahlungen -> get_vorauszahlungen
+  POST        /api/tenants/<int:tenant_id>/vorauszahlung_soll -> save_vorauszahlung_soll
+  DELETE      /api/vorauszahlung_soll/<int:id>             -> delete_vorauszahlung_soll
+  GET         /api/fristen                                 -> get_fristen
+  GET         /api/fristen.ics                             -> get_fristen_ics
   GET         /api/providers                               -> get_providers
   POST        /api/providers                               -> create_provider
   DELETE      /api/providers/<int:id>                      -> delete_provider
@@ -162,6 +167,9 @@ Zaehler und Staende
 -------------------
   GET         /api/meters                                  -> get_meters
   POST        /api/meters                                  -> create_meter
+  PUT         /api/meters/<int:id>                         -> update_meter
+  POST        /api/meters/<int:id>/wechsel                 -> zaehlerwechsel
+  GET         /api/eichfrist                               -> eichfrist_vorschlag
   DELETE      /api/meters/<int:id>                         -> delete_meter
   GET         /api/readings                                -> get_readings
   POST        /api/readings                                -> create_reading
@@ -253,6 +261,7 @@ import io
 from decimal import Decimal
 from pathlib import Path
 from nebenkostenfix import zeit
+from nebenkostenfix import eichfrist
 from flask import Flask, jsonify, make_response, request, send_file
 import click
 import json
@@ -275,11 +284,14 @@ from nebenkostenfix.heizung import (
     HeizungsFehler, pruefe_anteil, pruefe_kostenart, pruefe_versorgungsart,
     pruefe_warmwasserweg,
 )
-from nebenkostenfix.models import db, User, Property, Apartment, Tenant, Haushaltsgroesse, CostCategory, CostInvoice, Meter, MeterReading, TenantCostProfile, InvoiceDocument, Provider, TenantBillingReport, BillingReportCategory, BillingReportVersion, AnschreibenVorlage, Vermieterdaten, Heizungsanlage
-from nebenkostenfix.girocode_generator import iban_pruefen, iban_saeubern, vermieter_ausweis
+from nebenkostenfix.models import db, User, Property, Apartment, Tenant, Haushaltsgroesse, CostCategory, CostInvoice, Meter, MeterReading, TenantCostProfile, InvoiceDocument, Provider, TenantBillingReport, BillingReportCategory, BillingReportVersion, AnschreibenVorlage, Vermieterdaten, Heizungsanlage, Payment, VorauszahlungSoll
+from nebenkostenfix.girocode_generator import iban_pruefen, iban_saeubern, vermieter_art, vermieter_ausweis
 from nebenkostenfix.abrechnung_version import schnappschuss, json_sicher, SOFTWARE_VERSION, REGEL_VERSION, aenderungen_seit, gleich_gerechnet
-from nebenkostenfix.anschreiben import VORGABE, PLATZHALTER, text_fuer
+from nebenkostenfix.anschreiben import ARTEN, PLATZHALTER, text_fuer, vorgabe
+from nebenkostenfix.lohnausweis import ARTEN as ARTEN_35A
+from nebenkostenfix.anschreiben import anrede as anschreiben_anrede, saetze as anschreiben_saetze
 from nebenkostenfix import vorauszahlung as vz
+from nebenkostenfix import fristenkalender
 from nebenkostenfix.ablage import Ablage
 from nebenkostenfix.auth import init_auth
 from nebenkostenfix.backup import init_backup
@@ -1102,10 +1114,16 @@ def get_tenants():
             'apartment_name': t.apartment.name if t.apartment else 'Unknown',
             'property_name': t.apartment.property.name if t.apartment and t.apartment.property else 'Unknown',
             'gesperrt_bis': t.gesperrt_bis.isoformat() if t.gesperrt_bis else None,
+            'anrede': t.anrede,
             'ist_beispiel': beispielimmobilie.ist_beispiel(
                 t.apartment.property if t.apartment else None),
         })
     return jsonify(result), 200
+
+def _anrede_aus(eingabe):
+    """Die eigene Anrede des Mieters (NK-264); leer heißt neutraler Gruß."""
+    return eingabe.text('anrede', standard='', maxlaenge=200).strip() or None
+
 
 @app.route('/api/tenants', methods=['POST'])
 def create_tenant():
@@ -1116,7 +1134,8 @@ def create_tenant():
         name=eingabe.text('name', pflicht=True, maxlaenge=200),
         move_in_date=eingabe.datum('move_in_date', pflicht=True),
         move_out_date=eingabe.datum('move_out_date'),
-        last_billed_until=eingabe.datum('last_billed_until')
+        last_billed_until=eingabe.datum('last_billed_until'),
+        anrede=_anrede_aus(eingabe),
     )
     db.session.add(new_tenant)
     db.session.flush() # get id
@@ -1197,6 +1216,8 @@ def update_delete_tenant(id):
         tenant.move_out_date = eingabe.datum('move_out_date')
     if eingabe.vorhanden('last_billed_until'):
         tenant.last_billed_until = eingabe.datum('last_billed_until')
+    if eingabe.vorhanden('anrede'):
+        tenant.anrede = _anrede_aus(eingabe)
 
     vertrag = eingabe.datei('contract_file')
     if vertrag:
@@ -1282,6 +1303,117 @@ def delete_haushaltsgroesse(id):
     db.session.commit()
     return jsonify({'message': 'Haushaltsgröße gelöscht'}), 200
 
+# --- Soll und Ist der Vorauszahlungen (NK-261, R-VZ-02) ---
+# Eine Serienbuchung legt die Zahlungen im Voraus an und zaehlt sie damit
+# sofort als Ist. Der vereinbarte Betrag steht deshalb in einer eigenen
+# Tabelle: nur gegen ihn laesst sich sagen, ob ein Monat offen ist.
+def _soll_setzen(tenant, gueltig_ab, betrag):
+    """Legt einen Stichtag an oder berichtigt ihn; True, wenn er neu ist."""
+    vorhanden = next(
+        (s for s in tenant.vorauszahlung_soll if s.gueltig_ab == gueltig_ab), None)
+    if vorhanden:
+        vorhanden.betrag = betrag
+        return vorhanden, False
+    eintrag = VorauszahlungSoll(tenant_id=tenant.id, gueltig_ab=gueltig_ab, betrag=betrag)
+    db.session.add(eintrag)
+    return eintrag, True
+
+
+@app.route('/api/tenants/<int:tenant_id>/vorauszahlungen', methods=['GET'])
+def get_vorauszahlungen(tenant_id):
+    tenant = Tenant.query.get_or_404(tenant_id)
+    zahlungen = Payment.query.filter_by(
+        tenant_id=tenant.id, type='Nebenkostenvorauszahlung').all()
+    ergebnis = vz.soll_ist(
+        [(s.gueltig_ab, s.betrag) for s in tenant.vorauszahlung_soll],
+        [(p.payment_date, p.amount) for p in zahlungen],
+        tenant.move_in_date, tenant.move_out_date,
+        zeit.als_ortsdatum(zeit.jetzt_utc()))
+    ergebnis['soll'] = [
+        {'id': s.id, 'gueltig_ab': s.gueltig_ab.isoformat(), 'betrag': f'{s.betrag:.2f}'}
+        for s in tenant.vorauszahlung_soll]
+    ergebnis['erinnerung'] = vz.erinnerung(
+        ergebnis, anschreiben_anrede(tenant.name, tenant.anrede),
+        tenant.apartment.name, anschreiben_saetze(vermieter_art())['bekanntes_konto'],
+        vermieter_ausweis()[0])
+    return jsonify(ergebnis), 200
+
+
+@app.route('/api/tenants/<int:tenant_id>/vorauszahlung_soll', methods=['POST'])
+def save_vorauszahlung_soll(tenant_id):
+    """Wie bei der Haushaltsgroesse: derselbe Stichtag berichtigt."""
+    tenant = Tenant.query.get_or_404(tenant_id)
+    eingabe = Eingabe.aus_request()
+    gueltig_ab = eingabe.datum('gueltig_ab', pflicht=True)
+    betrag = eingabe.geldbetrag('betrag', pflicht=True, min_wert=0)
+    if gueltig_ab < tenant.move_in_date:
+        raise EingabeFehler(
+            f'Der Stichtag {gueltig_ab.isoformat()} liegt vor dem Einzug am '
+            f'{tenant.move_in_date.isoformat()}.', 'gueltig_ab')
+    if tenant.move_out_date and gueltig_ab > tenant.move_out_date:
+        raise EingabeFehler(
+            f'Der Stichtag {gueltig_ab.isoformat()} liegt nach dem Auszug am '
+            f'{tenant.move_out_date.isoformat()}.', 'gueltig_ab')
+    eintrag, neu = _soll_setzen(tenant, gueltig_ab, betrag)
+    db.session.commit()
+    if neu:
+        return jsonify({'message': 'Soll angelegt', 'id': eintrag.id}), 201
+    return jsonify({'message': 'Soll aktualisiert', 'id': eintrag.id}), 200
+
+
+@app.route('/api/vorauszahlung_soll/<int:id>', methods=['DELETE'])
+def delete_vorauszahlung_soll(id):
+    eintrag = VorauszahlungSoll.query.get_or_404(id)
+    db.session.delete(eintrag)
+    db.session.commit()
+    return jsonify({'message': 'Soll gelöscht'}), 200
+
+
+# --- Fristenkalender (NK-262, R-FRIST-05) ---
+def _fristen(heute):
+    """Alle Termine ab heute, ueber alle Immobilien; gesperrte Mieter fehlen."""
+    from nebenkostenfix.mehrjahresblick import jahresanfang
+    from nebenkostenfix.zeitraumvorschlag import jahresbeginn
+
+    berichte = TenantBillingReport.query.all()
+    takt, letzte = {}, {}
+    for r in berichte:
+        haus = r.tenant.apartment.property
+        if haus.id not in takt:
+            takt[haus.id] = jahresbeginn(haus)[:2]
+        # Ende des zuletzt abgerechneten Abrechnungsjahres: ein Auszug
+        # mitten im Jahr verschiebt den Stichtag nicht (R-FRIST-05).
+        ende = jahresanfang(r.end_date + timedelta(days=1), *takt[haus.id]) - timedelta(days=1)
+        if haus.id not in letzte or ende > letzte[haus.id][2]:
+            letzte[haus.id] = (haus.id, haus.name, ende)
+    # Gesperrte Mieter sind aus allen Listen ausgeblendet (R-DSGVO-02).
+    berichte = [r for r in berichte if r.tenant.gesperrt_bis is None]
+    abgeloest = {m.ersetzt_id for m in Meter.query.filter(Meter.ersetzt_id.isnot(None))}
+    zaehler = [(m.id, f'{m.category.name} {m.meter_number} ({m.property.name})', m.geeicht_bis)
+               for m in Meter.query.filter(Meter.geeicht_bis.isnot(None))
+               if m.id not in abgeloest]
+    return fristenkalender.termine(
+        [(r.id, r.tenant.name, r.frist_ende, r.zugestellt_am) for r in berichte],
+        list(letzte.values()),
+        [(s.id, s.tenant.name, s.gueltig_ab, s.betrag) for s in VorauszahlungSoll.query.all()
+         if s.tenant.gesperrt_bis is None
+         and not (s.tenant.move_out_date and s.gueltig_ab > s.tenant.move_out_date)],
+        zaehler, heute)
+
+
+@app.route('/api/fristen', methods=['GET'])
+def get_fristen():
+    return jsonify({'termine': _fristen(zeit.als_ortsdatum(zeit.jetzt_utc()))}), 200
+
+
+@app.route('/api/fristen.ics', methods=['GET'])
+def get_fristen_ics():
+    jetzt = zeit.jetzt_utc()
+    text = fristenkalender.ics(_fristen(zeit.als_ortsdatum(jetzt)), jetzt)
+    return send_file(io.BytesIO(text.encode('utf-8')), mimetype='text/calendar; charset=utf-8',
+                     as_attachment=True, download_name='fristen.ics')
+
+
 # --- Providers ---
 @app.route('/api/providers', methods=['GET'])
 def get_providers():
@@ -1330,13 +1462,16 @@ def get_categories():
 @app.route('/api/meters', methods=['GET'])
 def get_meters():
     meters = Meter.query.all()
+    # NK-258: wer wen beim Wechsel abgeloest hat, in beide Richtungen.
+    nachfolger = {m.ersetzt_id: m.id for m in meters if m.ersetzt_id}
+    heute = zeit.als_ortsdatum(zeit.jetzt_utc())
     result = []
     for m in meters:
         result.append({
             'id': m.id,
             'category_id': m.category_id,
             'category_name': m.category.name,
-            # NK-220 (V3): dieselbe Einheit, mit der die Abrechnung rechnet
+            # NK-220: dieselbe Einheit, mit der die Abrechnung rechnet
             'einheit': einheit_fuer(m.category.name, m.category.betrkv_nr),
             'property_id': m.property_id,
             'property_name': m.property.name,
@@ -1349,8 +1484,23 @@ def get_meters():
             'heizungsanlage_id': m.heizungsanlage_id,
             'heizungsanlage_name': (m.heizungsanlage.name
                                     if m.heizungsanlage else None),
+            'ort': m.ort,
+            'geeicht_bis': m.geeicht_bis.isoformat() if m.geeicht_bis else None,
+            'eichhinweis': eichfrist.hinweis(m.geeicht_bis, heute),
+            'ersetzt_id': m.ersetzt_id,
+            'ersetzt_durch': nachfolger.get(m.id),
         })
     return jsonify(result), 200
+
+
+def _anlage_pruefen(heizungsanlage_id, property_id):
+    if heizungsanlage_id is None:
+        return
+    anlage = Heizungsanlage.query.get_or_404(heizungsanlage_id)
+    if anlage.property_id != property_id:
+        raise EingabeFehler(
+            'Der Zähler kann nur eine Anlage derselben Immobilie messen.',
+            'heizungsanlage_id')
 
 @app.route('/api/meters', methods=['POST'])
 def create_meter():
@@ -1366,20 +1516,121 @@ def create_meter():
         # Welche Anlage dieser Zaehler misst (NK-125, D-45): nicht aus der
         # Kostenart geraten, sondern vom Vermieter gewaehlt.
         heizungsanlage_id=eingabe.ganzzahl('heizungsanlage_id'),
+        ort=eingabe.text('ort', maxlaenge=100),
+        geeicht_bis=eingabe.datum('geeicht_bis'),
     )
-    if new_meter.heizungsanlage_id is not None:
-        anlage = Heizungsanlage.query.get_or_404(new_meter.heizungsanlage_id)
-        if anlage.property_id != new_meter.property_id:
-            raise EingabeFehler(
-                'Der Zähler kann nur eine Anlage derselben Immobilie messen.',
-                'heizungsanlage_id')
+    _anlage_pruefen(new_meter.heizungsanlage_id, new_meter.property_id)
     db.session.add(new_meter)
     db.session.commit()
     return jsonify({'id': new_meter.id}), 201
 
+
+@app.route('/api/meters/<int:id>', methods=['PUT'])
+def update_meter(id):
+    """Stammdaten eines Zaehlers berichtigen (NK-258); nur was mitkommt.
+
+    Immobilie, Wohnung und Hauptzaehler bleiben: sie bestimmen, wessen
+    Verbrauch der Zaehler misst. Wer das aendern will, legt einen neuen an.
+    """
+    m = Meter.query.get_or_404(id)
+    eingabe = Eingabe.aus_request()
+    if eingabe.vorhanden('meter_number'):
+        m.meter_number = eingabe.text('meter_number', pflicht=True, maxlaenge=100)
+    if eingabe.vorhanden('ort'):
+        m.ort = eingabe.text('ort', maxlaenge=100)
+    if eingabe.vorhanden('geeicht_bis'):
+        m.geeicht_bis = eingabe.datum('geeicht_bis')
+    if eingabe.vorhanden('has_dual_tariff'):
+        m.has_dual_tariff = eingabe.wahrheit('has_dual_tariff')
+    if eingabe.vorhanden('is_official'):
+        m.is_official = eingabe.wahrheit('is_official')
+    if eingabe.vorhanden('category_id'):
+        kategorie = eingabe.ganzzahl('category_id', pflicht=True)
+        in_kette = m.ersetzt_id or Meter.query.filter_by(ersetzt_id=m.id).first()
+        if kategorie != m.category_id and in_kette:
+            raise EingabeFehler(
+                'Ein Zähler aus einem Zählerwechsel behält seine Kostenart.', 'category_id')
+        CostCategory.query.get_or_404(kategorie)
+        m.category_id = kategorie
+    if eingabe.vorhanden('heizungsanlage_id'):
+        m.heizungsanlage_id = eingabe.ganzzahl('heizungsanlage_id')
+        _anlage_pruefen(m.heizungsanlage_id, m.property_id)
+    db.session.commit()
+    return jsonify({'id': m.id}), 200
+
+
+# Was _ablesung_pruefen am Stand bemaengelt, heisst beim Wechsel Endstand.
+_WECHSELFELD = {'value': 'endstand', 'value_nt': 'endstand_nt', 'reading_date': 'datum'}
+
+
+@app.route('/api/meters/<int:id>/wechsel', methods=['POST'])
+def zaehlerwechsel(id):
+    """Zaehlerwechsel (NK-258): Endstand des alten, Anfangsstand des neuen.
+
+    Der neue Zaehler uebernimmt Kostenart, Immobilie, Wohnung und Tarif des
+    alten und verweist auf ihn; der Rechenkern summiert beide Teile. Beide
+    Staende stehen am selben Tag.
+    """
+    alt = Meter.query.get_or_404(id)
+    if Meter.query.filter_by(ersetzt_id=alt.id).first():
+        raise EingabeFehler('Dieser Zähler wurde schon ausgetauscht.', 'meter_id')
+    eingabe = Eingabe.aus_request()
+    datum = eingabe.datum('datum', pflicht=True)
+    zweitarif = bool(alt.has_dual_tariff)
+    endstand = eingabe.kommazahl('endstand', pflicht=True)
+    endstand_nt = eingabe.kommazahl('endstand_nt', pflicht=True) if zweitarif else None
+    anfangsstand = eingabe.kommazahl('anfangsstand', pflicht=True, min_wert=0)
+    anfangsstand_nt = (eingabe.kommazahl('anfangsstand_nt', pflicht=True, min_wert=0)
+                       if zweitarif else None)
+    nummer = eingabe.text('meter_number', pflicht=True, maxlaenge=100)
+    if any(r.reading_date > datum for r in alt.readings):
+        raise EingabeFehler(
+            'Der alte Zähler hat Stände nach dem Wechseltag. '
+            'Bitte erst diese Stände berichtigen.', 'datum')
+    try:
+        frage = _ablesung_pruefen(alt.id, datum, endstand, endstand_nt)
+    except EingabeFehler as fehler:
+        raise EingabeFehler(fehler.meldung, _WECHSELFELD.get(fehler.feld, fehler.feld)) from None
+    if frage and not eingabe.wahrheit('trotzdem'):
+        return jsonify({'error': frage, 'nachfrage': True}), 409
+
+    neu = Meter(
+        category_id=alt.category_id, property_id=alt.property_id,
+        apartment_id=alt.apartment_id, is_main_meter=alt.is_main_meter,
+        meter_number=nummer, has_dual_tariff=alt.has_dual_tariff,
+        is_official=alt.is_official, heizungsanlage_id=alt.heizungsanlage_id,
+        ort=eingabe.text('ort', maxlaenge=100) if eingabe.vorhanden('ort') else alt.ort,
+        geeicht_bis=eingabe.datum('geeicht_bis'), ersetzt_id=alt.id,
+    )
+    db.session.add(neu)
+    db.session.flush()
+    db.session.add(MeterReading(meter_id=alt.id, reading_date=datum,
+                                value=endstand, value_nt=endstand_nt))
+    db.session.add(MeterReading(meter_id=neu.id, reading_date=datum,
+                                value=anfangsstand, value_nt=anfangsstand_nt))
+    db.session.commit()
+    return jsonify({'id': neu.id}), 201
+
+
+@app.route('/api/eichfrist', methods=['GET'])
+def eichfrist_vorschlag():
+    """Vorschlag fuer „geeicht bis“ aus Eichjahr und Zaehlerart (R-EICH-01)."""
+    eingabe = Eingabe.aus_query()
+    jahr = eingabe.ganzzahl('eichjahr', pflicht=True, min_wert=1900)
+    if jahr > 2200:
+        raise EingabeFehler('Das Eichjahr liegt zu weit in der Zukunft.', 'eichjahr')
+    art = eingabe.text('art', pflicht=True)
+    if art not in eichfrist.EICHFRISTEN:
+        raise EingabeFehler(
+            f'Unbekannte Zählerart. Erlaubt sind: {", ".join(eichfrist.EICHFRISTEN)}.', 'art')
+    return jsonify({'geeicht_bis': eichfrist.geeicht_bis(jahr, art).isoformat()}), 200
+
+
 @app.route('/api/meters/<int:id>', methods=['DELETE'])
 def delete_meter(id):
     m = Meter.query.get_or_404(id)
+    # Ein Nachfolger aus einem Zaehlerwechsel steht danach wieder fuer sich.
+    Meter.query.filter_by(ersetzt_id=m.id).update({'ersetzt_id': None})
     db.session.delete(m)
     db.session.commit()
     return jsonify({'message': 'deleted'})
@@ -1435,7 +1686,7 @@ def _stand_text(wert: float) -> str:
 
 
 def _ablesung_pruefen(meter_id: int, datum: date, wert: float, wert_nt, eigene_id=None):
-    """NK-216 (F1): was nie stimmen kann, ist ein Fehler; was selten stimmt, eine Frage.
+    """NK-216: was nie stimmen kann, ist ein Fehler; was selten stimmt, eine Frage.
 
     Negative Staende und Ablesungen in der Zukunft gibt es nicht (400). Ein
     Stand unter dem vorigen oder ueber dem folgenden und ein zweiter Stand
@@ -1947,11 +2198,32 @@ def _rechnungsfelder(eingabe):
             'Der Grundpreis ist ein Teil des Rechnungsbetrags und kann nicht '
             'größer sein als er.', 'grundpreis')
 
+    # NK-268 (R-35A-01): der Lohnanteil nach § 35a EStG steht an der
+    # Rechnung, mit seiner Art; beides oder keines (derselbe CHECK steht in
+    # der Datenbank).
+    art_35a = eingabe.text('art_35a') or None
+    lohnanteil = eingabe.geldbetrag('lohnanteil', min_wert=0)
+    if art_35a is not None and art_35a not in ARTEN_35A:
+        raise EingabeFehler(
+            'Unbekannte Art nach § 35a EStG. Wählen Sie haushaltsnahe '
+            'Dienstleistungen oder Handwerkerleistungen.', 'art_35a')
+    if (art_35a is None) != (lohnanteil is None):
+        raise EingabeFehler(
+            'Der Lohnanteil nach § 35a EStG braucht beides: die Art der '
+            'Leistung und den Betrag, oder keines von beiden.',
+            'lohnanteil' if art_35a else 'art_35a')
+    if lohnanteil is not None and lohnanteil > amount:
+        raise EingabeFehler(
+            'Der Lohnanteil ist ein Teil des Rechnungsbetrags und kann nicht '
+            'größer sein als er.', 'lohnanteil')
+
     return {
         'category_id': eingabe.ganzzahl('category_id', pflicht=True),
         'property_id': eingabe.ganzzahl('property_id', pflicht=True),
         'amount': amount,
         'grundpreis': grundpreis,
+        'art_35a': art_35a,
+        'lohnanteil': lohnanteil,
         'invoice_number': eingabe.text('invoice_number', standard='', maxlaenge=100),
         'provider_id': eingabe.ganzzahl('provider_id'),
         'start_date': eingabe.datum('start_date', pflicht=True),
@@ -2003,6 +2275,8 @@ def get_invoices():
             'preis_ht': i.preis_ht,
             'preis_nt': i.preis_nt,
             'grundpreis': i.grundpreis,
+            'art_35a': i.art_35a,
+            'lohnanteil': i.lohnanteil,
             # Die Heizkosten-Felder (NK-125, D-44): Anlage und Posten des
             # § 7 Abs. 2 stehen an der Rechnung; die CO2-Angaben kommen
             # vom Lieferantenbeleg (D-54, uebernehmen statt rechnen).
@@ -2057,6 +2331,8 @@ def create_invoice():
         preis_ht=felder['preis_ht'],
         preis_nt=felder['preis_nt'],
         grundpreis=felder['grundpreis'],
+        art_35a=felder['art_35a'],
+        lohnanteil=felder['lohnanteil'],
         heizungsanlage_id=felder['heizungsanlage_id'],
         heizkostenart=felder['heizkostenart'],
         co2_kosten=felder['co2_kosten'],
@@ -2110,6 +2386,8 @@ def update_invoice(id):
     invoice.preis_ht = felder['preis_ht']
     invoice.preis_nt = felder['preis_nt']
     invoice.grundpreis = felder['grundpreis']
+    invoice.art_35a = felder['art_35a']
+    invoice.lohnanteil = felder['lohnanteil']
     invoice.heizungsanlage_id = felder['heizungsanlage_id']
     invoice.heizkostenart = felder['heizkostenart']
     invoice.co2_kosten = felder['co2_kosten']
@@ -2264,7 +2542,6 @@ def _zahlungen_nach_auszug_warnung(tenant, e_date):
     Die Schlussabrechnung zaehlt nur Zahlungen bis zum Auszug; was danach
     gebucht ist, zaehlt in keiner Abrechnung und fiel niemandem auf.
     """
-    from nebenkostenfix.models import Payment
     from nebenkostenfix.rechenkern import euro_text
 
     auszug = tenant.move_out_date
@@ -2460,7 +2737,7 @@ def generate_bill():
     if spaete:
         bill_data['warnings'].append(spaete)
     bill_data['vorauszahlung'] = _vorauszahlung_vorschlag(
-        db.session.get(Tenant, tenant_id), bill_data, category_ids, vz._heute())
+        db.session.get(Tenant, tenant_id), bill_data, category_ids)
 
     return jsonify(bill_data), 200
 
@@ -2526,13 +2803,15 @@ def finalize_bill():
         return jsonify({'error': str(e)}), 400
     
     # Generate PDF (NK-057: ein Generator, der Umfang steht auf dem Schalter)
+    mieter = Tenant.query.get(tenant_id)
     pdf_gen = PDFGenerator(
         property_name=bill_data['property'],
         apartment_name=bill_data['apartment'],
         tenant_name=bill_data['tenant_name'],
         start_date=bill_data['start_date'],
         end_date=bill_data['end_date'],
-        detailliert=is_detailed
+        detailliert=is_detailed,
+        tenant_anrede=mieter.anrede,
     )
     
     # Kein eigenes try mehr (NK-030): der zentrale Handler rollt zurueck,
@@ -2541,9 +2820,8 @@ def finalize_bill():
     # Vermieter bekam "PDF Error: list index out of range" zu lesen.
     # NK-064: das Anschreiben des Objekts (oder der Vorgabetext) spricht
     # auf dem Deckblatt, mit den Zahlen aus diesem Ergebnis.
-    mieter = Tenant.query.get(tenant_id)
     anschreiben_text = _anschreiben_fuer(mieter, bill_data, vorauszahlung=(
-        _vorauszahlung_vorschlag(mieter, bill_data, category_ids, vz._heute())))
+        _vorauszahlung_vorschlag(mieter, bill_data, category_ids)))
     pdf_bytes = pdf_gen.generate(
         bill_data['line_items'],
         bill_data['total_amount'],
@@ -2554,6 +2832,7 @@ def finalize_bill():
         landlord_share=bill_data.get('landlord_share'),
         anschreiben=anschreiben_text,
         vorbehalt=bill_data.get('vorbehalt'),
+        ausweis_35a=bill_data.get('ausweis_35a'),
     )
         
     # Save to NAS with type-specific filename
@@ -2662,6 +2941,7 @@ def _vermieter_stand():
         'name_quelle': quelle(name_tabelle, name_umgebung),
         'iban_quelle': quelle(iban_tabelle, iban_umgebung),
         'girocode_bereit': bool(name and iban),
+        'art': zeile.art if zeile else None,
         'logo': vermieter_logo.pfad() is not None,
     }
 
@@ -2814,6 +3094,12 @@ def setze_vermieterdaten():
 
     zeile.name = name or None
     zeile.iban = iban_pruefen(iban_roh) if iban_roh.strip() else None
+    # NK-264: nur wenn geschickt -- ältere Oberflächen lassen die Art stehen.
+    if eingabe.vorhanden('art'):
+        art = eingabe.text('art', standard='', maxlaenge=10).strip()
+        if art and art not in ARTEN:
+            raise EingabeFehler('Die Art des Vermieters ist „privat“ oder „firma“.', 'art')
+        zeile.art = art or None
     zeile.aktualisiert_am = date.today()
     db.session.commit()
     return jsonify(_vermieter_stand())
@@ -2858,28 +3144,16 @@ def export_data():
     """Alle Daten als JSON. Per POST mit ``passphrase`` verschluesselt
     (NK-130, D-86): eine Datei .nkexp, lesbar mit
     ``flask backup entschluesseln`` oder dem Modul verschluesselung."""
-    def to_dict(model_obj):
-        d = {}
-        for c in model_obj.__table__.columns:
-            val = getattr(model_obj, c.name)
-            if hasattr(val, 'isoformat'):
-                val = val.isoformat()
-            d[c.name] = val
-        return d
-        
+    def to_dict(zeile):
+        return {name: (wert.isoformat() if hasattr(wert, 'isoformat') else wert)
+                for name, wert in zeile.items()}
+
+    # NK-269: jede Tabelle, damit eine neue nicht wieder fehlt (Zahlungen,
+    # Soll und Versionen fehlten); die Konten bleiben draussen (Passwort-Hash).
     data = {
-        'providers': [to_dict(x) for x in Provider.query.all()],
-        'properties': [to_dict(x) for x in Property.query.all()],
-        'apartments': [to_dict(x) for x in Apartment.query.all()],
-        'tenants': [to_dict(x) for x in Tenant.query.all()],
-        'cost_categories': [to_dict(x) for x in CostCategory.query.all()],
-        'cost_invoices': [to_dict(x) for x in CostInvoice.query.all()],
-        'invoice_documents': [to_dict(x) for x in InvoiceDocument.query.all()],
-        'meters': [to_dict(x) for x in Meter.query.all()],
-        'meter_readings': [to_dict(x) for x in MeterReading.query.all()],
-        'tenant_cost_profiles': [to_dict(x) for x in TenantCostProfile.query.all()],
-        'haushaltsgroessen': [to_dict(x) for x in Haushaltsgroesse.query.all()],
-        'tenant_billing_reports': [to_dict(x) for x in TenantBillingReport.query.all()]
+        tabelle.name: [to_dict(z) for z in db.session.execute(
+            tabelle.select().order_by(*tabelle.primary_key.columns)).mappings()]
+        for tabelle in db.metadata.sorted_tables if tabelle.name != 'users'
     }
     if request.method == 'GET':
         return jsonify(data)
@@ -2915,6 +3189,8 @@ def get_all_billing_reports():
             'id': r.id,
             'tenant_id': r.tenant_id,
             'tenant_name': r.tenant.name,
+            # NK-267: der Jahreswechsel sucht die Abrechnungen einer Immobilie.
+            'property_id': r.tenant.apartment.property_id,
             'property_name': r.tenant.apartment.property.name,
             'apartment_name': r.tenant.apartment.name,
             'start_date': r.start_date.isoformat(),
@@ -3015,13 +3291,12 @@ def zustellung_melden(id):
     }), 200
 
 
-def _vorauszahlung_vorschlag(mieter, bill_data, category_ids, stichtag):
+def _vorauszahlung_vorschlag(mieter, bill_data, category_ids, stichtag=None):
     """Der Vorschlag zur Anpassung der Vorauszahlung (R-VZ-01, NK-226).
 
     Teilauswahl heißt: im Zeitraum gibt es Rechnungen einer Kostenart, die
     die Abrechnung nicht umfasst und die der Mieter nicht ausgenommen hat.
     """
-    from nebenkostenfix.models import Payment
     beginn = datetime.fromisoformat(str(bill_data['start_date'])).date()
     ende = datetime.fromisoformat(str(bill_data['end_date'])).date()
     teilauswahl = False
@@ -3050,7 +3325,7 @@ def _anschreiben_fuer(mieter, bill_data, report=None, vorauszahlung=None):
     """
     vorlage_zeile = AnschreibenVorlage.query.filter_by(
         property_id=mieter.apartment.property_id).first()
-    vorlage = vorlage_zeile.text if vorlage_zeile else VORGABE
+    vorlage = vorlage_zeile.text if vorlage_zeile else vorgabe(vermieter_art())
 
     anfang = datetime.fromisoformat(bill_data['start_date']).strftime('%d.%m.%Y')
     ende = datetime.fromisoformat(bill_data['end_date']).strftime('%d.%m.%Y')
@@ -3075,6 +3350,7 @@ def _anschreiben_fuer(mieter, bill_data, report=None, vorauszahlung=None):
         einwendungsfrist=frist_text,
         vermieter_name=vermieter_ausweis()[0],
         vorauszahlung=vorauszahlung,
+        mieter_anrede=mieter.anrede,
     )
 
 
@@ -3185,7 +3461,7 @@ def get_anschreiben_vorlage(property_id):
         return jsonify({'error': 'Objekt nicht gefunden.'}), 404
     vorlage_zeile = AnschreibenVorlage.query.filter_by(property_id=property_id).first()
     return jsonify({
-        'text': vorlage_zeile.text if vorlage_zeile else VORGABE,
+        'text': vorlage_zeile.text if vorlage_zeile else vorgabe(vermieter_art()),
         'ist_vorgabe': vorlage_zeile is None,
         'platzhalter': PLATZHALTER,
     })
@@ -3228,12 +3504,18 @@ def loesche_anschreiben_vorlage(property_id):
     if vorlage_zeile is not None:
         db.session.delete(vorlage_zeile)
         db.session.commit()
-    return jsonify({'text': VORGABE, 'ist_vorgabe': True, 'platzhalter': PLATZHALTER})
+    return jsonify({'text': vorgabe(vermieter_art()), 'ist_vorgabe': True,
+                    'platzhalter': PLATZHALTER})
 
 
 @app.route('/api/billing/reports/<int:id>/belege', methods=['GET'])
 def get_billing_report_belege(id):
-    """Alle Belege der Abrechnung als ZIP zum Mitgeben (§ 556 Abs. 4 BGB).
+    """Das Belegeinsicht-Paket der Abrechnung als ZIP (§ 556 Abs. 4 BGB).
+
+    NK-266 (R-DSGVO-03): die Abrechnung, der Rechenweg, die Belege der
+    Abrechnung und die Ablesefotos der Zähler seiner Wohnung -- nichts
+    von anderen Mietern. Die Namen im Archiv sind neutral (NK-131): sie
+    nennen Kostenart, Zähler und Datum, keine Person.
 
     Die Rechnungen der Abrechnung sind die, auf die die Zeilen des
     Ergebnisses verweisen -- gelesen aus dem gespeicherten Ergebnis,
@@ -3255,7 +3537,7 @@ def get_billing_report_belege(id):
 
     eintraege = []  # (Name im Archiv, Pfad auf der Platte)
     fehlen = []
-    for rid in rechnungs_ids:
+    for nummer, rid in enumerate(rechnungs_ids, start=1):
         rechnung = db.session.get(CostInvoice, rid)
         name = (rechnung.invoice_number if rechnung is not None
                 and rechnung.invoice_number else f'Rechnung Nr. {rid}')
@@ -3274,15 +3556,24 @@ def get_billing_report_belege(id):
         if datei is None:
             fehlen.append(f'{name}: die Datei liegt nicht (mehr) am angegebenen Ort.')
             continue
-        eintrag = os.path.basename(pfad)
-        eintraege.append((eintrag, datei))
+        eintraege.append((f'Belege/{nummer:02d}_{_dateiname_teil(rechnung.category.name)}'
+                          f'{os.path.splitext(pfad)[1].lower()}', datei))
 
     if not eintraege and not fehlen:
         return jsonify({
             'error': 'Für diese Abrechnung gibt es keine Belege.'}), 404
 
+    pdf = _beleg_datei(report.document_path) if report.document_path else None
+    if pdf:
+        eintraege.insert(0, ('Abrechnung.pdf', pdf))
+    else:
+        fehlen.insert(0, 'Abrechnung: das PDF liegt nicht vor.')
+    eintraege.extend(_ablesefotos(report))
+
+    from nebenkostenfix.csv_export import positionen_csv
     archiv = BytesIO()
     with zipfile.ZipFile(archiv, 'w', zipfile.ZIP_DEFLATED) as paket:
+        paket.writestr('Rechenweg.csv', '\ufeff' + positionen_csv(ergebnis))
         vergeben = set()
         for name, datei in eintraege:
             ziel, n = name, 2
@@ -3310,6 +3601,36 @@ def get_billing_report_belege(id):
                      download_name=download_name)
 
 
+def _dateiname_teil(text) -> str:
+    """Ein Stück Dateiname ohne Pfad- und Sonderzeichen."""
+    return ''.join(z if z.isalnum() or z in '-_' else '_' for z in str(text)).strip('_') or 'Datei'
+
+
+def _ablesefotos(report) -> list:
+    """NK-266: die Fotos der Stände, auf denen die Abrechnung ruht.
+
+    Nur Zähler der Wohnung des Mieters, keine Hauptzähler und keine fremden
+    (R-DSGVO-03). Je Zähler die Stände im Zeitraum und je der letzte davor
+    und der erste danach -- zwischen ihnen wird gerechnet.
+    """
+    mieter = report.tenant
+    if mieter is None or mieter.apartment_id is None:
+        return []
+    fotos = []
+    for zaehler in Meter.query.filter_by(apartment_id=mieter.apartment_id, is_main_meter=False).order_by(Meter.id):
+        staende = sorted(zaehler.readings, key=lambda r: r.reading_date)
+        davor = [r for r in staende if r.reading_date < report.start_date][-1:]
+        danach = [r for r in staende if r.reading_date > report.end_date][:1]
+        drin = [r for r in staende if report.start_date <= r.reading_date <= report.end_date]
+        for stand in davor + drin + danach:
+            datei = _beleg_datei(stand.document_path) if stand.document_path else None
+            if datei:
+                fotos.append((f'Ablesefotos/Zaehler_{_dateiname_teil(zaehler.meter_number)}_'
+                              f'{stand.reading_date.isoformat()}'
+                              f'{os.path.splitext(stand.document_path)[1].lower()}', datei))
+    return fotos
+
+
 @app.route('/api/billing/reports/<int:id>/positionen.csv', methods=['GET'])
 def get_billing_report_csv(id):
     """Die Positionen der Abrechnung als CSV fuer die Tabellenkalkulation
@@ -3329,7 +3650,7 @@ def get_billing_report_csv(id):
 
 
 def _regelstand_veraltet(report) -> bool:
-    """NK-217 (F2): die gueltige Version stammt von einem aelteren Regelstand.
+    """NK-217: die gueltige Version stammt von einem aelteren Regelstand.
 
     Die Abrechnung bleibt, wie sie zugegangen ist (R-DOC-02); der Vermieter
     soll nur sehen, dass eine Korrektur heute anders rechnen kann. Altbestand
@@ -3392,7 +3713,7 @@ def _je_kostenart(ergebnis) -> dict:
 
 @app.route('/api/billing/reports/<int:id>/korrektur/vorschau', methods=['GET'])
 def korrektur_vorschau(id):
-    """NK-217 (F2): was eine Korrektur aendern wuerde, ohne sie anzulegen.
+    """NK-217: was eine Korrektur aendern wuerde, ohne sie anzulegen.
 
     Rechnet wie die Korrektur, speichert nichts und stellt je Kostenart und
     fuer Summe, Vorauszahlungen und Saldo den alten Wert (Schnappschuss der
@@ -3514,7 +3835,8 @@ def korrigiere_billing_report(id):
             tenant_name=bill_data['tenant_name'],
             start_date=bill_data['start_date'],
             end_date=bill_data['end_date'],
-            detailliert=detailliert
+            detailliert=detailliert,
+            tenant_anrede=tenant.anrede,
         )
         suffix = ("_Detailliert" if detailliert else "_Einfach") + zusatz
         dateiname = (f"Nebenkostenabrechnung_{tenant.name.replace(' ', '_')}"
@@ -3527,6 +3849,7 @@ def korrigiere_billing_report(id):
             landlord_share=bill_data.get('landlord_share'),
             anschreiben=anschreiben_text,
             vorbehalt=bill_data.get('vorbehalt'),
+            ausweis_35a=bill_data.get('ausweis_35a'),
         )
         pdf_path, _ = nas_handler.save_billing_report(
             DummyFile(dateiname, pdf_bytes), prop.name,
@@ -3555,8 +3878,6 @@ def get_interpolation_audit():
 
 @app.route('/api/payments', methods=['GET'])
 def get_payments():
-    # Import here to avoid circular imports if any, or just use the model
-    from nebenkostenfix.models import Payment, Tenant
     payments = (db.session.query(Payment, Tenant)
                 .join(Tenant, Payment.tenant_id == Tenant.id)
                 .filter(Tenant.gesperrt_bis.is_(None)).all())
@@ -3578,7 +3899,6 @@ def get_payments():
 
 @app.route('/api/payments', methods=['POST'])
 def add_payment():
-    from nebenkostenfix.models import Payment
     from datetime import date
     import calendar
     
@@ -3625,6 +3945,12 @@ def add_payment():
             created_count += 1
             if created_count > 120:
                 break
+        # NK-261: die Serie ist der vereinbarte Betrag; er bleibt als Soll
+        # stehen. Vor dem Einzug gibt es kein Soll (wie in der Route dazu).
+        tenant = db.session.get(Tenant, tenant_id)
+        if (type_ == 'Nebenkostenvorauszahlung' and tenant is not None
+                and start_date >= tenant.move_in_date):
+            _soll_setzen(tenant, start_date, amount)
         db.session.commit()
         return jsonify({'message': f'{created_count} Zahlungen erfolgreich erfasst'}), 201
     else:
@@ -3641,7 +3967,6 @@ def add_payment():
 
 @app.route('/api/payments/<int:id>', methods=['DELETE'])
 def delete_payment(id):
-    from nebenkostenfix.models import Payment
     payment = Payment.query.get_or_404(id)
     db.session.delete(payment)
     db.session.commit()
@@ -3650,7 +3975,6 @@ def delete_payment(id):
 
 @app.route('/api/payments/bulk', methods=['DELETE'])
 def bulk_delete_payments():
-    from nebenkostenfix.models import Payment
     eingabe = Eingabe.aus_request()
     ids = eingabe.ganzzahlliste('ids', pflicht=True)
     Payment.query.filter(Payment.id.in_(ids)).delete(synchronize_session=False)
@@ -3689,10 +4013,9 @@ def _map_to_bucket(cat_name):
 
 @app.route('/api/analytics/building/<int:property_id>', methods=['GET'])
 def analytics_building(property_id):
-    from nebenkostenfix.models import CostInvoice, Payment, CostCategory, Meter, Tenant, Apartment, db
     import datetime
     from nebenkostenfix.billing_engine import BillingEngine
-    from nebenkostenfix.zeitraumvorschlag import abgerechnet_bis
+    from nebenkostenfix.zeitraumvorschlag import naechster_zeitraum
     
     def _zufluss_datum(inv):
         """Tag, an dem die Rechnung im Cashflow zählt (NK-120).
@@ -3723,8 +4046,11 @@ def analytics_building(property_id):
     # --- KPIs ---
     payments = db.session.query(Payment).join(Tenant).join(Apartment).filter(Apartment.property_id == property_id).all()
     today = datetime.date.today()
-    cashflow_in_current = sum(p.amount for p in payments if p.payment_date.year == current_year and p.type != 'Kaution')
-    cashflow_out_current = sum(inv.amount for inv in invoices if _zufluss_datum(inv).year == current_year)
+    # NK-241: Kontobewegung bis heute, wie in_actual/out_actual der Jahreszeile.
+    cashflow_in_current = sum(p.amount for p in payments if p.payment_date.year == current_year
+                              and p.payment_date <= today and p.type != 'Kaution')
+    cashflow_out_current = sum(inv.amount for inv in invoices
+                               if _zufluss_datum(inv).year == current_year and _zufluss_datum(inv) <= today)
     cashflow_ytd = cashflow_in_current - cashflow_out_current
     
     # Betriebskosten: exact date range from invoices
@@ -3754,7 +4080,6 @@ def analytics_building(property_id):
     general_power_prev = 0
     power_period = ''
     
-    from nebenkostenfix.models import MeterReading
     
     general_power_is_interpolated = False
     
@@ -3882,15 +4207,7 @@ def analytics_building(property_id):
         db.or_(Tenant.move_out_date == None, Tenant.move_out_date >= today)
     ).all()
     
-    open_tasks = 0
-    one_year_ago = today - datetime.timedelta(days=365)
-    for t in active_tenants:
-        # F-127: auch wer in der App abgerechnet wurde, ist erledigt.
-        bis = abgerechnet_bis(t)
-        if not bis or bis < one_year_ago:
-            open_tasks += 1
-
-    # NK-211 (B4): wer ausgezogen ist, braucht eine Endabrechnung bis zum
+    # NK-211: wer ausgezogen ist, braucht eine Endabrechnung bis zum
     # Auszug. Zwei Jahre nach dem Auszug ist auch die Frist des Zeitraums
     # vorbei, in dem er liegt (§ 556 Abs. 3 BGB: zwölf Monate nach dessen
     # Ende) -- aelterer Bestand zaehlt nicht mehr als Aufgabe.
@@ -3899,9 +4216,14 @@ def analytics_building(property_id):
         Tenant.move_out_date < today,
         Tenant.move_out_date >= today - datetime.timedelta(days=730),
     ).order_by(Tenant.id).all()
-    for t in ausgezogene:
-        bis = abgerechnet_bis(t)
-        if not bis or bis < t.move_out_date:
+    # NK-240: offen ist ein Zeitraum, der vorbei ist -- dieselbe Regel wie
+    # der Zeitraumvorschlag, nicht „abgerechnet in den letzten 365 Tagen“.
+    open_tasks = 0
+    for t in active_tenants + ausgezogene:
+        if t.gesperrt_bis is not None:
+            continue  # NK-269: geloescht bis auf den Anker, nicht abzurechnen (R-DSGVO-02)
+        zeitraum = naechster_zeitraum(t)
+        if zeitraum and zeitraum['ziel'] <= today:
             open_tasks += 1
 
     kpis = {
@@ -4103,7 +4425,6 @@ def analytics_building(property_id):
 
 @app.route('/api/analytics/apartment/<int:apartment_id>', methods=['GET'])
 def analytics_apartment(apartment_id):
-    from nebenkostenfix.models import Meter, TenantBillingReport, db
     
     sub_meters = Meter.query.filter_by(apartment_id=apartment_id, is_main_meter=False).all()
     years = set(str(r.reading_date.year) for m in sub_meters for r in m.readings)
@@ -4128,7 +4449,6 @@ def analytics_apartment(apartment_id):
                     'value': round(diff, 2),
                     'unit': _get_unit(cat_name)
                 })
-    from nebenkostenfix.models import Tenant
     tenants = Tenant.query.filter_by(apartment_id=apartment_id).all()
     tenant_ids = [t.id for t in tenants]
     
@@ -4148,15 +4468,43 @@ def analytics_apartment(apartment_id):
             group = _map_category(item['category'])
             cost_distribution[group] += item['tenant_cost']
             
+    wohnung = db.session.get(Apartment, apartment_id)
     return jsonify({
         'own_consumption': own_consumption,
-        'cost_distribution': cost_distribution
+        'cost_distribution': cost_distribution,
+        'mehrjahresblick': _mehrjahresblick(wohnung) if wohnung else [],
     })
+
+
+def _mehrjahresblick(wohnung):
+    """NK-263: Euro je m² je Kostenart und Vorauszahlungen über die Jahre.
+
+    Aus dem Ergebnis, auf dem jede Abrechnung steht (``_bericht_ergebnis``),
+    mit der Fläche ihres Schnappschusses -- eine spätere Änderung der
+    Wohnfläche schreibt die alten Jahre nicht um.
+    """
+    from nebenkostenfix import mehrjahresblick
+    from nebenkostenfix.zeitraumvorschlag import jahresbeginn
+
+    berichte = (TenantBillingReport.query.join(Tenant)
+                .filter(Tenant.apartment_id == wohnung.id).all())
+    abrechnungen = []
+    for report in berichte:
+        try:
+            ergebnis, version = _bericht_ergebnis(report)
+        except BillingDataError:
+            continue  # Altbestand, der sich heute nicht mehr rechnen lässt
+        qm = ((version.eingangsdaten or {}).get('wohnung', {}).get('qm')
+              if version is not None else wohnung.sqm)
+        kosten = [(z['category'], z['tenant_cost']) for z in ergebnis.get('line_items', [])]
+        abrechnungen.append((report.start_date, report.end_date, qm, kosten,
+                             ergebnis.get('prepaid_amount')))
+    monat, tag, _ = jahresbeginn(wohnung.property)
+    return mehrjahresblick.verlauf(abrechnungen, monat, tag)
 
 @app.route('/api/analytics/data-quality/<int:property_id>', methods=['GET'])
 def analytics_data_quality(property_id):
     """Data quality dashboard: meter freshness + missing sub-meter warnings."""
-    from nebenkostenfix.models import Meter, MeterReading, Tenant, TenantCostProfile, CostCategory, Apartment
     from datetime import date as date_type
 
     today = date_type.today()

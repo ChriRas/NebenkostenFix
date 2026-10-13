@@ -132,6 +132,8 @@ def _rechnung(invoice: CostInvoice) -> Rechnung:
         preis_ht=invoice.preis_ht,
         preis_nt=invoice.preis_nt,
         grundpreis=invoice.grundpreis,
+        art_35a=invoice.art_35a,
+        lohnanteil=invoice.lohnanteil,
     )
 
 
@@ -192,6 +194,7 @@ def _zaehler(meter: Meter, readings, auszugstage=frozenset()) -> Zaehler:
         wohnung_id=meter.apartment_id,
         staende=_staende(readings, auszugstage),
         heizungsanlage_id=meter.heizungsanlage_id,
+        ersetzt_id=meter.ersetzt_id,
     )
 
 

@@ -8,6 +8,10 @@ Rechenweg.
 
     GET /api/jahresabrechnung?property_id=<id>&jahr=<JJJJ>
 
+Das Jahr ist das Abrechnungsjahr des Hauses (D-114), das in ``jahr``
+beginnt, beim 01.01. also das Kalenderjahr. Summen sind zeitanteilig: eine
+Rechnung über die Jahresgrenze zählt mit den Tagen im Jahr (NK-242).
+
 - **Kostenarten** (Schritt 2): jede übliche Kostenart und jede, zu der es im
   Jahr oder im Vorjahr Rechnungen gibt, mit Summe, Anzahl und Vorjahres-
   summe. ``fehlt`` heißt: im Vorjahr gab es eine, in diesem Jahr keine.
@@ -19,6 +23,9 @@ Rechenweg.
 - **Mieter** (Schritte 4 und 5): wer im Jahr dort wohnte, mit dem
   Zeitraum, der abzurechnen ist, und der Abrechnung, falls es sie schon gibt.
 - **Frist**: Ende der Abrechnungsfrist nach § 556 Abs. 3 BGB.
+- **Prüfstand** (Schritt 5, NK-265): die Warnungen vor dem Festsetzen, je
+  Befund ein Satz, was auffällt, einer, was zu tun ist, und das Ziel, an dem
+  es sich beheben lässt. Er blockiert nichts.
 """
 
 from __future__ import annotations
@@ -39,6 +46,9 @@ UEBLICH = (
 STICHTAG_TOLERANZ = timedelta(days=31)
 WECHSEL_TOLERANZ = timedelta(days=7)
 SPRUNG_PROZENT = 20
+# Verbrauch schwankt stärker als Kosten (Wetter, Haushaltsgröße): erst die
+# Hälfte mehr oder weniger als im Vorjahr ist einen Blick wert.
+ZAEHLER_SPRUNG_PROZENT = 50
 
 
 class StandFehler(Exception):
@@ -49,10 +59,21 @@ def _ueberlappt(beginn: date, ende: date, von: date, bis: date) -> bool:
     return beginn <= bis and ende >= von
 
 
+def _anteil(rechnung, von: date, bis: date) -> Decimal:
+    """Der Teil der Rechnung in ``von``–``bis``, nach Tagen wie im Rechenkern."""
+    from nebenkostenfix.geld import dec, runde
+    from nebenkostenfix.rechenkern import ueberschneidungstage
+
+    beginn, ende = rechnung.start_date, rechnung.end_date
+    return runde(dec(rechnung.amount) * dec(ueberschneidungstage(beginn, ende, von, bis))
+                 / dec(ueberschneidungstage(beginn, ende, beginn, ende)))
+
+
 def stand(property_id: int, jahr: int, heute: date | None = None) -> dict:
     from nebenkostenfix.frist import frist_status
     from nebenkostenfix.models import (CostCategory, CostInvoice, Meter, Property, Tenant,
                         TenantBillingReport)
+    from nebenkostenfix.zeitraumvorschlag import jahresbeginn
 
     heute = heute or date.today()
     if not 2000 <= jahr <= heute.year:
@@ -60,8 +81,10 @@ def stand(property_id: int, jahr: int, heute: date | None = None) -> dict:
     haus = Property.query.get(property_id)
     if haus is None:
         raise StandFehler('Diese Immobilie gibt es nicht.')
-    von, bis = date(jahr, 1, 1), date(jahr, 12, 31)
-    vorjahr_von, vorjahr_bis = date(jahr - 1, 1, 1), date(jahr - 1, 12, 31)
+    # NK-242: das Abrechnungsjahr des Hauses (D-114), das im Jahr ``jahr`` beginnt.
+    monat, tag, _ = jahresbeginn(haus)
+    von, bis = date(jahr, monat, tag), date(jahr + 1, monat, tag) - timedelta(days=1)
+    vorjahr_von, vorjahr_bis = date(jahr - 1, monat, tag), von - timedelta(days=1)
 
     # --- Schritt 2: Kostenarten --------------------------------------------------
     rechnungen = CostInvoice.query.filter_by(property_id=haus.id).all()
@@ -73,8 +96,8 @@ def stand(property_id: int, jahr: int, heute: date | None = None) -> dict:
                   and _ueberlappt(r.start_date, r.end_date, vorjahr_von, vorjahr_bis)]
         if not (diese or vorige or kat.name in UEBLICH):
             continue
-        summe = sum((r.amount for r in diese), start=0)
-        summe_vorjahr = sum((r.amount for r in vorige), start=0)
+        summe = sum((_anteil(r, von, bis) for r in diese), start=Decimal(0))
+        summe_vorjahr = sum((_anteil(r, vorjahr_von, vorjahr_bis) for r in vorige), start=Decimal(0))
         if diese:
             zustand = 'erfasst'
         elif vorige:
@@ -119,17 +142,30 @@ def stand(property_id: int, jahr: int, heute: date | None = None) -> dict:
                                   if vorhanden and vorhanden.zugestellt_am else None),
             })
             for tag in (t.move_in_date, t.move_out_date):
-                if tag and von < tag <= bis:
+                # Auszug am 30.06. und Einzug am 01.07. sind ein Wechsel (NK-265, D-116).
+                if tag and von < tag <= bis and not any(
+                        w == wohnung.id and abs(tag - frueher) <= timedelta(days=1)
+                        for w, _, frueher in wechsel):
                     wechsel.append((wohnung.id, wohnung.name, tag))
 
     # --- Schritt 3: Ablesungen ----------------------------------------------------
     ablesungen = []
-    for zaehler in Meter.query.filter_by(property_id=haus.id).order_by(Meter.meter_number).all():
+    alle_zaehler = Meter.query.filter_by(property_id=haus.id).order_by(Meter.meter_number).all()
+    # NK-258: ein abgeloester Zaehler endet mit dem Wechsel, sein Nachfolger
+    # beginnt dort; davor bzw. danach ist an ihm nichts abzulesen.
+    abgeloest = {z.ersetzt_id for z in alle_zaehler if z.ersetzt_id}
+    for zaehler in alle_zaehler:
         tage = sorted(a.reading_date for a in zaehler.readings)
-        am_stichtag = any(abs(tag - bis) <= STICHTAG_TOLERANZ for tag in tage)
+        ausgebaut = tage[-1] if tage and zaehler.id in abgeloest else None
+        eingebaut = tage[0] if tage and zaehler.ersetzt_id else None
+        if ausgebaut and ausgebaut < von:
+            continue
+        am_stichtag = (bool(ausgebaut and ausgebaut <= bis)
+                       or any(abs(tag - bis) <= STICHTAG_TOLERANZ for tag in tage))
         fehlende_wechsel = [
             tag.isoformat() for (wohnung_id, _, tag) in wechsel
             if zaehler.apartment_id == wohnung_id
+            and not (ausgebaut and tag > ausgebaut) and not (eingebaut and tag < eingebaut)
             and not any(abs(t - tag) <= WECHSEL_TOLERANZ for t in tage)
         ]
         ablesungen.append({
@@ -142,6 +178,8 @@ def stand(property_id: int, jahr: int, heute: date | None = None) -> dict:
         })
 
     frist = frist_status(bis, heute)
+    pruefstand = _pruefstand(haus, rechnungen, kostenarten, ablesungen, mieter,
+                             von, bis, vorjahr_von, vorjahr_bis)
     return {
         'property_id': haus.id, 'immobilie': haus.name, 'jahr': jahr,
         'von': von.isoformat(), 'bis': bis.isoformat(),
@@ -151,7 +189,140 @@ def stand(property_id: int, jahr: int, heute: date | None = None) -> dict:
         'frist_ende': frist['frist_ende'].isoformat(),
         'frist_tage': (frist['frist_ende'] - heute).days,
         'frist_ueberschritten': frist['ueberschritten'],
+        'pruefstand': pruefstand,
     }
+
+
+def _prozent(neu, alt) -> int:
+    """Die Änderung von ``alt`` zu ``neu`` in ganzen Prozent."""
+    neu, alt = Decimal(str(neu)), Decimal(str(alt))
+    return int(((neu - alt) * 100 / alt).quantize(Decimal('1'), ROUND_HALF_UP))
+
+
+def _befund(art, text, tun, aktion, kennung=None) -> dict:
+    return {'art': art, 'text': text, 'tun': tun, 'ziel': {'aktion': aktion, 'id': kennung}}
+
+
+def _pruefstand(haus, rechnungen, kostenarten, ablesungen, mieter,
+                von, bis, vorjahr_von, vorjahr_bis) -> list:
+    """Die Warnungen vor dem Festsetzen (NK-265), in der Reihenfolge der Karte."""
+    from nebenkostenfix.abrechnungsdaten import lade_zaehler
+    from nebenkostenfix.leerstand import LEERSTAND, Einheit, bilanzen
+    from nebenkostenfix.models import Payment
+    from nebenkostenfix.rechenkern import (euro_text, menge_text, ueberschneidungstage,
+                                           verbrauch_detail)
+    from nebenkostenfix.zeitraum import grenze
+
+    def tag(d):
+        return d.strftime('%d.%m.%Y')
+
+    befunde = []
+
+    # €/m² gegen Vorjahr: die Kostenarten mit Sprung (NK-228), je Wohnfläche.
+    flaeche = sum(Decimal(str(w.sqm or 0)) for w in haus.apartments if w.is_active)
+    for k in kostenarten:
+        if not k['sprung']:
+            continue
+        zeichen = '+' if k['aenderung'] > 0 else '−'
+        if flaeche:
+            jetzt = euro_text(Decimal(str(k['summe'])) / flaeche) + '/m²'
+            vorher = euro_text(Decimal(str(k['summe_vorjahr'])) / flaeche) + '/m²'
+        else:
+            jetzt, vorher = euro_text(k['summe']), euro_text(k['summe_vorjahr'])
+        befunde.append(_befund(
+            'kosten_je_qm',
+            f'„{k["name"]}“ kostet {jetzt} statt {vorher} im Vorjahr '
+            f'({zeichen}{abs(k["aenderung"])} %).',
+            'Prüfen Sie die Rechnungen und nennen Sie den Grund im Anschreiben.',
+            'rechnungen'))
+
+    # Zählersprünge: Verbrauch im Jahr gegen das Vorjahr, nach dem Rechenkern.
+    for a in ablesungen:
+        zaehler = lade_zaehler(a['id'])
+        jetzt = verbrauch_detail(zaehler, von, bis)
+        vorher = verbrauch_detail(zaehler, vorjahr_von, vorjahr_bis)
+        if 'no_data' in (jetzt['status'], vorher['status']) or vorher['consumption'] <= 0:
+            continue
+        aenderung = _prozent(jetzt['consumption'], vorher['consumption'])
+        if abs(aenderung) <= ZAEHLER_SPRUNG_PROZENT:
+            continue
+        einheit = f' {jetzt["unit"]}' if jetzt['unit'] else ''
+        befunde.append(_befund(
+            'zaehlersprung',
+            f'Zähler {a["nummer"]} ({a["wohnung"]}) zeigt {menge_text(jetzt["consumption"])}{einheit} '
+            f'statt {menge_text(vorher["consumption"])}{einheit} im Vorjahr '
+            f'({"+" if aenderung > 0 else "−"}{abs(aenderung)} %).',
+            'Prüfen Sie die Zählerstände auf Tippfehler.',
+            'zaehler', a['id']))
+
+    im_jahr = sorted((r for r in rechnungen if _ueberlappt(r.start_date, r.end_date, von, bis)),
+                     key=lambda r: (r.start_date, r.id))
+
+    # Rechnung ohne Beleg: weder eigene Datei noch ein Sammelbeleg mit Datei.
+    for r in im_jahr:
+        if r.document_path or (r.document is not None and r.document.document_path):
+            continue
+        befunde.append(_befund(
+            'ohne_beleg',
+            f'Die Rechnung „{r.category.name}“ über {euro_text(r.amount)} '
+            f'({tag(r.start_date)} – {tag(r.end_date)}) hat keinen Beleg.',
+            'Laden Sie den Beleg hoch: Ihre Mieter dürfen ihn einsehen.',
+            'rechnung', r.id))
+
+    # Rechnung außerhalb des Zeitraums: zählt nur mit ihren Tagen im Jahr.
+    for r in im_jahr:
+        if von <= r.start_date and r.end_date <= bis:
+            continue
+        drin = ueberschneidungstage(r.start_date, r.end_date, von, bis)
+        alle = ueberschneidungstage(r.start_date, r.end_date, r.start_date, r.end_date)
+        befunde.append(_befund(
+            'ausserhalb',
+            f'Die Rechnung „{r.category.name}“ ({tag(r.start_date)} – {tag(r.end_date)}) '
+            f'reicht über das Abrechnungsjahr hinaus; es zählen {drin} von {alle} Tagen.',
+            'Prüfen Sie den Zeitraum der Rechnung.',
+            'rechnung', r.id))
+
+    # Leerstand: unvermietete Tage einer Wohnung trägt der Vermieter.
+    einheiten = [Einheit(wohnung_id=w.id, name=w.name, qm=w.sqm,
+                         eigennutzung=bool(w.eigennutzung),
+                         mietzeiten=[(t.move_in_date,
+                                      grenze(t.move_out_date) if t.move_out_date else date.max)
+                                     for t in w.tenants])
+                 for w in sorted(haus.apartments, key=lambda w: w.name) if w.is_active]
+    for b in bilanzen(einheiten, von, grenze(bis)):
+        if b.grund != LEERSTAND:
+            continue
+        befunde.append(_befund(
+            'leerstand',
+            f'Die Wohnung {b.name} stand {b.unbelegt} Tage leer; diesen Anteil tragen Sie.',
+            'Prüfen Sie Ein- und Auszug: fehlt ein Mieter, erfassen Sie ihn.',
+            'mieter', b.wohnung_id))
+
+    # Mieter ohne Vorauszahlung im Zeitraum (nur, wer noch abzurechnen ist).
+    for m in mieter:
+        if m['abrechnung_id']:
+            continue
+        gezahlt = Payment.query.filter(
+            Payment.tenant_id == m['id'], Payment.type == 'Nebenkostenvorauszahlung',
+            Payment.payment_date >= date.fromisoformat(m['von']),
+            Payment.payment_date <= date.fromisoformat(m['bis'])).first()
+        if gezahlt is None:
+            befunde.append(_befund(
+                'ohne_vorauszahlung',
+                f'Für {m["name"]} ({m["wohnung"]}) ist im Zeitraum keine Vorauszahlung erfasst.',
+                'Erfassen Sie die Zahlungen, sonst fehlen sie in der Abrechnung.',
+                'zahlung', m['id']))
+
+    # Fehlende Ablesung beim Mieterwechsel.
+    for a in ablesungen:
+        for wechsel in a['wechsel_fehlen']:
+            befunde.append(_befund(
+                'wechsel_ablesung',
+                f'Zähler {a["nummer"]} ({a["wohnung"]}) hat keinen Stand zum Mieterwechsel '
+                f'am {tag(date.fromisoformat(wechsel))}.',
+                'Erfassen Sie den Zählerstand vom Wechseltag.',
+                'ablesung', a['id']))
+    return befunde
 
 
 def init_jahresabrechnung(app):

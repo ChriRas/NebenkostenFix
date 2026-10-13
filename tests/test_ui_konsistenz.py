@@ -336,3 +336,48 @@ def test_heute_ist_das_lokale_datum():
     1 bzw. 2 Uhr stand im Ablesedialog und in den anderen Vorbelegungen noch
     das Datum von gestern."""
     assert "new Date().toISOString()" not in _liest(APP)
+
+
+def _schmal(css: str) -> str:
+    """Alle Blöcke ``@media (max-width: 720px)`` hintereinander."""
+    kopf = "@media (max-width: 720px)"
+    return "".join(_media_block(css[m.start():], kopf) for m in re.finditer(re.escape(kopf), css))
+
+
+def test_zaehlertabelle_wird_am_handy_zur_karte():
+    """NK-252: unter 720 px rollte die Zählertabelle in ihrer Karte (NK-157),
+    Verlauf, Stift und Papierkorb lagen rechts außerhalb des Bilds."""
+    app = _liest(APP)
+    zaehler = app[app.index("function renderMeters("):]
+    zaehler = zaehler[:zaehler.index("\n}\n")]
+    assert "table.className = 'zaehler-tabelle'" in zaehler
+    assert '<tr class="zaehler-kopf"' in zaehler
+    for beschriftung in ("Kategorie", "Zählernummer", "Wohnung", "Letzter Stand"):
+        assert f".dataset.label = '{beschriftung}'" in zaehler, beschriftung
+    schmal = _schmal(_liest(STYLE))
+    karte = re.search(r"\.glass-panel table\.zaehler-tabelle,[^{]*\{([^}]*)\}", schmal)
+    assert karte and "display: block" in karte.group(1) and "overflow-x: visible" in karte.group(1)
+    assert re.search(r"\.zaehler-tabelle \.zaehler-kopf \{\s*display: none;", schmal)
+    assert "content: attr(data-label)" in schmal
+
+
+def test_kopfaktionen_am_handy_im_menue():
+    """NK-253: unter 720 px stapelten sich die Kopfknöpfe (vier bei den
+    Zählern) über dem Inhalt; ein Menüknopf neben dem Titel trägt sie."""
+    app = _liest(APP)
+    start = app[app.index("function initApp("):]
+    assert "initKopfMenues();" in start[:start.index("\n}\n")]
+    menue = app[app.index("function initKopfMenues("):]
+    menue = menue[:menue.index("\n}\n")]
+    assert "querySelectorAll('.section-header > .kopf-aktionen')" in menue
+    for merkmal in ("'btn-secondary kopf-menue-knopf'", "'aria-haspopup'", "'aria-expanded'",
+                    "'aria-label', 'Aktionen'", "classList.add('mit-menue')", "'Escape'"):
+        assert merkmal in menue, merkmal
+    css = _liest(STYLE)
+    # Am Schreibtisch bleibt der Kopf wie er war.
+    assert re.search(r"^\.kopf-menue-knopf \{\s*display: none;", css, re.M)
+    schmal = _schmal(css)
+    assert re.search(r"\.kopf-menue-knopf \{\s*display: inline-flex;", schmal)
+    zu = re.search(r"\.kopf-aktionen\.mit-menue \{([^}]*)\}", schmal)
+    assert zu and "display: none" in zu.group(1) and "position: absolute" in zu.group(1)
+    assert re.search(r"\.kopf-aktionen\.mit-menue\.offen \{\s*display: flex;", schmal)

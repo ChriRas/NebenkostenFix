@@ -4,13 +4,15 @@ from xml.sax.saxutils import escape  # nosec B406
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
-from reportlab.platypus import PageBreak
+from reportlab.platypus import KeepTogether, PageBreak
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from datetime import datetime
 from decimal import Decimal
 from nebenkostenfix import zeit
 from nebenkostenfix.pdf_cover_page import build_cover_page_elements
-from nebenkostenfix.girocode_generator import build_girocode_elements, vermieter_ausweis
+from nebenkostenfix.anschreiben import saetze as anschreiben_saetze
+from nebenkostenfix.girocode_generator import (
+    _format_iban_display, build_girocode_elements, vermieter_art, vermieter_ausweis)
 from nebenkostenfix.geld import NULL
 from nebenkostenfix import betrkv
 from nebenkostenfix.zeitraum import HINWEIS_TAGESKONVENTION
@@ -109,8 +111,9 @@ class PDFGenerator:
     ``abrechnung_version`` -- dieselben, die NK-061 mit der Version der
     finalisierten Abrechnung abspeichert."""
     def __init__(self, property_name, apartment_name, tenant_name, start_date, end_date,
-                 detailliert=False):
+                 detailliert=False, tenant_anrede=None):
         self.detailliert = detailliert
+        self.tenant_anrede = tenant_anrede  # NK-264
         self.property_name = property_name
         self.apartment_name = apartment_name
         self.tenant_name = tenant_name
@@ -122,9 +125,10 @@ class PDFGenerator:
         self.styles.add(ParagraphStyle(name='TitleBold', fontName='Helvetica-Bold', fontSize=18, leading=22, spaceAfter=20))
         self.styles.add(ParagraphStyle(name='HeaderNormal', fontName='Helvetica', fontSize=10, leading=14))
         self.styles.add(ParagraphStyle(name='HeaderRight', fontName='Helvetica', fontSize=10, leading=14, alignment=2))
-        self.styles.add(ParagraphStyle(name='TableCell', fontName='Helvetica', fontSize=9, leading=12, wordWrap='CJK'))
-        self.styles.add(ParagraphStyle(name='TableCellRight', fontName='Helvetica', fontSize=9, leading=12, alignment=2, wordWrap='CJK'))
-        self.styles.add(ParagraphStyle(name='SubTableCell', fontName='Helvetica', fontSize=8, leading=11, leftIndent=10, textColor=colors.HexColor('#4b5563'), wordWrap='CJK'))
+        # NK-250: kein wordWrap='CJK' -- es brach Wörter an beliebiger Stelle.
+        self.styles.add(ParagraphStyle(name='TableCell', fontName='Helvetica', fontSize=9, leading=12))
+        self.styles.add(ParagraphStyle(name='TableCellRight', fontName='Helvetica', fontSize=9, leading=12, alignment=2))
+        self.styles.add(ParagraphStyle(name='SubTableCell', fontName='Helvetica', fontSize=8, leading=11, leftIndent=10, textColor=colors.HexColor('#4b5563')))
         self.styles.add(ParagraphStyle(name='SectionHeader', fontName='Helvetica-Bold', fontSize=10, leading=14, textColor=colors.white))
         self.styles.add(ParagraphStyle(name='TotalCell', fontName='Helvetica-Bold', fontSize=10, leading=14))
         self.styles.add(ParagraphStyle(name='TotalCellRight', fontName='Helvetica-Bold', fontSize=10, leading=14, alignment=2))
@@ -249,9 +253,8 @@ class PDFGenerator:
                 ]
             data.append(row)
 
-        breiten = [110, 90, 80, 100]
-        if mit_betraegen:
-            breiten += [50, 51]
+        # NK-250: die Kopfwörter der Betragsspalten passen ungebrochen hinein.
+        breiten = [105, 78, 74, 73, 89, 62] if mit_betraegen else [110, 90, 80, 100]
         tabelle = Table(data, colWidths=breiten, repeatRows=1)
         tabelle.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#f3f4f6')),
@@ -421,9 +424,40 @@ class PDFGenerator:
 
         return elemente
 
+    def _ausweis_35a_elemente(self, ausweis_35a):
+        """Die Lohnanteile nach § 35a EStG (NK-268, R-35A-01).
+
+        Eine Tabelle je Art (haushaltsnahe Dienstleistungen,
+        Handwerkerleistungen) mit der Summe darunter -- nur Beträge, kein
+        Steuersatz und kein Höchstbetrag; der Hinweis sagt, woher sie
+        kommen. Ohne Angabe an einer Rechnung bleibt der Abschnitt weg.
+        """
+        if not ausweis_35a:
+            return []
+        elemente = [Spacer(1, 20), Paragraph(
+            "Lohnanteile nach § 35a EStG", self.styles['TitleBold'])]
+        for gruppe in ausweis_35a['gruppen']:
+            daten = [[Paragraph(f"<b>{gruppe['art_text']}</b>", self.styles['TableCell']),
+                      Paragraph("<b>Ihr Anteil</b>", self.styles['TableCellRight'])]]
+            daten += [[Paragraph(escape(z['kostenart']), self.styles['TableCell']),
+                       Paragraph(f"{self._deutsch(z['betrag'])} €", self.styles['TableCellRight'])]
+                      for z in gruppe['zeilen']]
+            daten.append([Paragraph("Summe", self.styles['TotalCell']),
+                          Paragraph(f"{self._deutsch(gruppe['summe'])} €",
+                                    self.styles['TotalCellRight'])])
+            tabelle = Table(daten, colWidths=[380, 100])
+            tabelle.setStyle(TableStyle([
+                ('LINEBELOW', (0, 0), (-1, 0), 0.5, colors.HexColor('#9ca3af')),
+                ('LINEABOVE', (0, -1), (-1, -1), 0.5, colors.HexColor('#9ca3af')),
+                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ]))
+            elemente += [tabelle, Spacer(1, 8)]
+        elemente.append(Paragraph(escape(ausweis_35a['hinweis']), self.styles['Fussnote']))
+        return elemente
+
     def generate(self, line_items, total_amount, prepaid_amount=NULL,
                  co2_ausweis=None, landlord_share=None, anschreiben=None,
-                 vorbehalt=None):
+                 vorbehalt=None, ausweis_35a=None):
         buffer = BytesIO()
         doc = SimpleDocTemplate(buffer, pagesize=A4,
                                 rightMargin=56.7, leftMargin=56.7,
@@ -433,12 +467,13 @@ class PDFGenerator:
         
         # Prepend cover page (Deckblatt)
         balance = total_amount - prepaid_amount
-        # NK-210 (B3): der Name aus den Einstellungen statt der Rolle
+        # NK-210: der Name aus den Einstellungen statt der Rolle
         vermieter = vermieter_ausweis()[0]
         cover_elements = build_cover_page_elements(
             property_name=self.property_name,
             apartment_name=self.apartment_name,
             tenant_name=self.tenant_name,
+            tenant_anrede=self.tenant_anrede,
             start_date=self.start_date,
             end_date=self.end_date,
             total_amount=total_amount,
@@ -530,8 +565,10 @@ class PDFGenerator:
             stripe_counter = 0
             
             for item in section_data["items"]:
-                provider = item.get('provider_name', '-') or '-'
-                period_str = f"{item['period']}<br/>Anbieter: {provider}"
+                period_str = item['period']
+                # NK-246: ohne Anbieter keine Anbieterzeile.
+                if item.get('provider_name'):
+                    period_str += f"<br/>Anbieter: {item['provider_name']}"
                 # R-DOC-01 Punkt 8: der Belegverweis direkt an der Position
                 # -- fuer jede Zeile, die aus genau einer Rechnung stammt.
                 # Mehrere Rechnungen (Heizung, D-47) zaehlen ueber die
@@ -715,19 +752,43 @@ class PDFGenerator:
         elements.extend(self._heizung_co2_elemente(
             line_items, co2_ausweis, landlord_share))
 
+        # NK-268: die Lohnanteile nach § 35a EStG, auf beiden Fassungen.
+        elements.extend(self._ausweis_35a_elemente(ausweis_35a))
+
         # R-DOC-01 Punkt 8: die Belegliste gehoert auf beide Wege des
         # Dokuments -- der Vermieter sendet nur eine der beiden Fassungen,
         # also muss jede fuer sich die Zuordnung Position zu Beleg tragen.
-        elements.extend(self._belegliste_elemente(line_items))
+        # NK-244: genau einmal; die ausfuehrliche Fassung mit Betraegen.
+        elements.extend(self._belegliste_elemente(
+            line_items, mit_betraegen=self.detailliert))
 
         elements.append(Spacer(1, 40))
         
+        # NK-248: die hinterlegte IBAN steht im Satz. NK-264: ich/wir nach
+        # der Art des Vermieters, ohne Angabe neutral.
+        saetze = anschreiben_saetze(vermieter_art())
+        zahlungsblock = []
         if balance > 0:
-            elements.append(Paragraph("Bitte überweisen Sie den ausstehenden Betrag innerhalb von 14 Tagen auf das bekannte Konto.", self.styles['HeaderNormal']))
-        elements.append(Paragraph("Bei Fragen zur Abrechnung stehen wir Ihnen gerne zur Verfügung.", self.styles['HeaderNormal']))
+            iban = vermieter_ausweis()[1]
+            konto = (f"{saetze['konto']} mit der IBAN {_format_iban_display(iban)}"
+                     if iban else saetze['bekanntes_konto'])
+            zahlungsblock.append(Paragraph(f"Bitte überweisen Sie den ausstehenden Betrag innerhalb von 14 Tagen auf {konto}.", self.styles['HeaderNormal']))
+        zahlungsblock.append(Paragraph(saetze['rueckfragen'], self.styles['HeaderNormal']))
+        # GiroCode (EPC-QR) -- nur bei Nachzahlung. NK-270: Satz und Kasten
+        # bleiben zusammen direkt nach der Belegliste; passt der Block nicht
+        # mehr, rueckt er als Ganzes auf die naechste Seite.
+        zahlungsblock.extend(build_girocode_elements(
+            balance=balance,
+            tenant_name=self.tenant_name,
+            apartment_name=self.apartment_name,
+            start_date=self.start_date,
+            end_date=self.end_date,
+        ))
+        elements.append(KeepTogether(zahlungsblock))
         
 
-        if self.detailliert:
+        # NK-245: ohne Zaehlerzeile kein leerer Nachweisteil samt Umbruch.
+        if self.detailliert and any(item.get('meter_details') for item in line_items):
             elements.append(Paragraph(
                 '<i>Detaillierte Verbrauchsnachweise auf den folgenden Seiten</i>',
                 self.styles['HeaderNormal']))
@@ -779,7 +840,7 @@ class PDFGenerator:
                     except (ValueError, TypeError): return d
                 
                 def dt_offset(stichtag, offset):
-                    # NK-218 (V1): ein Satz statt „Abweichung X Tage (Fenster Y
+                    # NK-218: ein Satz statt „Abweichung X Tage (Fenster Y
                     # Tage)“; das Warnzeichen davor kannte die Schrift nicht.
                     if offset <= 7:
                         return ""
@@ -800,14 +861,27 @@ class PDFGenerator:
                         drei = Decimal('0.001')
                         anfang = Decimal(str(tm['stand_beginn'])).quantize(drei)
                         verbrauch = Decimal(str(tm['consumption'])).quantize(drei)
-                        ende = anfang + verbrauch
+                        # NK-258: bei einem Zaehlerwechsel ist der Verbrauch
+                        # (Endstand alt - Beginn) + (Ende - Anfangsstand neu).
+                        wechsel = tm.get('zaehlerwechsel') or []
+                        ende = anfang + verbrauch - sum(
+                            (Decimal(str(w['endstand'])).quantize(drei)
+                             - Decimal(str(w['anfangsstand'])).quantize(drei) for w in wechsel),
+                            Decimal(0))
 
                         def wie(abgelesen):
                             return "abgelesen" if abgelesen else "berechnet"
 
                         box_data.append([Paragraph(f"Zählerstand Beginn {format_date(tm.get('target_start_date'))} ({wie(tm.get('beginn_abgelesen'))}):", self.styles['MeterText']), Paragraph(f"{self._deutsch(anfang, 3)} {unit}", rechts)])
+                        for w in wechsel:
+                            box_data.append([Paragraph(
+                                f"Zählerwechsel {format_date(w['datum'])}: Endstand {escape(w['alt'])} "
+                                f"{self._deutsch(w['endstand'], 3)}, Anfangsstand {escape(w['neu'])} "
+                                f"{self._deutsch(w['anfangsstand'], 3)} {unit}", self.styles['MeterText']), ''])
+                            box_style.append(('SPAN', (0, len(box_data) - 1), (-1, len(box_data) - 1)))
+                            row_idx += 1
                         box_data.append([Paragraph(f"Zählerstand Ende {format_date(tm.get('target_end_date'))} ({wie(tm.get('ende_abgelesen'))}):", self.styles['MeterText']), Paragraph(f"{self._deutsch(ende, 3)} {unit}", rechts)])
-                        box_data.append([Paragraph("Eigenverbrauch (Ende − Beginn):", self.styles['MeterTextBold']), Paragraph(f"{self._deutsch(verbrauch, 3)} {unit}", self.styles['MeterTextBold'])])
+                        box_data.append([Paragraph("Eigenverbrauch (beide Zähler):" if wechsel else "Eigenverbrauch (Ende − Beginn):", self.styles['MeterTextBold']), Paragraph(f"{self._deutsch(verbrauch, 3)} {unit}", self.styles['MeterTextBold'])])
                         ablesungen = [
                             f"{format_date(b['date'])}: {self._deutsch(b['total'], 3)}"
                             + (" (Zwischenablesung)" if b.get('zwischenablesung') else "")
@@ -860,7 +934,7 @@ class PDFGenerator:
                     box_data.append([Paragraph(f"Gesamtverbrauch Haus (Hauptzähler{zeitraum}):", self.styles['MeterText']), Paragraph(f"{main_c:.1f} {unit}", self.styles['MeterText'])])
                     box_data.append([Paragraph(f"Summe aller Wohnungen:", self.styles['MeterText']), Paragraph(f"{sum_sub:.1f} {unit}", self.styles['MeterText'])])
                     box_data.append([Paragraph(f"Allgemeinverbrauch (Haus − Wohnungen):", self.styles['MeterText']), Paragraph(f"{allg:.1f} {unit}", self.styles['MeterTextBold'])])
-                    # NK-209 (B2): der Anteil, mit dem gerechnet wurde -- nach
+                    # NK-209: der Anteil, mit dem gerechnet wurde -- nach
                     # Personentagen, nicht 1/Zahl der Mieter. Gespeicherte
                     # Abrechnungen von davor kennen ihn nicht; dort fehlt die
                     # Zeile lieber, als dass sie etwas Falsches sagt.
@@ -910,26 +984,8 @@ class PDFGenerator:
                 t.setStyle(TableStyle(box_style))
                 elements.append(t)
                 elements.append(Spacer(1, 20))
-            
-            # ----------------------------------------------------
-            # Belegliste (R-DOC-01 Punkt 8) -- ersetzt die fruehere Tabelle
-            # "Verwendete Rechnungen": dieselben Betraege, aber je Rechnung
-            # und mit Nummer, Datum, Anbieter und Dokumentseite.
-            # ----------------------------------------------------
-            elements.extend(
-                self._belegliste_elemente(line_items, mit_betraegen=True))
-        
 
-        # GiroCode (EPC-QR) — only rendered for Nachzahlung (balance > 0)
-        girocode_elements = build_girocode_elements(
-            balance=balance,
-            tenant_name=self.tenant_name,
-            apartment_name=self.apartment_name,
-            start_date=self.start_date,
-            end_date=self.end_date,
-        )
-        elements.extend(girocode_elements)
-        
+
         doc.build(elements, onFirstPage=_fuss_zeichnen, onLaterPages=_fuss_zeichnen)
         
         pdf_data = buffer.getvalue()

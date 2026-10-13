@@ -62,6 +62,7 @@ OBERFLAECHE = {
     },
     'Tenant': {
         'apartment_id': 'id="tenant-apartment"',
+        'anrede': 'id="tenant-anrede"',
         'name': 'id="tenant-name"',
         'move_in_date': 'id="tenant-move-in"',
         'move_out_date': 'id="tenant-move-out"',
@@ -72,6 +73,11 @@ OBERFLAECHE = {
         'tenant_id': '/haushaltsgroessen',
         'gueltig_ab': 'gueltig_ab',
         'personenanzahl': 'personenanzahl',
+    },
+    'VorauszahlungSoll': {
+        'tenant_id': '/vorauszahlung_soll`',
+        'gueltig_ab': 'vz-gueltig-ab',
+        'betrag': 'vz-betrag',
     },
     'TenantCostProfile': {
         'tenant_id': '/profiles`',
@@ -94,6 +100,8 @@ OBERFLAECHE = {
         'preis_ht': 'id="invoice-preis-ht"',
         'preis_nt': 'id="invoice-preis-nt"',
         'grundpreis': 'id="invoice-grundpreis"',
+        'art_35a': 'id="invoice-art-35a"',
+        'lohnanteil': 'id="invoice-lohnanteil"',
         'heizungsanlage_id': 'id="invoice-heizungsanlage"',
         'heizkostenart': 'id="invoice-heizkostenart"',
         'co2_kosten': 'id="invoice-co2-kosten"',
@@ -121,10 +129,14 @@ OBERFLAECHE = {
         'category_id': 'id="meter-category"',
         'property_id': 'id="meter-property"',
         'apartment_id': 'id="meter-apartment"',
-        'is_main_meter': 'is_main_meter: aptId',
+        'is_main_meter': 'daten.is_main_meter = aptId',
         'meter_number': 'id="meter-number"',
         'has_dual_tariff': 'id="meter-dual-tariff"',
         'is_official': 'id="meter-is-official"',
+        # NK-258: der Verweis entsteht im Wechseldialog, nicht als eigenes Feld.
+        'ersetzt_id': 'id="wechsel-modal"',
+        'geeicht_bis': 'id="meter-geeicht-bis"',
+        'ort': 'id="meter-ort"',
     },
     'MeterReading': {
         'meter_id': 'id="reading-meter"',
@@ -142,6 +154,7 @@ OBERFLAECHE = {
     'Vermieterdaten': {
         'name': 'id="vermieter-name"',
         'iban': 'id="vermieter-iban"',
+        'art': 'id="vermieter-art"',
     },
     'TenantBillingReport': {
         'zugestellt_am': 'zustellung-datum-',
@@ -227,6 +240,9 @@ AUSNAHMEN = {
         'id': 'Schlüssel.',
     },
     'Haushaltsgroesse': {
+        'id': 'Schlüssel.',
+    },
+    'VorauszahlungSoll': {
         'id': 'Schlüssel.',
     },
     'TenantCostProfile': {

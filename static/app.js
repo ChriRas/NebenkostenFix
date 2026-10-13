@@ -259,6 +259,7 @@ function initApp() {
     initTabs();
     initModalBedienung();
     initBarrierearm();
+    initKopfMenues();
     fetchProperties();
     fetchTenants();
     fetchAllApartments();
@@ -855,6 +856,38 @@ function ersterFokus(overlay) {
         .filter(el => ['INPUT', 'SELECT', 'TEXTAREA'].includes(el.tagName));
     const ziel = felder[0] || fokussierbar(modal)[0];
     if (ziel && !modal.contains(document.activeElement)) ziel.focus();
+}
+
+// NK-253: Am Handy stapelten sich die Kopfknöpfe über dem Inhalt. Unter
+// 720 px trägt ein Menüknopf neben dem Titel die Aktionen (CSS blendet um).
+function initKopfMenues() {
+    const schalte = (aktionen, offen) => {
+        aktionen.classList.toggle('offen', offen);
+        aktionen.parentElement.querySelector('.kopf-menue-knopf')
+            .setAttribute('aria-expanded', String(offen));
+    };
+    document.querySelectorAll('.section-header > .kopf-aktionen').forEach(aktionen => {
+        if (aktionen.querySelectorAll('button').length < 2) return;
+        const knopf = document.createElement('button');
+        knopf.type = 'button';
+        knopf.className = 'btn-secondary kopf-menue-knopf';
+        knopf.setAttribute('aria-haspopup', 'true');
+        knopf.setAttribute('aria-expanded', 'false');
+        // Nur das Symbol: mit Text bricht der Knopf unter lange Titel um.
+        knopf.setAttribute('aria-label', 'Aktionen');
+        knopf.title = 'Aktionen';
+        knopf.innerHTML = '<i class="ph ph-dots-three-vertical" aria-hidden="true"></i>';
+        knopf.addEventListener('click', () => schalte(aktionen, !aktionen.classList.contains('offen')));
+        aktionen.classList.add('mit-menue');
+        // Direkt hinter den Titel, damit Filter-Pillen nicht dazwischen umbrechen.
+        aktionen.parentElement.firstElementChild.after(knopf);
+        aktionen.addEventListener('click', e => { if (e.target.closest('button')) schalte(aktionen, false); });
+    });
+    const schliesseAlle = () => document.querySelectorAll('.kopf-aktionen.offen').forEach(a => schalte(a, false));
+    document.addEventListener('click', e => {
+        if (!e.target.closest || !e.target.closest('.kopf-menue-knopf, .kopf-aktionen')) schliesseAlle();
+    });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') schliesseAlle(); });
 }
 
 function initModalBedienung() {
@@ -1651,7 +1684,7 @@ async function deleteApartment(id) {
 }
 
 
-// NK-212 (B5): aktiv wie beim Server (F-118) -- der Auszugstag ist der
+// NK-212: aktiv wie beim Server (F-118) -- der Auszugstag ist der
 // letzte Miettag, wer davor auszog, zählt nicht mehr. ``heute`` als ISO-Tag.
 function istAktiverMieter(t, heute) {
     return !t.ist_beispiel && (!t.move_out_date || t.move_out_date >= heute);
@@ -1791,6 +1824,14 @@ async function fetchTenants() {
                 householdBtn.title = 'Haushaltsgröße';
                 householdBtn.onclick = () => openHouseholdModal(t);
 
+                // NK-261: Soll und Ist der Vorauszahlungen je Monat.
+                const vzBtn = document.createElement('button');
+                vzBtn.className = 'btn-icon';
+                vzBtn.innerHTML = '<i class="ph ph-coins" aria-hidden="true"></i>';
+                vzBtn.title = 'Vorauszahlungen';
+                vzBtn.setAttribute('aria-label', 'Vorauszahlungen');
+                vzBtn.onclick = () => openVorauszahlungModal(t);
+
                 // NK-078: Auskunft als ZIP -- JSON mit allen Zeilen zum
                 // Mietverhaeltnis und die Dateien dazu.
                 const exportBtn = document.createElement('button');
@@ -1807,6 +1848,7 @@ async function fetchTenants() {
                 tdActions.appendChild(editBtn);
                 tdActions.appendChild(profileBtn);
                 tdActions.appendChild(householdBtn);
+                tdActions.appendChild(vzBtn);
                 tdActions.appendChild(exportBtn);
                 tdActions.appendChild(deleteBtn);
                 
@@ -1850,6 +1892,8 @@ async function saveTenant() {
         formData.append('name', name);
         formData.append('apartment_id', parseInt(aptId));
         formData.append('move_in_date', moveIn);
+        // NK-264: immer mitschicken, damit Leeren die eigene Anrede löscht.
+        formData.append('anrede', document.getElementById('tenant-anrede').value.trim());
         if (moveOut) formData.append('move_out_date', moveOut);
         if (lastBilled) formData.append('last_billed_until', lastBilled);
         
@@ -2174,6 +2218,7 @@ function openAddTenantModal(tenant = null) {
     if (tenant && tenant.id) {
         editingTenantId = tenant.id;
         document.getElementById('tenant-name').value = tenant.name;
+        document.getElementById('tenant-anrede').value = tenant.anrede || '';
         
         // Ensure the dropdown shows the correct option
         setTimeout(() => {
@@ -2211,6 +2256,7 @@ function openAddTenantModal(tenant = null) {
     } else {
         editingTenantId = null;
         document.getElementById('tenant-name').value = '';
+        document.getElementById('tenant-anrede').value = '';
         document.getElementById('tenant-move-in').value = '';
         document.getElementById('tenant-move-out').value = '';
         document.getElementById('tenant-last-billed').value = '';
@@ -2438,7 +2484,7 @@ function zaehlerArtName(name) {
 }
 
 function getReadingHtml(r, einheit) {
-    // NK-220 (V3): die Einheit kommt vom Server (einheit_fuer im Rechenkern),
+    // NK-220: die Einheit kommt vom Server (einheit_fuer im Rechenkern),
     // nicht mehr aus dem Namen der Kostenart; Heizung bekam vorher keine.
     const unit = einheit ? ' ' + einheit : '';
 
@@ -2506,11 +2552,13 @@ function renderMeters() {
         box.appendChild(title);
         
         const table = document.createElement('table');
+        // NK-252: am Handy wird jede Zeile eine Karte (style.css), die Aktionen bleiben im Bild.
+        table.className = 'zaehler-tabelle';
         table.style.width = '100%';
         table.style.borderCollapse = 'collapse';
         table.style.textAlign = 'left';
         table.innerHTML = `
-            <tr style="border-bottom: 1px solid var(--border-color);">
+            <tr class="zaehler-kopf" style="border-bottom: 1px solid var(--border-color);">
                 <th style="padding: 12px 8px;">Kategorie</th>
                 <th style="padding: 12px 8px;">Zählernummer</th>
                 <th style="padding: 12px 8px;">Wohnung</th>
@@ -2531,25 +2579,40 @@ function renderMeters() {
             const tdCat = document.createElement('td');
             tdCat.style.padding = "12px 8px";
             tdCat.textContent = zaehlerArtName(m.category_name);
+            tdCat.dataset.label = 'Kategorie';
             
             const tdNum = document.createElement('td');
             tdNum.style.padding = "12px 8px";
-            // NK-219 (V2): die Nummer tippt der Nutzer ein, sie kommt maskiert ins HTML.
+            tdNum.dataset.label = 'Zählernummer';
+            // NK-219: die Nummer tippt der Nutzer ein, sie kommt maskiert ins HTML.
             tdNum.innerHTML = escapeHtml(m.meter_number) + (
                 m.is_official 
                 ? ' <span style="font-size: 13px; padding: 2px 6px; background: var(--primary); color: white; border-radius: 4px; margin-left: 8px;" title="Offizieller Zähler des Versorgers"><i class="ph ph-check-circle"></i> Versorger</span>' 
                 : ' <span style="font-size: 13px; padding: 2px 6px; background: var(--border-color); color: var(--text-color); border-radius: 4px; margin-left: 8px;" title="Privater Zwischenzähler">Privat</span>'
             );
             
+            // NK-258: ausgebaut (Zaehlerwechsel), Einbauort und Eichfrist.
+            if (m.ersetzt_durch) {
+                tdNum.insertAdjacentHTML('beforeend', ' <span class="dq-status-badge none" title="Bei einem Zählerwechsel ersetzt; die Abrechnung zählt ihn mit seinem Nachfolger zusammen.">ausgebaut</span>');
+            }
+            if (m.eichhinweis) {
+                tdNum.insertAdjacentHTML('beforeend', ` <span class="dq-status-badge yellow"><i class="ph ph-warning" aria-hidden="true"></i> ${escapeHtml(m.eichhinweis)}</span>`);
+            }
+            if (m.ort) {
+                tdNum.insertAdjacentHTML('beforeend', `<div class="text-muted">${escapeHtml(m.ort)}</div>`);
+            }
+
             const tdApt = document.createElement('td');
             tdApt.style.padding = "12px 8px";
             tdApt.textContent = m.is_main_meter ? "Allgemein" : (m.apartment_name || "-");
+            tdApt.dataset.label = 'Wohnung';
             
             // Find latest reading
             const meterReadings = readings.filter(r => r.meter_id === m.id).sort((a,b) => new Date(b.reading_date) - new Date(a.reading_date));
             const tdRead = document.createElement('td');
             tdRead.style.padding = "12px 8px";
             tdRead.className = "tabular-nums";
+            tdRead.dataset.label = 'Letzter Stand';
             if (meterReadings.length > 0) {
                 const latest = meterReadings[0];
                 tdRead.innerHTML = getReadingHtml(latest, m.einheit);
@@ -2558,12 +2621,13 @@ function renderMeters() {
             }
             
             const tdActions = document.createElement('td');
+            tdActions.className = 'zaehler-aktionen';
             tdActions.style.padding = "12px 8px";
-            // Verlauf, Stift und Papierkorb bleiben in einer Zeile
+            // Die Aktionen bleiben in einer Zeile; am Handy brechen sie um (style.css).
             tdActions.style.whiteSpace = 'nowrap';
             tdActions.onclick = (e) => e.stopPropagation();
             
-            // NK-219 (V2): der Verlauf war nur über einen Klick auf die Zeile
+            // NK-219: der Verlauf war nur über einen Klick auf die Zeile
             // zu finden; der Stift sagt jetzt, dass er nur den letzten Stand ändert.
             const verlaufBtn = document.createElement('button');
             verlaufBtn.className = 'btn-secondary';
@@ -2582,8 +2646,36 @@ function renderMeters() {
                 editReadBtn.style.marginRight = "8px";
                 editReadBtn.onclick = () => openAddReadingModal(null, latest.id);
                 tdActions.appendChild(editReadBtn);
+            } else {
+                // NK-257: ohne Ablesung fehlte in der Zeile jeder Weg zum ersten Stand.
+                const ersterBtn = document.createElement('button');
+                ersterBtn.className = 'btn-secondary';
+                ersterBtn.style.cssText = 'font-size: 0.85rem; padding: 4px 10px; margin-right: 8px;';
+                ersterBtn.innerHTML = '<i class="ph ph-plus" aria-hidden="true"></i> Ersten Stand erfassen';
+                ersterBtn.onclick = () => openAddReadingModal(m.id);
+                tdActions.appendChild(ersterBtn);
             }
             
+            const bearbeitenBtn = document.createElement('button');
+            bearbeitenBtn.className = 'btn-icon';
+            bearbeitenBtn.innerHTML = '<i class="ph ph-gear-six" aria-hidden="true"></i>';
+            bearbeitenBtn.title = 'Zähler bearbeiten';
+            bearbeitenBtn.setAttribute('aria-label', 'Zähler bearbeiten');
+            bearbeitenBtn.style.marginRight = "8px";
+            bearbeitenBtn.onclick = () => openEditMeterModal(m.id);
+            tdActions.appendChild(bearbeitenBtn);
+
+            if (!m.ersetzt_durch) {
+                const wechselBtn = document.createElement('button');
+                wechselBtn.className = 'btn-icon';
+                wechselBtn.innerHTML = '<i class="ph ph-swap" aria-hidden="true"></i>';
+                wechselBtn.title = 'Zählerwechsel erfassen';
+                wechselBtn.setAttribute('aria-label', 'Zählerwechsel erfassen');
+                wechselBtn.style.marginRight = "8px";
+                wechselBtn.onclick = () => openWechselModal(m.id);
+                tdActions.appendChild(wechselBtn);
+            }
+
             const delBtn = document.createElement('button');
             delBtn.className = 'btn-icon';
             delBtn.innerHTML = '<i class="ph ph-trash"></i>';
@@ -2622,7 +2714,7 @@ function getCategoryIcon(catName) {
     return 'ph-receipt';
 }
 
-// NK-156 (K4): der Leerzustand „Keine Treffer“ führt zurück zur ganzen Liste.
+// NK-156: der Leerzustand „Keine Treffer“ führt zurück zur ganzen Liste.
 function rechnungsfilterZuruecksetzen() {
     const suche = document.getElementById('invoice-search');
     const kategorie = document.getElementById('invoice-category-filter');
@@ -3008,6 +3100,97 @@ async function deleteHouseholdSize(id, tenantId) {
     }
 }
 
+// --- NK-261 (R-VZ-02): Soll und Ist der Vorauszahlungen ---
+
+async function openVorauszahlungModal(tenant) {
+    document.getElementById('vz-tenant-name').textContent = tenant.name;
+    document.getElementById('vz-tenant-id').value = tenant.id;
+    document.getElementById('vz-betrag').value = '';
+    const daten = await ladeVorauszahlungen(tenant.id);
+    // Ohne Soll ist der Einzug der naheliegende erste Stichtag.
+    document.getElementById('vz-gueltig-ab').value =
+        daten && daten.soll.length === 0 ? String(tenant.move_in_date || '').slice(0, 10) : '';
+    document.getElementById('vorauszahlung-modal').classList.add('active');
+}
+
+function closeVorauszahlungModal() {
+    document.getElementById('vorauszahlung-modal').classList.remove('active');
+}
+
+async function ladeVorauszahlungen(tenantId) {
+    let d;
+    try {
+        const res = await fetch(`/api/tenants/${tenantId}/vorauszahlungen`);
+        if (!res.ok) throw await serverFehler(res);
+        d = await res.json();
+    } catch (e) {
+        showError(meldungZu(e, 'Fehler beim Laden der Vorauszahlungen.'));
+        return null;
+    }
+    document.getElementById('vz-soll-liste').innerHTML = d.soll.length === 0
+        ? '<tr><td colspan="3" class="text-muted" style="padding: 8px;">Noch kein Soll hinterlegt — ohne Soll gibt es keinen Rückstand.</td></tr>'
+        : d.soll.map(s => `<tr>
+            <td style="padding: 8px;">${escapeHtml(datumText(s.gueltig_ab))}</td>
+            <td style="padding: 8px; text-align: right;">${escapeHtml(euroText(s.betrag))}</td>
+            <td><button type="button" class="btn-icon" aria-label="Soll löschen" title="Soll löschen" onclick="loescheVorauszahlungSoll(${Number(s.id)}, ${Number(tenantId)})"><i class="ph ph-trash" aria-hidden="true"></i></button></td>
+        </tr>`).join('');
+    // Der jüngste Monat oben: dort schaut man zuerst hin.
+    document.getElementById('vz-monate').innerHTML = [...d.monate].reverse().map(m => {
+        const [klasse, stand] = m.laufend ? ['text-muted', 'laufend']
+            : m.rueckstand ? ['dq-status-badge red', 'Rückstand']
+            : m.soll === null ? ['text-muted', 'kein Soll']
+            : ['dq-status-badge green', 'bezahlt'];
+        return `<tr>
+            <td style="padding: 6px 8px;">${escapeHtml(m.monat.slice(5) + '/' + m.monat.slice(0, 4))}</td>
+            <td style="padding: 6px 8px; text-align: right;">${escapeHtml(m.soll === null ? '–' : euroText(m.soll))}</td>
+            <td style="padding: 6px 8px; text-align: right;">${escapeHtml(euroText(m.ist))}</td>
+            <td style="padding: 6px 8px; text-align: right;">${escapeHtml(m.differenz === null ? '–' : euroText(m.differenz))}</td>
+            <td style="padding: 6px 8px;"><span class="${escapeHtml(klasse)}">${escapeHtml(stand)}</span></td>
+        </tr>`;
+    }).join('');
+    const saldo = Number(d.saldo);
+    document.getElementById('vz-saldo').textContent = saldo > 0
+        ? `Offen sind insgesamt ${euroText(saldo)} (fällige Monate, Überzahlungen gegengerechnet).`
+        : saldo < 0 ? `Überzahlt um ${euroText(-saldo)}.` : 'Kein Rückstand.';
+    document.getElementById('vz-erinnerung').value = d.erinnerung || '';
+    document.getElementById('vz-erinnerung-block').hidden = !d.erinnerung;
+    return d;
+}
+
+async function saveVorauszahlungSoll() {
+    const tenantId = document.getElementById('vz-tenant-id').value;
+    const gueltigAb = document.getElementById('vz-gueltig-ab').value;
+    const betrag = document.getElementById('vz-betrag').value;
+    if (!gueltigAb || betrag === '') {
+        showError('Bitte geben Sie an, ab wann welcher Monatsbetrag gilt.');
+        return;
+    }
+    try {
+        const res = await fetch(`/api/tenants/${tenantId}/vorauszahlung_soll`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ gueltig_ab: gueltigAb, betrag: betrag })
+        });
+        if (!res.ok) throw await serverFehler(res);
+        document.getElementById('vz-gueltig-ab').value = '';
+        document.getElementById('vz-betrag').value = '';
+        await ladeVorauszahlungen(tenantId);
+    } catch (e) {
+        showError(meldungZu(e, 'Fehler beim Speichern des Solls.'));
+    }
+}
+
+async function loescheVorauszahlungSoll(id, tenantId) {
+    if (!await frageLoeschen('Möchten Sie diesen Monatsbetrag wirklich löschen?')) return;
+    try {
+        const res = await fetch(`/api/vorauszahlung_soll/${id}`, { method: 'DELETE' });
+        if (!res.ok) throw await serverFehler(res);
+        await ladeVorauszahlungen(tenantId);
+    } catch (e) {
+        showError(meldungZu(e, 'Fehler beim Löschen des Solls.'));
+    }
+}
+
 // --- Meter Modal ---
 function openAddMeterModal() {
     const catSelect = document.getElementById('meter-category');
@@ -3049,6 +3232,14 @@ function openAddMeterModal() {
     document.getElementById('meter-number').value = '';
     document.getElementById('meter-dual-tariff').checked = false;
     document.getElementById('meter-is-official').checked = false;
+    // NK-258: derselbe Dialog bearbeitet auch; beim Anlegen ist alles frei.
+    document.getElementById('meter-id').value = '';
+    document.getElementById('meter-modal-title').textContent = 'Neuer Zähler';
+    for (const id of ['meter-ort', 'meter-eichjahr', 'meter-eichart', 'meter-geeicht-bis']) {
+        document.getElementById(id).value = '';
+    }
+    document.getElementById('meter-property').disabled = false;
+    document.getElementById('meter-apartment').disabled = false;
     // NK-125: noch keine Immobilie gewaehlt, also keine Anlage im Auswahlfeld.
     const anlageSelect = document.getElementById('meter-heizungsanlage');
     anlageSelect.replaceChildren();
@@ -3073,13 +3264,47 @@ function updateMeterApartments() {
     const anlageSelect = document.getElementById('meter-heizungsanlage');
     anlageSelect.replaceChildren();
     anlageSelect.insertAdjacentHTML('beforeend', `<option value="">— keine (misst keine Wärme) —</option>`);
-    if (propId) {
-        fetchHeizungsanlagen(propId).then(anlagen => {
-            anlagen.forEach(a => {
-                anlageSelect.insertAdjacentHTML('beforeend', `<option value="${a.id}">${escapeHtml(a.name)}</option>`);
-            });
-        }).catch(e => console.error('Heizungsanlagen konnten nicht geladen werden', e));
-    }
+    if (!propId) return Promise.resolve();
+    // NK-258: das Bearbeiten wartet darauf, um die Anlage vorzuwaehlen.
+    return fetchHeizungsanlagen(propId).then(anlagen => {
+        anlagen.forEach(a => {
+            anlageSelect.insertAdjacentHTML('beforeend', `<option value="${a.id}">${escapeHtml(a.name)}</option>`);
+        });
+    }).catch(e => console.error('Heizungsanlagen konnten nicht geladen werden', e));
+}
+
+// NK-258: Stammdaten eines Zaehlers berichtigen. Immobilie und Wohnung
+// bleiben gesperrt -- sie bestimmen, wessen Verbrauch er misst.
+async function openEditMeterModal(id) {
+    const m = meters.find(z => z.id === id);
+    if (!m) return;
+    openAddMeterModal();
+    document.getElementById('meter-id').value = m.id;
+    document.getElementById('meter-modal-title').textContent = 'Zähler bearbeiten';
+    document.getElementById('meter-category').value = m.category_id;
+    document.getElementById('meter-property').value = m.property_id;
+    await updateMeterApartments();
+    document.getElementById('meter-apartment').value = m.apartment_id ?? '';
+    document.getElementById('meter-heizungsanlage').value = m.heizungsanlage_id ?? '';
+    document.getElementById('meter-property').disabled = true;
+    document.getElementById('meter-apartment').disabled = true;
+    document.getElementById('meter-number').value = m.meter_number;
+    document.getElementById('meter-ort').value = m.ort || '';
+    document.getElementById('meter-geeicht-bis').value = m.geeicht_bis || '';
+    document.getElementById('meter-dual-tariff').checked = !!m.has_dual_tariff;
+    document.getElementById('meter-is-official').checked = !!m.is_official;
+}
+
+// R-EICH-01: Vorschlag fuer „geeicht bis“, sobald Eichjahr und Art da sind.
+async function eichfristVorschlag() {
+    const jahr = document.getElementById('meter-eichjahr').value;
+    const art = document.getElementById('meter-eichart').value;
+    if (!jahr || !art) return;
+    try {
+        const res = await fetch(`/api/eichfrist?eichjahr=${encodeURIComponent(jahr)}&art=${encodeURIComponent(art)}`);
+        if (!res.ok) throw await serverFehler(res);
+        document.getElementById('meter-geeicht-bis').value = (await res.json()).geeicht_bis;
+    } catch (e) { showError(meldungZu(e, 'Kein Vorschlag für die Eichfrist.')); }
 }
 
 function closeAddMeterModal() { document.getElementById('meter-modal').classList.remove('active'); }
@@ -3097,25 +3322,70 @@ async function saveMeter() {
     
     try {
         const anlageId = document.getElementById('meter-heizungsanlage').value;
-        const res = await fetch('/api/meters', {
-            method: 'POST',
+        const editId = document.getElementById('meter-id').value;
+        const daten = {
+            category_id: parseInt(catId),
+            meter_number: num,
+            has_dual_tariff: document.getElementById('meter-dual-tariff').checked,
+            is_official: document.getElementById('meter-is-official').checked,
+            // NK-125: welche Anlage dieser Immobilie der Zaehler misst.
+            heizungsanlage_id: anlageId ? parseInt(anlageId) : null,
+            // NK-258: Einbauort und Ende der Eichfrist, beides optional.
+            ort: document.getElementById('meter-ort').value.trim() || null,
+            geeicht_bis: document.getElementById('meter-geeicht-bis').value || null,
+        };
+        if (!editId) {
+            daten.property_id = parseInt(propId);
+            daten.apartment_id = aptId ? parseInt(aptId) : null;
+            daten.is_main_meter = aptId === "";
+        }
+        const res = await fetch(editId ? `/api/meters/${editId}` : '/api/meters', {
+            method: editId ? 'PUT' : 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-                category_id: parseInt(catId),
-                property_id: parseInt(propId),
-                apartment_id: aptId ? parseInt(aptId) : null,
-                is_main_meter: aptId === "",
-                meter_number: num,
-                has_dual_tariff: document.getElementById('meter-dual-tariff').checked,
-                is_official: document.getElementById('meter-is-official').checked,
-                // NK-125: welche Anlage dieser Immobilie der Zaehler misst.
-                heizungsanlage_id: anlageId ? parseInt(anlageId) : null
-            })
+            body: JSON.stringify(daten)
         });
         if (!res.ok) throw await serverFehler(res);
         closeAddMeterModal();
         fetchMeters();
     } catch(e) { showError(meldungZu(e, 'Fehler beim Speichern.')); }
+}
+
+// --- Zaehlerwechsel (NK-258) ---
+function openWechselModal(id) {
+    const m = meters.find(z => z.id === id);
+    if (!m) return;
+    document.getElementById('wechsel-meter-id').value = m.id;
+    document.getElementById('wechsel-modal-title').textContent = `Zählerwechsel: ${m.meter_number}`;
+    for (const feld of ['datum', 'endstand', 'endstand-nt', 'nummer', 'anfangsstand',
+                        'anfangsstand-nt', 'geeicht-bis']) {
+        document.getElementById('wechsel-' + feld).value = '';
+    }
+    document.getElementById('wechsel-ort').value = m.ort || '';
+    document.querySelectorAll('#wechsel-modal .wechsel-nt').forEach(
+        el => { el.hidden = !m.has_dual_tariff; });
+    document.getElementById('wechsel-modal').classList.add('active');
+}
+
+function closeWechselModal() { document.getElementById('wechsel-modal').classList.remove('active'); }
+
+async function saveWechsel() {
+    const id = document.getElementById('wechsel-meter-id').value;
+    const formData = new FormData();
+    for (const [feld, name] of [['datum', 'datum'], ['endstand', 'endstand'],
+                                ['endstand-nt', 'endstand_nt'], ['nummer', 'meter_number'],
+                                ['anfangsstand', 'anfangsstand'], ['anfangsstand-nt', 'anfangsstand_nt'],
+                                ['ort', 'ort'], ['geeicht-bis', 'geeicht_bis']]) {
+        formData.append(name, document.getElementById('wechsel-' + feld).value.trim());
+    }
+    try {
+        // Der Endstand wird geprueft wie jeder Stand (NK-216): 409 heisst Rueckfrage.
+        const res = await sendeMitNachfrage(`/api/meters/${id}/wechsel`, 'POST', formData);
+        if (!res) return;
+        if (!res.ok) throw await serverFehler(res);
+        closeWechselModal();
+        fetchMeters();
+        fetchReadings();
+    } catch (e) { showError(meldungZu(e, 'Der Zählerwechsel wurde nicht gespeichert.')); }
 }
 
 async function deleteMeter(id) {
@@ -3205,11 +3475,14 @@ async function deleteReading(id) {
 function handleReadingMeterChange() {
     const meterId = document.getElementById('reading-meter').value;
     const meter = meters.find(m => m.id == meterId);
+    // NK-255: die Einheit des Zählers steht am Feld, nicht nur im letzten Stand.
+    const einheit = meter && meter.einheit ? meter.einheit : '';
     if (meter && meter.has_dual_tariff) {
-        document.getElementById('label-reading-value').textContent = 'Zählerstand (HT)';
+        document.getElementById('label-reading-value').textContent = `Zählerstand (HT${einheit && ', ' + einheit})`;
+        document.getElementById('label-reading-value-nt').textContent = `Zählerstand (NT${einheit && ', ' + einheit})`;
         document.getElementById('group-reading-value-nt').style.display = 'block';
     } else {
-        document.getElementById('label-reading-value').textContent = 'Zählerstand';
+        document.getElementById('label-reading-value').textContent = einheit ? `Zählerstand (${einheit})` : 'Zählerstand';
         document.getElementById('group-reading-value-nt').style.display = 'none';
         document.getElementById('reading-value-nt').value = '';
     }
@@ -3348,17 +3621,29 @@ function ablesenZeilen(propertyId) {
                 : `${fmt.format(letzte.value)}${einheit}`)
               + ` am ${new Date(letzte.reading_date).toLocaleDateString('de-DE')}`);
         const nameHtml = escapeHtml(`${m.is_main_meter ? 'Allgemein' : (m.apartment_name || '')} · ${zaehlerArtName(m.category_name)} (${m.meter_number})`);
-        const ntHtml = m.has_dual_tariff ? `<div class="form-group feld-breit"><label for="ablesen-nt-${m.id}">Stand (NT)</label>
+        // NK-255: die Einheit gehört an das Feld, nicht nur in den letzten Stand.
+        const stand = tarif => {
+            const zusatz = [tarif, m.einheit].filter(Boolean).join(', ');
+            return escapeHtml(zusatz ? `Stand (${zusatz})` : 'Stand');
+        };
+        const ntLabelHtml = stand('NT');
+        const wertLabelHtml = stand(m.has_dual_tariff && 'HT');
+        const ntHtml = m.has_dual_tariff ? `<div class="form-group feld-breit"><label for="ablesen-nt-${m.id}">${ntLabelHtml}</label>
                     <input type="number" inputmode="decimal" step="0.01" id="ablesen-nt-${m.id}"></div>` : '';
         return `<div class="glass-panel ablesen-zeile" id="ablesen-zeile-${m.id}" style="padding: 12px; margin-bottom: 12px;">
             <strong>${nameHtml}</strong><br><small style="color: var(--text-muted)">${standHtml}</small>
             <div class="felder-nebeneinander">
-                <div class="form-group feld-breit"><label for="ablesen-wert-${m.id}">${m.has_dual_tariff ? 'Stand (HT)' : 'Stand'}</label>
+                <div class="form-group feld-breit"><label for="ablesen-wert-${m.id}">${wertLabelHtml}</label>
                     <input type="number" inputmode="decimal" step="0.01" id="ablesen-wert-${m.id}"></div>
                 ${ntHtml}
             </div>
-            <div class="form-group"><label for="ablesen-foto-${m.id}">Foto (optional)</label>
-                <input type="file" id="ablesen-foto-${m.id}" accept="image/*" capture="environment"></div>
+            <div class="form-group"><label>Foto (optional)</label>
+                <div class="file-upload-wrapper">
+                    <input type="file" id="ablesen-foto-${m.id}" accept="image/*" capture="environment"
+                        onchange="this.nextElementSibling.lastElementChild.textContent = this.files[0] ? this.files[0].name : 'Foto auswählen...'">
+                    <label for="ablesen-foto-${m.id}" class="file-upload-label">
+                        <i class="ph ph-camera" aria-hidden="true"></i><span>Foto auswählen...</span></label>
+                </div></div>
             <small class="ablesen-meldung" id="ablesen-meldung-${m.id}" role="status"></small>
         </div>`;
     }).join('') || '<p style="color: var(--text-muted)">Diese Immobilie hat noch keine Zähler.</p>';
@@ -3574,6 +3859,9 @@ async function openAddInvoiceModal(editInvoiceId = null) {
             document.getElementById('invoice-preis-ht').value = i.preis_ht ?? '';
             document.getElementById('invoice-preis-nt').value = i.preis_nt ?? '';
             document.getElementById('invoice-grundpreis').value = i.grundpreis ?? '';
+            // NK-268: Art und Lohnanteil nach § 35a EStG.
+            document.getElementById('invoice-art-35a').value = i.art_35a || '';
+            document.getElementById('invoice-lohnanteil').value = i.lohnanteil ?? '';
             document.getElementById('invoice-pages').value = i.document_pages || '';
             // NK-125: Anlage, Posten und CO2-Angaben des Belegs.
             await populateInvoiceHeizung(i.heizungsanlage_id || null);
@@ -3605,6 +3893,8 @@ async function openAddInvoiceModal(editInvoiceId = null) {
         document.getElementById('invoice-preis-ht').value = '';
         document.getElementById('invoice-preis-nt').value = '';
         document.getElementById('invoice-grundpreis').value = '';
+        document.getElementById('invoice-art-35a').value = '';
+        document.getElementById('invoice-lohnanteil').value = '';
         document.getElementById('invoice-pages').value = '';
         if (provSelect) provSelect.value = '';
         docSelect.value = '';
@@ -3847,6 +4137,15 @@ async function saveInvoice() {
     // F-137: leer heisst keine Angabe, der Server rechnet dann wie bisher.
     const grundpreis = document.getElementById('invoice-grundpreis').value;
     if (grundpreis !== '') formData.append('grundpreis', grundpreis);
+    // NK-268: Art und Lohnanteil nach § 35a EStG gehoeren zusammen (R-35A-01).
+    const art35a = document.getElementById('invoice-art-35a').value;
+    const lohnanteil = document.getElementById('invoice-lohnanteil').value;
+    if ((art35a === '') !== (lohnanteil === '')) {
+        showError('Der Lohnanteil nach § 35a EStG braucht beides: die Art der Leistung und den Betrag, oder keines von beiden.');
+        return;
+    }
+    if (art35a !== '') formData.append('art_35a', art35a);
+    if (lohnanteil !== '') formData.append('lohnanteil', lohnanteil);
     // NK-125: Anlage und Posten gehoeren zusammen (D-44); die CO2-Angaben
     // des Belegs kommen dazu, sobald eine Anlage gewaehlt ist.
     const heizungsanlageId = document.getElementById('invoice-heizungsanlage').value;
@@ -4000,6 +4299,7 @@ async function fetchVermieterdaten() {
         const stand = await res.json();
         document.getElementById('vermieter-name').value = stand.name || '';
         document.getElementById('vermieter-iban').value = stand.iban || '';
+        document.getElementById('vermieter-art').value = stand.art || '';
         const quelle = [];
         if (stand.name_quelle === 'umgebung') quelle.push('Name aus der Umgebungsvariable VERMIETER_NAME');
         if (stand.iban_quelle === 'umgebung') quelle.push('IBAN aus der Umgebungsvariable VERMIETER_IBAN');
@@ -4058,11 +4358,12 @@ window.vermieterLogoLoeschen = vermieterLogoLoeschen;
 async function saveVermieterdaten() {
     const name = document.getElementById('vermieter-name').value.trim();
     const iban = document.getElementById('vermieter-iban').value.trim();
+    const art = document.getElementById('vermieter-art').value;
     try {
         const res = await fetch('/api/vermieter', {
             method: 'PUT',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ name, iban })
+            body: JSON.stringify({ name, iban, art })
         });
         if (!res.ok) throw await serverFehler(res);
         showSuccess('Vermieterdaten gespeichert.');
@@ -4870,17 +5171,180 @@ async function rtVorjahrFuellen() {
 }
 window.rtVorjahrFuellen = rtVorjahrFuellen;
 
-// Aus Schritt 2 des Assistenten: Immobilie und Jahr stehen schon fest.
-async function jahrVorjahrFuellen() {
-    if (!jahrStand) return;
+// Aus Schritt 2 des Assistenten und aus dem Jahreswechsel (NK-267):
+// Immobilie und Jahr stehen schon fest.
+async function rechnungenWieVorjahr(haus, jahr) {
     await oeffneRechnungstabelle();
-    document.getElementById('rt-immobilie').value = jahrStand.property_id;
+    document.getElementById('rt-immobilie').value = haus;
     rtImmobilieGewaehlt();
-    document.getElementById('rt-jahr').value = jahrStand.jahr;
+    document.getElementById('rt-jahr').value = jahr;
     rtJahrGewaehlt();
     await rtVorjahrFuellen();
 }
+
+async function jahrVorjahrFuellen() {
+    if (jahrStand) await rechnungenWieVorjahr(jahrStand.property_id, jahrStand.jahr);
+}
 window.jahrVorjahrFuellen = jahrVorjahrFuellen;
+
+// --- NK-267: Neues Jahr beginnen ----------------------------------------
+// Ein geführter Ablauf nur über vorhandene Wege: Zähler zum Stichtag ablesen
+// (NK-227), Vorauszahlungen nach der letzten Abrechnung anpassen (NK-226, in
+// deren Details), Rechnungen des neuen Jahres wie im Vorjahr vorbelegen
+// (NK-230), am Ende eine Checkliste. Den Stand hält der Browser: Abbrechen
+// behält ihn, beim nächsten Öffnen geht es an derselben Stelle weiter.
+const JW_SPEICHER = 'nk-jahreswechsel';
+const JW_PUNKTE = [
+    ['ablesen', 'Zähler zum Stichtag abgelesen'],
+    ['vorauszahlung', 'Vorauszahlungen geprüft und angepasst'],
+    ['vorjahr', 'Rechnungen des neuen Jahres wie im Vorjahr vorbelegt'],
+];
+let jwStand = null;
+
+function jwSichern() {
+    try { localStorage.setItem(JW_SPEICHER, JSON.stringify(jwStand)); } catch (e) { /* ohne Speicher keine Wiederaufnahme */ }
+}
+
+function jwGemerkt() {
+    try { return JSON.parse(localStorage.getItem(JW_SPEICHER)); } catch (e) { return null; }
+}
+
+// Der Tag vor dem Beginn des neuen Abrechnungsjahres (D-114), als ISO-Datum.
+function jwStichtag() {
+    const haus = properties.find(p => String(p.id) === String(jwStand.property_id)) || {};
+    const [tag, monat] = (haus.abrechnungsjahr_beginn || '01.01.').split('.').map(Number);
+    return new Date(Date.UTC(jwStand.jahr, monat - 1, tag - 1)).toISOString().slice(0, 10);
+}
+
+async function oeffneJahreswechsel() {
+    await fetchProperties();
+    if (!properties.length) {
+        showError('Legen Sie zuerst eine Immobilie an.');
+        return;
+    }
+    const gemerkt = jwGemerkt();
+    const weiter = !!(gemerkt && gemerkt.erledigt
+        && properties.some(p => String(p.id) === String(gemerkt.property_id)));
+    jwStand = weiter ? gemerkt
+        : { property_id: String(properties[0].id), jahr: new Date().getFullYear(), schritt: 1, erledigt: {} };
+    const auswahl = document.getElementById('jw-immobilie');
+    auswahl.innerHTML = properties.map(p =>
+        `<option value="${escapeHtml(String(p.id))}">${escapeHtml(p.name)}</option>`).join('');
+    auswahl.value = jwStand.property_id;
+    document.getElementById('jw-jahr').value = jwStand.jahr;
+    document.getElementById('jw-wieder').hidden = !weiter;
+    jwGehe(Math.min(4, Math.max(1, Number(jwStand.schritt) || 1)));
+    document.getElementById('jahreswechsel-modal').classList.add('active');
+}
+window.oeffneJahreswechsel = oeffneJahreswechsel;
+
+// Eine andere Immobilie oder ein anderes Jahr ist ein neuer Jahreswechsel.
+function jwAuswahl() {
+    jwStand = { property_id: document.getElementById('jw-immobilie').value,
+                jahr: Number(document.getElementById('jw-jahr').value) || new Date().getFullYear(),
+                schritt: 1, erledigt: {} };
+    document.getElementById('jw-wieder').hidden = true;
+    jwGehe(1);
+}
+window.jwAuswahl = jwAuswahl;
+
+function jwZeigen() {
+    document.querySelectorAll('[data-jw-schritt]').forEach(abschnitt => {
+        abschnitt.hidden = Number(abschnitt.dataset.jwSchritt) !== jwStand.schritt;
+    });
+    document.querySelectorAll('#jw-schritte li').forEach(punkt => {
+        const nummer = Number(punkt.dataset.schritt);
+        punkt.classList.toggle('aktuell', nummer === jwStand.schritt);
+        punkt.classList.toggle('erledigt', nummer < 4 && !!jwStand.erledigt[JW_PUNKTE[nummer - 1][0]]);
+        if (nummer === jwStand.schritt) punkt.setAttribute('aria-current', 'step');
+        else punkt.removeAttribute('aria-current');
+    });
+    JW_PUNKTE.forEach(([punkt]) => {
+        document.getElementById(`jw-erledigt-${punkt}`).checked = !!jwStand.erledigt[punkt];
+    });
+    document.getElementById('jw-stichtag').textContent = datumText(jwStichtag());
+    document.getElementById('jw-zurueck').disabled = jwStand.schritt === 1;
+    document.getElementById('jw-weiter').hidden = jwStand.schritt === 4;
+    document.getElementById('jw-fertig').hidden = jwStand.schritt !== 4;
+}
+
+function jwGehe(schritt) {
+    jwStand.schritt = schritt;
+    jwSichern();
+    jwZeigen();
+    if (schritt === 2) jwAbrechnungenZeigen();
+    if (schritt === 4) jwChecklisteZeigen();
+}
+window.jwGehe = jwGehe;
+
+function jwSchritt(richtung) {
+    jwGehe(Math.min(4, Math.max(1, jwStand.schritt + richtung)));
+}
+window.jwSchritt = jwSchritt;
+
+function jwHaken(punkt, an) {
+    jwStand.erledigt[punkt] = an;
+    jwSichern();
+    jwZeigen();
+}
+window.jwHaken = jwHaken;
+
+function jwAblesen() {
+    openAblesen();
+    document.getElementById('ablesen-property').value = jwStand.property_id;
+    document.getElementById('ablesen-datum').value = jwStichtag();
+    ablesenListe();
+}
+window.jwAblesen = jwAblesen;
+
+function jwVorjahr() {
+    return rechnungenWieVorjahr(jwStand.property_id, jwStand.jahr);
+}
+window.jwVorjahr = jwVorjahr;
+
+// Je Mieter der Immobilie die letzte Abrechnung; in ihren Details steht der
+// Vorschlag zur Vorauszahlung samt Serienbuchung (NK-226).
+async function jwAbrechnungenZeigen() {
+    const ziel = document.getElementById('jw-abrechnungen');
+    try {
+        const res = await fetch('/api/billing/reports');
+        if (!res.ok) throw await serverFehler(res);
+        const letzte = new Map();
+        (await res.json()).filter(r => String(r.property_id) === String(jwStand.property_id))
+            .sort((a, b) => a.end_date < b.end_date ? 1 : -1)
+            .forEach(r => { if (!letzte.has(r.tenant_id)) letzte.set(r.tenant_id, r); });
+        ziel.innerHTML = [...letzte.values()].map(r => {
+            const zeileHtml = escapeHtml(`${r.tenant_name} · ${r.apartment_name} · ${datumText(r.start_date)} bis ${datumText(r.end_date)}`);
+            return `<li>${zeileHtml} <button type="button" class="btn-tint" onclick="openReportDetails(${Number(r.id)})">Abrechnung ansehen</button></li>`;
+        }).join('') || '<li>Für diese Immobilie gibt es noch keine Abrechnung und damit keinen Vorschlag.</li>';
+    } catch (e) {
+        ziel.innerHTML = '';
+        showError(meldungZu(e, 'Die Abrechnungen ließen sich nicht laden.'));
+    }
+}
+
+function jwChecklisteZeigen() {
+    document.getElementById('jw-checkliste').innerHTML = JW_PUNKTE.map(([punkt, text], i) => {
+        const textHtml = escapeHtml(text);
+        return jwStand.erledigt[punkt]
+            ? `<li class="erledigt"><i class="ph ph-check-circle" aria-hidden="true"></i> ${textHtml}</li>`
+            : `<li><i class="ph ph-circle" aria-hidden="true"></i> ${textHtml}: offen.
+                <button type="button" class="btn-tint" onclick="jwGehe(${Number(i + 1)})">Zurück zu Schritt ${Number(i + 1)}</button></li>`;
+    }).join('');
+}
+
+// Abbrechen behält den Stand; erst „Jahreswechsel schließen“ verwirft ihn.
+function jwAbbrechen() {
+    document.getElementById('jahreswechsel-modal').classList.remove('active');
+}
+window.jwAbbrechen = jwAbbrechen;
+
+function jwAbschliessen() {
+    try { localStorage.removeItem(JW_SPEICHER); } catch (e) { /* nichts gemerkt */ }
+    jwStand = null;
+    jwAbbrechen();
+}
+window.jwAbschliessen = jwAbschliessen;
 
 // --- Jahresabrechnungs-Assistent (NK-160) ------------------------------------
 // Fünf Schritte: Jahr und Immobilie -> Rechnungen (mit Vorjahr) ->
@@ -4926,13 +5390,16 @@ function warnungenBuendeln(warnungen) {
     });
 }
 
-// D-116: höchstens drei Meldungen sichtbar, der Rest aufklappbar.
 function warnungenHtml(warnungen) {
-    const zeilen = warnungenBuendeln(warnungen).map(w =>
+    return hinweiseKappen(warnungenBuendeln(warnungen).map(w =>
         `<li title="${escapeHtml(w.kennung)}">${escapeHtml(w.kurz)}`
         + (w.tun ? ` <strong>Was tun:</strong> ${escapeHtml(w.tun)}` : '')
         + (w.rest ? ` <details><summary>Mehr</summary>${escapeHtml(w.rest)}</details>` : '')
-        + '</li>');
+        + '</li>'));
+}
+
+// D-116: höchstens drei Meldungen sichtbar, der Rest aufklappbar.
+function hinweiseKappen(zeilen) {
     if (zeilen.length <= 3) return zeilen.join('');
     const weitere = zeilen.length - 3;
     return zeilen.slice(0, 3).join('')
@@ -4989,6 +5456,8 @@ async function jahrSchritt(richtung) {
     try {
         if (richtung > 0 && jahrAktuell === 1 && !(await jahrNeuLaden())) return;
         if (richtung > 0 && jahrAktuell === 3) await jahrVorschauLaden();
+        // NK-265: der Prüfstand zeigt, was seit Schritt 1 behoben wurde.
+        if (richtung > 0 && jahrAktuell === 4) await jahrNeuLaden();
         jahrAktuell = Math.min(5, Math.max(1, jahrAktuell + richtung));
         jahrZeigen();
     } finally {
@@ -5011,6 +5480,7 @@ async function jahrNeuLaden() {
     jahrKostenartenZeigen();
     jahrAblesungenZeigen();
     jahrFristZeigen();
+    jahrPruefstandZeigen();
     return true;
 }
 window.jahrNeuLaden = jahrNeuLaden;
@@ -5166,6 +5636,57 @@ async function jahrFestsetzen() {
     }
 }
 window.jahrFestsetzen = jahrFestsetzen;
+
+// --- NK-265: Prüfstand vor dem Festsetzen ---
+// Die Warnungen rechnet der Server (jahrStand.pruefstand). Jede führt mit
+// einem Knopf zu der Stelle, die sie behebt; festsetzen geht trotzdem.
+const PRUEFSTAND_ZIELE = {
+    rechnungen: ['Rechnungen prüfen', () => jahrGeheZu(2)],
+    rechnung: ['Rechnung öffnen', id => openAddInvoiceModal(id)],
+    zaehler: ['Zählerstände ansehen', id => openHistoryModal(id)],
+    ablesung: ['Ablesung erfassen', id => openAddReadingModal(id)],
+    mieter: ['Mieter erfassen', id => {
+        openAddTenantModal();
+        document.getElementById('tenant-apartment').value = String(id);
+    }],
+    zahlung: ['Zahlung erfassen', id => {
+        openAddPaymentModal();
+        document.getElementById('payment-tenant').value = String(id);
+        document.getElementById('payment-type').value = 'Nebenkostenvorauszahlung';
+        toggleBillingReportField();
+    }],
+};
+
+function jahrGeheZu(schritt) {
+    jahrAktuell = schritt;
+    jahrZeigen();
+}
+
+function jahrPruefstandZeigen() {
+    const befunde = jahrStand.pruefstand || [];
+    const ziel = document.getElementById('jahr-pruefstand');
+    if (!befunde.length) {
+        ziel.innerHTML = '<p class="karten-text">Der Prüfstand findet nichts Auffälliges.</p>';
+        return;
+    }
+    const zeilen = befunde.map((b, i) => {
+        const beschriftung = (PRUEFSTAND_ZIELE[b.ziel.aktion] || [])[0];
+        const knopfHtml = beschriftung
+            ? ` <button type="button" class="btn-tint btn-klein" onclick="jahrPruefstandOeffnen(${Number(i)})">${escapeHtml(beschriftung)}</button>`
+            : '';
+        return `<li>${escapeHtml(b.text)} <strong>Was tun:</strong> ${escapeHtml(b.tun)}${knopfHtml}</li>`;
+    });
+    const listeHtml = hinweiseKappen(zeilen);
+    ziel.innerHTML = `<p class="karten-text">${escapeHtml(anzahlText(befunde.length, 'Hinweis', 'Hinweise'))} vor dem Festsetzen. `
+        + 'Sie können trotzdem festsetzen.</p>'
+        + `<ul class="jahr-warnungen">${listeHtml}</ul>`;
+}
+
+function jahrPruefstandOeffnen(index) {
+    const befund = jahrStand.pruefstand[index];
+    PRUEFSTAND_ZIELE[befund.ziel.aktion][1](befund.ziel.id);
+}
+window.jahrPruefstandOeffnen = jahrPruefstandOeffnen;
 
 // --- Anschreiben-Vorlage des Objekts (NK-124, Backend seit NK-064) ---
 
@@ -5488,7 +6009,7 @@ function berichtZustellungsBlock(id, umschlag) {
                 </p>
             </div>`;
     }
-    // NK-221 (V4): das Feld startet leer; ein vorbelegtes Heute wurde
+    // NK-221: das Feld startet leer; ein vorbelegtes Heute wurde
     // ungelesen gespeichert, und die Einwendungsfrist lief ab falschem Tag.
     return `
         <div class="dashboard-card glass-panel" style="margin-bottom: 20px; padding: 16px;">
@@ -5555,7 +6076,7 @@ function berichtVersionenBlock(id, umschlag) {
         </div>`;
 }
 
-// NK-217 (F2): die Abrechnung bleibt, wie sie zugegangen ist. NK-229 (R-DOC-03):
+// NK-217: die Abrechnung bleibt, wie sie zugegangen ist. NK-229 (R-DOC-03):
 // aufgeklappt sagt der Hinweis, was sich geändert hat, wann eine Korrektur
 // sinnvoll ist, und führt zur Vorschau, bevor etwas entsteht.
 function regelstandHinweis(id, aenderungen) {
@@ -5569,7 +6090,7 @@ function regelstandHinweis(id, aenderungen) {
     </details>`;
 }
 
-/* NK-217 (F2): vor dem Bestätigen steht da, was die Korrektur ändert. */
+/* NK-217: vor dem Bestätigen steht da, was die Korrektur ändert. */
 function korrekturVorschauText(v) {
     const zeile = (name, p) => `${name}: ${p.alt === null ? 'bisher ohne Wert' : euroText(p.alt)} → ${euroText(p.neu)}`;
     const zeilen = v.positionen.filter(p => p.alt !== p.neu)
@@ -5651,7 +6172,7 @@ async function openReportDetails(id) {
             </div>
             <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px;">
                 <a class="btn-secondary" href="/api/billing/reports/${id}/belege" download
-                   title="Alle Belege dieser Abrechnung als ZIP für den Mieter (§ 556 Abs. 4 BGB)">
+                   title="Abrechnung, Rechenweg, Belege und Ablesefotos der eigenen Zähler als ZIP für den Mieter (§ 556 Abs. 4 BGB)">
                     <i class="ph ph-file-zip"></i> Belege herunterladen
                 </a>
                 <a class="btn-secondary" href="/api/billing/reports/${id}/positionen.csv" download
@@ -6126,7 +6647,7 @@ async function generateBillPreview(tenantId, startDate, endDate, categoryIds = n
                         : '';
                     mdStr += `<div><span style="font-weight:bold;">Hauptzähler${escapeHtml(hzZeitraum)}:</span> ${mCons} ${escapeHtml(md.unit)}</div>`;
                     mdStr += `<div><span style="font-weight:bold;">Allgemeinverbrauch:</span> ${aCons} ${escapeHtml(md.unit)}</div>`;
-                    // NK-209 (B2): der Anteil, mit dem gerechnet wurde (Personentage)
+                    // NK-209: der Anteil, mit dem gerechnet wurde (Personentage)
                     if (md.allgemein_quote != null && md.allgemein_anteil != null) {
                         const prozent = (md.allgemein_quote * 100).toLocaleString('de-DE',
                             { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -6378,6 +6899,7 @@ async function fetchAnalytics() {
         renderFinanceCharts(dataB.cashflow);
     } else if (currentAnalyticsView === 'dataquality') {
         viewDQ.style.display = 'flex';
+        ladeFristen();
         const resDQ = await fetch(`/api/analytics/data-quality/${propId}`);
         const dataDQ = await resDQ.json();
         renderDataQuality(dataDQ);
@@ -6387,6 +6909,47 @@ async function fetchAnalytics() {
         const dataA = await resA.json();
         renderAptConsumptionChart(dataA.own_consumption);
         renderAptCostsChart(dataA.cost_distribution);
+        renderMehrjahresblick(dataA.mehrjahresblick);
+    }
+}
+
+/* NK-263: Euro je m² und Jahr je Kostenart und die Vorauszahlungen über die
+   Abrechnungsjahre. Spalten sind die Jahre, ein leeres Jahr bleibt als Lücke. */
+function renderMehrjahresblick(jahre) {
+    const kopf = document.getElementById('mjb-kopf');
+    const zeilen = document.getElementById('mjb-zeilen');
+    if (!jahre || jahre.length === 0) {
+        kopf.innerHTML = '';
+        zeilen.innerHTML = '<tr><td class="text-muted" style="padding: 8px;">Noch keine Abrechnung — der Verlauf beginnt mit der ersten.</td></tr>';
+        return;
+    }
+    const wert = w => (w === null || w === undefined ? '–' : euroText(w));
+    const zeile = (titel, werte, starkAttr = '') => {
+        const werteHtml = werte.map(w => `<td style="padding: 6px 8px; text-align: right;">${escapeHtml(w)}</td>`).join('');
+        return `<tr${starkAttr}><th scope="row" style="text-align: left; padding: 6px 8px; font-weight: inherit;">${escapeHtml(titel)}</th>${werteHtml}</tr>`;
+    };
+    const arten = [...new Set(jahre.flatMap(j => Object.keys(j.je_qm)))].sort();
+    const jahreHtml = jahre.map(j => `<th scope="col" style="text-align: right; padding: 6px 8px;">${escapeHtml(j.jahr)}</th>`).join('');
+    kopf.innerHTML = `<th scope="col" style="text-align: left; padding: 6px 8px;">€ je m² und Jahr</th>${jahreHtml}`;
+    zeilen.innerHTML = arten.map(a => zeile(a, jahre.map(j => wert(j.je_qm[a])))).join('')
+        + zeile('Gesamt', jahre.map(j => wert(j.je_qm_gesamt)), ' style="font-weight: 600;"')
+        + zeile('Vorauszahlungen im Jahr', jahre.map(j => (j.belegte_tage ? euroText(j.vorauszahlung) : '–')))
+        + zeile('Belegt', jahre.map(j => (j.belegte_tage ? `${j.belegte_tage} von ${j.jahrestage} Tagen` : 'leer')));
+}
+
+/* NK-262 (R-FRIST-05): die kommenden Termine aller Immobilien. Der Kalender
+   ist informativ; laedt er nicht, bleibt die uebrige Ansicht stehen. */
+async function ladeFristen() {
+    const liste = document.getElementById('fristen-liste');
+    try {
+        const res = await fetch('/api/fristen');
+        if (!res.ok) throw await serverFehler(res);
+        const { termine } = await res.json();
+        liste.innerHTML = termine.length === 0
+            ? '<li class="text-muted">Keine anstehenden Termine.</li>'
+            : termine.map(t => `<li><strong>${escapeHtml(datumText(t.datum))}</strong> · ${escapeHtml(t.titel)}</li>`).join('');
+    } catch (e) {
+        liste.innerHTML = `<li class="text-muted">${escapeHtml(meldungZu(e, 'Die Fristen ließen sich nicht laden.'))}</li>`;
     }
 }
 
@@ -7042,47 +7605,48 @@ function renderBuildingVitalSigns(kpis) {
     const container = document.getElementById('kpis-container');
     if (!container) return;
     
+    // NK-260: Farben und Hover kommen aus .kpi-karte in style.css, nicht aus dem Markup.
     let trendIcon = kpis.general_power_trend > 0 ? '<i class="ph ph-trend-up"></i>' : '<i class="ph ph-trend-down"></i>';
-    let trendColor = kpis.general_power_trend > 0 ? 'color: var(--danger-color)' : 'color: var(--success-color)';
+    let trendColor = kpis.general_power_trend > 0 ? 'kpi-trend--hoch' : 'kpi-trend--runter';
     if (kpis.general_power_trend === 0) {
         trendIcon = '<i class="ph ph-minus"></i>';
-        trendColor = 'color: var(--text-muted)';
+        trendColor = 'kpi-trend--gleich';
     }
 
     const costsPeriod = kpis.costs_period ? kpis.costs_period : kpis.reference_year;
     const powerPeriod = kpis.power_period ? kpis.power_period : kpis.reference_year;
 
     container.innerHTML = `
-        <div class="dashboard-card glass-panel" style="padding: 20px; border-left: 4px solid var(--success-color);">
-            <div style="font-size: 0.9em; color: var(--text-muted); margin-bottom: 8px;">Überschuss im laufenden Jahr (${new Date().getFullYear()})</div>
-            <div style="font-size: 1.8em; font-weight: 600; color: ${kpis.cashflow_ytd >= 0 ? 'var(--success-color)' : 'var(--danger-color)'}">
+        <div class="dashboard-card glass-panel kpi-karte">
+            <div class="kpi-titel">Kontobewegung ${new Date().getFullYear()}</div>
+            <div class="kpi-wert">
                 ${kpis.cashflow_ytd.toLocaleString('de-DE', {style: 'currency', currency: 'EUR'})}
             </div>
         </div>
-        <div class="dashboard-card glass-panel kpi-clickable" id="kpi-costs-card" onclick="openCostsHistory()" style="padding: 20px; border-left: 4px solid var(--primary-color); cursor: pointer; transition: transform 0.15s, box-shadow 0.15s;" onmouseenter="this.style.transform='translateY(-2px)';this.style.boxShadow='0 4px 12px rgba(0,0,0,0.1)'" onmouseleave="this.style.transform='none';this.style.boxShadow='none'">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <div style="font-size: 0.9em; color: var(--text-muted); margin-bottom: 4px;">Betriebskosten</div>
-                <i class="ph ph-clock-counter-clockwise" style="color: var(--text-muted); font-size: 1.1em;" title="Verlauf anzeigen"></i>
+        <div class="dashboard-card glass-panel kpi-karte kpi-clickable" id="kpi-costs-card" onclick="openCostsHistory()">
+            <div class="kpi-kopf">
+                <div class="kpi-titel">Betriebskosten</div>
+                <i class="ph ph-clock-counter-clockwise kpi-verlauf" title="Verlauf anzeigen"></i>
             </div>
-            <div style="font-size: 13px; color: var(--text-muted); margin-bottom: 8px;">${escapeHtml(costsPeriod)}</div>
-            <div style="font-size: 1.8em; font-weight: 600; color: var(--text-color)">
+            <div class="kpi-zeitraum">${escapeHtml(costsPeriod)}</div>
+            <div class="kpi-wert">
                 ${kpis.total_costs_last_year.toLocaleString('de-DE', {style: 'currency', currency: 'EUR'})}
             </div>
         </div>
-        <div class="dashboard-card glass-panel kpi-clickable" id="kpi-power-card" onclick="openPowerHistory()" style="padding: 20px; border-left: 4px solid var(--warning-color); cursor: pointer; transition: transform 0.15s, box-shadow 0.15s;" onmouseenter="this.style.transform='translateY(-2px)';this.style.boxShadow='0 4px 12px rgba(0,0,0,0.1)'" onmouseleave="this.style.transform='none';this.style.boxShadow='none'">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <div style="font-size: 0.9em; color: var(--text-muted); margin-bottom: 4px;">Allgemeinstrom</div>
-                <i class="ph ph-clock-counter-clockwise" style="color: var(--text-muted); font-size: 1.1em;" title="Verlauf anzeigen"></i>
+        <div class="dashboard-card glass-panel kpi-karte kpi-karte--strom kpi-clickable" id="kpi-power-card" onclick="openPowerHistory()">
+            <div class="kpi-kopf">
+                <div class="kpi-titel">Allgemeinstrom</div>
+                <i class="ph ph-clock-counter-clockwise kpi-verlauf" title="Verlauf anzeigen"></i>
             </div>
-            <div style="font-size: 13px; color: var(--text-muted); margin-bottom: 8px;">${escapeHtml(powerPeriod)}</div>
-            <div style="font-size: 1.8em; font-weight: 600; color: var(--text-color); display: flex; align-items: baseline; gap: 8px;">
-                ${window.wrapInterpolated(kpis.general_power.toLocaleString('de-DE'), kpis.general_power_is_interpolated !== false)} <span style="font-size: 13px; font-weight: 400;">kWh</span>
-                <span style="font-size: 13px; ${trendColor}">${trendIcon} ${Math.abs(kpis.general_power_trend).toLocaleString('de-DE')}%</span>
+            <div class="kpi-zeitraum">${escapeHtml(powerPeriod)}</div>
+            <div class="kpi-wert kpi-wert--zeile">
+                ${window.wrapInterpolated(kpis.general_power.toLocaleString('de-DE'), kpis.general_power_is_interpolated !== false)} <span class="kpi-einheit">kWh</span>
+                <span class="kpi-trend ${trendColor}">${trendIcon} ${Math.abs(kpis.general_power_trend).toLocaleString('de-DE')}%</span>
             </div>
         </div>
-        <div class="dashboard-card glass-panel" style="padding: 20px; border-left: 4px solid var(--danger-color);">
-            <div style="font-size: 0.9em; color: var(--text-muted); margin-bottom: 8px;">Ausstehende Abrechnungen</div>
-            <div style="font-size: 1.8em; font-weight: 600; color: ${kpis.open_tasks > 0 ? 'var(--danger-color)' : 'var(--success-color)'}">
+        <div class="dashboard-card glass-panel kpi-karte kpi-karte--offen">
+            <div class="kpi-titel">Ausstehende Abrechnungen</div>
+            <div class="kpi-wert ${kpis.open_tasks > 0 ? 'kpi-wert--offen' : 'kpi-wert--erledigt'}">
                 ${kpis.open_tasks}
             </div>
         </div>
@@ -7280,17 +7844,12 @@ function renderBuildingComparison(apartment_comparison) {
     if (chartBuildingComparisonInstance) chartBuildingComparisonInstance.destroy();
     
     const titleEl = document.getElementById('chart-comparison-title');
-    // Leerhinweis neben der Zeichenfläche, nicht an ihrer Stelle: kommen
-    // später Daten, muss die Fläche noch da sein (NK-157).
-    const leerHinweis = document.getElementById('chart-building-comparison-leer');
-    const leer = !apartment_comparison || apartment_comparison.length === 0;
-    ctx.canvas.hidden = leer;
-    leerHinweis.hidden = !leer;
-
-    if (leer) {
-        titleEl.textContent = 'Wohnungsvergleich';
-        return;
-    }
+    // NK-254: ein Vergleich braucht zwei Wohnungen mit Daten, sonst bleibt die
+    // Karte weg. Nur ausblenden: kommen später Daten, muss die Zeichenfläche
+    // noch da sein (NK-157).
+    const wohnungen = new Set((apartment_comparison || []).map(d => d.apartment));
+    titleEl.closest('.dashboard-card').hidden = wohnungen.size < 2;
+    if (wohnungen.size < 2) return;
     
     // Show reading period range in title
     const periods = apartment_comparison.filter(d => d.period).map(d => d.period);
@@ -7685,6 +8244,19 @@ function renderPayments() {
         if (kautionPayments.length > 0) group.kaution = kautionPayments[0].amount;
         
         const totalMonthly = group.latestMiete + group.latestNK;
+        // NK-256: Zeilen ohne Zahlung dieser Art zeigten „0,00 €“; sie entfallen.
+        const zeile = (zahlungen, text, betrag) => zahlungen.length === 0 ? '' : `
+                <div style="display: flex; justify-content: space-between; width: 100%;">
+                    <span>${text}:</span>
+                    <strong>${betrag.toLocaleString('de-DE', {style: 'currency', currency: 'EUR'})}</strong>
+                </div>`;
+        const mieteHtml = zeile(mietePayments, 'Miete', group.latestMiete);
+        const nkHtml = zeile(nkPayments, 'Nebenkosten', group.latestNK);
+        const gesamtHtml = mietePayments.length + nkPayments.length === 0 ? '' : `<hr style="width: 100%; border: 0; border-top: 1px solid var(--border-color); margin: 4px 0;">
+                <div style="display: flex; justify-content: space-between; width: 100%; color: var(--text-color);">
+                    <span><strong>Gesamt (mtl.):</strong></span>
+                    <strong style="color: var(--primary-color);">${totalMonthly.toLocaleString('de-DE', {style: 'currency', currency: 'EUR'})}</strong>
+                </div>`;
         
         const card = document.createElement('div');
         card.className = 'property-card glass-panel';
@@ -7698,25 +8270,15 @@ function renderPayments() {
             </div>
             <h3 class="prop-title">${escapeHtml(group.tenant_name)}</h3>
             <div class="prop-meta" style="flex-direction: column; align-items: flex-start; gap: 8px;">
-                <div style="display: flex; justify-content: space-between; width: 100%;">
-                    <span>Miete:</span>
-                    <strong>${group.latestMiete.toLocaleString('de-DE', {style: 'currency', currency: 'EUR'})}</strong>
-                </div>
-                <div style="display: flex; justify-content: space-between; width: 100%;">
-                    <span>Nebenkosten:</span>
-                    <strong>${group.latestNK.toLocaleString('de-DE', {style: 'currency', currency: 'EUR'})}</strong>
-                </div>
+                ${mieteHtml}
+                ${nkHtml}
                 ${group.kaution > 0 ? `
                 <div style="display: flex; justify-content: space-between; width: 100%; color: var(--text-muted); font-size: 13px;">
                     <span>Kaution:</span>
                     <span>${group.kaution.toLocaleString('de-DE', {style: 'currency', currency: 'EUR'})}</span>
                 </div>
                 ` : ''}
-                <hr style="width: 100%; border: 0; border-top: 1px solid var(--border-color); margin: 4px 0;">
-                <div style="display: flex; justify-content: space-between; width: 100%; color: var(--text-color);">
-                    <span><strong>Gesamt (mtl.):</strong></span>
-                    <strong style="color: var(--primary-color);">${totalMonthly.toLocaleString('de-DE', {style: 'currency', currency: 'EUR'})}</strong>
-                </div>
+                ${gesamtHtml}
             </div>
         `;
         paymentsGrid.appendChild(card);

@@ -61,11 +61,58 @@ def test_rundgang_in_drei_breiten():
     assert sorted(breite for breite, _ in rundgang.BREITEN) == [390, 768, 1440]
 
 
+def test_rundgang_prueft_am_handy_die_zaehleraktionen():
+    """NK-252: bei 390 px lagen die Zähleraktionen rechts außerhalb des Bilds."""
+    assert '#meters-container button' in rundgang.ZAEHLER_AKTIONEN_JS
+    assert 'window.innerWidth' in rundgang.ZAEHLER_AKTIONEN_JS
+    quelle = (WURZEL / 'scripts' / 'rundgang.py').read_text(encoding='utf-8')
+    assert re.search(r'if breite < 720:\n\s+gang\.handy\(\)', quelle)
+
+
+def test_rundgang_prueft_am_handy_das_kopfmenue():
+    """NK-253: bei 390 px stapelten sich die Kopfknöpfe über dem Inhalt."""
+    for merkmal in ('.kopf-menue-knopf', 'knopf.click()', 'titel.bottom', 'window.innerWidth'):
+        assert merkmal in rundgang.KOPF_MENUE_JS, merkmal
+    quelle = (WURZEL / 'scripts' / 'rundgang.py').read_text(encoding='utf-8')
+    handy = quelle[quelle.index('    def handy(self):'):]
+    assert re.search(r'for bereich in BEREICHE:[^\n]*\n(.*\n){1,4}.*evaluate\(KOPF_MENUE_JS, bereich\)',
+                     handy[:handy.index('\n    def ')])
+
+
+def test_rundgang_prueft_die_zahlungskarten_auf_nullzeilen():
+    """NK-256: Mieter ohne Mietzahlung hatten eine Zeile „Miete: 0,00 €“."""
+    assert '#payments-grid .property-card' in rundgang.ZAHLUNG_NULLZEILEN_JS
+    assert '0,00' in rundgang.ZAHLUNG_NULLZEILEN_JS
+    quelle = (WURZEL / 'scripts' / 'rundgang.py').read_text(encoding='utf-8')
+    handy = quelle[quelle.index('    def handy(self):'):]
+    assert 'self.seite.evaluate(ZAHLUNG_NULLZEILEN_JS)' in handy[:handy.index('\n    def ')]
+
+
+def test_rundgang_prueft_den_ersten_stand():
+    """NK-257: ein Zähler ohne Ablesung hatte weder Stift noch einen Knopf
+    für den ersten Stand."""
+    assert 'Ersten Stand erfassen' in rundgang.ERSTER_STAND_JS
+    assert 'Letzten Stand bearbeiten' in rundgang.ERSTER_STAND_JS
+    quelle = (WURZEL / 'scripts' / 'rundgang.py').read_text(encoding='utf-8')
+    handy = quelle[quelle.index('    def handy(self):'):]
+    assert 'self.seite.evaluate(ERSTER_STAND_JS)' in handy[:handy.index('\n    def ')]
+
+
 def test_leere_zeichenflaeche_bleibt_erhalten():
     """Ein Leerhinweis ersetzt die Zeichenfläche nicht per innerHTML: kommen
-    später Daten, fände Chart.js sonst kein <canvas> mehr (Fund des Rundgangs)."""
+    später Daten, fände Chart.js sonst kein <canvas> mehr (Fund des Rundgangs).
+    Den Wohnungsvergleich ohne Daten blendet NK-254 ganz aus."""
     assert not re.search(r'canvas\.parentElement\.innerHTML', SKRIPT)
-    assert 'id="chart-building-comparison-leer"' in SEITE
+    assert 'id="chart-building-comparison"' in SEITE
+
+
+def test_rundgang_prueft_den_wohnungsvergleich():
+    """NK-254: die Vergleichskarte stand auch ohne zwei Wohnungen mit Daten da."""
+    assert "Chart.getChart(document.getElementById('chart-building-comparison'))" in rundgang.VERGLEICH_JS
+    assert 'wohnungen < 2' in rundgang.VERGLEICH_JS
+    quelle = (WURZEL / 'scripts' / 'rundgang.py').read_text(encoding='utf-8')
+    handy = quelle[quelle.index('    def handy(self):'):]
+    assert 'self.seite.evaluate(VERGLEICH_JS)' in handy[:handy.index('\n    def ')]
 
 
 def test_rundgang_sieht_kaputte_werte():

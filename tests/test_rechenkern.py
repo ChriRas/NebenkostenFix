@@ -125,7 +125,9 @@ def test_kern_importiert_kein_orm():
     ebenso an nichts als ``geld`` -- ``tests/test_co2_aufteilung.py`` haelt
     auch das fest. ``betrkv`` (NK-117) kommt herein, weil ``ist_abwasser`` den
     Katalog fragt, ob ein Name das Niederschlagswasser meint; es haengt an
-    nichts als der Standardbibliothek.
+    nichts als der Standardbibliothek. ``lohnausweis`` (NK-268) sammelt die
+    Lohnanteile nach § 35a EStG und haengt an nichts als ``geld`` --
+    ``tests/test_lohnausweis_35a.py`` haelt das fest.
     """
     import ast
     from nebenkostenfix import rechenkern
@@ -140,7 +142,7 @@ def test_kern_importiert_kein_orm():
         # Die eigenen Bausteine haengen selbst an nichts als der
         # Standardbibliothek -- sie duerfen mit herein, ein ORM nicht.
         'abrechnungsart', 'betrkv', 'co2', 'geld', 'haushalt', 'heizung', 'leerstand',
-        'nutzung', 'zeitraum',
+        'lohnausweis', 'nutzung', 'zeitraum',
     }, (
         f'Der Rechenkern zieht fremde Module herein: {importiert}'
     )
