@@ -53,8 +53,12 @@ def verlauf(abrechnungen, monat: int, erster: int) -> list[dict]:
         j = jahre[jahresanfang(beginn, monat, erster)]
         tage = (ende - beginn).days + 1
         j['tage'] += tage
-        if qm:
+        # Fehlt einer Abrechnung die Flaeche, fehlt sie dem Jahr: ihre Kosten
+        # zaehlen, ihre Tage nicht -- der Wert je m² waere zu hoch (NK-269).
+        if qm and j['flaechentage'] is not None:
             j['flaechentage'] += dec(qm) * tage
+        else:
+            j['flaechentage'] = None
         for art, betrag in kosten:
             j['kosten'][art] += dec(betrag)
         j['vorauszahlung'] += dec(vorauszahlung or 0)

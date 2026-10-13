@@ -150,12 +150,22 @@ def stand(property_id: int, jahr: int, heute: date | None = None) -> dict:
 
     # --- Schritt 3: Ablesungen ----------------------------------------------------
     ablesungen = []
-    for zaehler in Meter.query.filter_by(property_id=haus.id).order_by(Meter.meter_number).all():
+    alle_zaehler = Meter.query.filter_by(property_id=haus.id).order_by(Meter.meter_number).all()
+    # NK-258: ein abgeloester Zaehler endet mit dem Wechsel, sein Nachfolger
+    # beginnt dort; davor bzw. danach ist an ihm nichts abzulesen.
+    abgeloest = {z.ersetzt_id for z in alle_zaehler if z.ersetzt_id}
+    for zaehler in alle_zaehler:
         tage = sorted(a.reading_date for a in zaehler.readings)
-        am_stichtag = any(abs(tag - bis) <= STICHTAG_TOLERANZ for tag in tage)
+        ausgebaut = tage[-1] if tage and zaehler.id in abgeloest else None
+        eingebaut = tage[0] if tage and zaehler.ersetzt_id else None
+        if ausgebaut and ausgebaut < von:
+            continue
+        am_stichtag = (bool(ausgebaut and ausgebaut <= bis)
+                       or any(abs(tag - bis) <= STICHTAG_TOLERANZ for tag in tage))
         fehlende_wechsel = [
             tag.isoformat() for (wohnung_id, _, tag) in wechsel
             if zaehler.apartment_id == wohnung_id
+            and not (ausgebaut and tag > ausgebaut) and not (eingebaut and tag < eingebaut)
             and not any(abs(t - tag) <= WECHSEL_TOLERANZ for t in tage)
         ]
         ablesungen.append({

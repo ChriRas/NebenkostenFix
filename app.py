@@ -1350,6 +1350,10 @@ def save_vorauszahlung_soll(tenant_id):
         raise EingabeFehler(
             f'Der Stichtag {gueltig_ab.isoformat()} liegt vor dem Einzug am '
             f'{tenant.move_in_date.isoformat()}.', 'gueltig_ab')
+    if tenant.move_out_date and gueltig_ab > tenant.move_out_date:
+        raise EingabeFehler(
+            f'Der Stichtag {gueltig_ab.isoformat()} liegt nach dem Auszug am '
+            f'{tenant.move_out_date.isoformat()}.', 'gueltig_ab')
     eintrag, neu = _soll_setzen(tenant, gueltig_ab, betrag)
     db.session.commit()
     if neu:
@@ -1367,13 +1371,23 @@ def delete_vorauszahlung_soll(id):
 
 # --- Fristenkalender (NK-262, R-FRIST-05) ---
 def _fristen(heute):
-    """Alle Termine ab heute, ueber alle Immobilien."""
+    """Alle Termine ab heute, ueber alle Immobilien; gesperrte Mieter fehlen."""
+    from nebenkostenfix.mehrjahresblick import jahresanfang
+    from nebenkostenfix.zeitraumvorschlag import jahresbeginn
+
     berichte = TenantBillingReport.query.all()
-    letzte = {}
+    takt, letzte = {}, {}
     for r in berichte:
         haus = r.tenant.apartment.property
-        if haus.id not in letzte or r.end_date > letzte[haus.id][2]:
-            letzte[haus.id] = (haus.id, haus.name, r.end_date)
+        if haus.id not in takt:
+            takt[haus.id] = jahresbeginn(haus)[:2]
+        # Ende des zuletzt abgerechneten Abrechnungsjahres: ein Auszug
+        # mitten im Jahr verschiebt den Stichtag nicht (R-FRIST-05).
+        ende = jahresanfang(r.end_date + timedelta(days=1), *takt[haus.id]) - timedelta(days=1)
+        if haus.id not in letzte or ende > letzte[haus.id][2]:
+            letzte[haus.id] = (haus.id, haus.name, ende)
+    # Gesperrte Mieter sind aus allen Listen ausgeblendet (R-DSGVO-02).
+    berichte = [r for r in berichte if r.tenant.gesperrt_bis is None]
     abgeloest = {m.ersetzt_id for m in Meter.query.filter(Meter.ersetzt_id.isnot(None))}
     zaehler = [(m.id, f'{m.category.name} {m.meter_number} ({m.property.name})', m.geeicht_bis)
                for m in Meter.query.filter(Meter.geeicht_bis.isnot(None))
@@ -1381,7 +1395,9 @@ def _fristen(heute):
     return fristenkalender.termine(
         [(r.id, r.tenant.name, r.frist_ende, r.zugestellt_am) for r in berichte],
         list(letzte.values()),
-        [(s.id, s.tenant.name, s.gueltig_ab, s.betrag) for s in VorauszahlungSoll.query.all()],
+        [(s.id, s.tenant.name, s.gueltig_ab, s.betrag) for s in VorauszahlungSoll.query.all()
+         if s.tenant.gesperrt_bis is None
+         and not (s.tenant.move_out_date and s.gueltig_ab > s.tenant.move_out_date)],
         zaehler, heute)
 
 
@@ -3128,28 +3144,16 @@ def export_data():
     """Alle Daten als JSON. Per POST mit ``passphrase`` verschluesselt
     (NK-130, D-86): eine Datei .nkexp, lesbar mit
     ``flask backup entschluesseln`` oder dem Modul verschluesselung."""
-    def to_dict(model_obj):
-        d = {}
-        for c in model_obj.__table__.columns:
-            val = getattr(model_obj, c.name)
-            if hasattr(val, 'isoformat'):
-                val = val.isoformat()
-            d[c.name] = val
-        return d
-        
+    def to_dict(zeile):
+        return {name: (wert.isoformat() if hasattr(wert, 'isoformat') else wert)
+                for name, wert in zeile.items()}
+
+    # NK-269: jede Tabelle, damit eine neue nicht wieder fehlt (Zahlungen,
+    # Soll und Versionen fehlten); die Konten bleiben draussen (Passwort-Hash).
     data = {
-        'providers': [to_dict(x) for x in Provider.query.all()],
-        'properties': [to_dict(x) for x in Property.query.all()],
-        'apartments': [to_dict(x) for x in Apartment.query.all()],
-        'tenants': [to_dict(x) for x in Tenant.query.all()],
-        'cost_categories': [to_dict(x) for x in CostCategory.query.all()],
-        'cost_invoices': [to_dict(x) for x in CostInvoice.query.all()],
-        'invoice_documents': [to_dict(x) for x in InvoiceDocument.query.all()],
-        'meters': [to_dict(x) for x in Meter.query.all()],
-        'meter_readings': [to_dict(x) for x in MeterReading.query.all()],
-        'tenant_cost_profiles': [to_dict(x) for x in TenantCostProfile.query.all()],
-        'haushaltsgroessen': [to_dict(x) for x in Haushaltsgroesse.query.all()],
-        'tenant_billing_reports': [to_dict(x) for x in TenantBillingReport.query.all()]
+        tabelle.name: [to_dict(z) for z in db.session.execute(
+            tabelle.select().order_by(*tabelle.primary_key.columns)).mappings()]
+        for tabelle in db.metadata.sorted_tables if tabelle.name != 'users'
     }
     if request.method == 'GET':
         return jsonify(data)
@@ -3613,7 +3617,7 @@ def _ablesefotos(report) -> list:
     if mieter is None or mieter.apartment_id is None:
         return []
     fotos = []
-    for zaehler in Meter.query.filter_by(apartment_id=mieter.apartment_id).order_by(Meter.id):
+    for zaehler in Meter.query.filter_by(apartment_id=mieter.apartment_id, is_main_meter=False).order_by(Meter.id):
         staende = sorted(zaehler.readings, key=lambda r: r.reading_date)
         davor = [r for r in staende if r.reading_date < report.start_date][-1:]
         danach = [r for r in staende if r.reading_date > report.end_date][:1]
@@ -4216,6 +4220,8 @@ def analytics_building(property_id):
     # der Zeitraumvorschlag, nicht „abgerechnet in den letzten 365 Tagen“.
     open_tasks = 0
     for t in active_tenants + ausgezogene:
+        if t.gesperrt_bis is not None:
+            continue  # NK-269: geloescht bis auf den Anker, nicht abzurechnen (R-DSGVO-02)
         zeitraum = naechster_zeitraum(t)
         if zeitraum and zeitraum['ziel'] <= today:
             open_tasks += 1
