@@ -152,6 +152,8 @@ Stammdaten -- Immobilie, Wohnung, Mieter, Anbieter, Kostenart
   GET         /api/tenants/<int:tenant_id>/vorauszahlungen -> get_vorauszahlungen
   POST        /api/tenants/<int:tenant_id>/vorauszahlung_soll -> save_vorauszahlung_soll
   DELETE      /api/vorauszahlung_soll/<int:id>             -> delete_vorauszahlung_soll
+  GET         /api/fristen                                 -> get_fristen
+  GET         /api/fristen.ics                             -> get_fristen_ics
   GET         /api/providers                               -> get_providers
   POST        /api/providers                               -> create_provider
   DELETE      /api/providers/<int:id>                      -> delete_provider
@@ -288,6 +290,7 @@ from nebenkostenfix.abrechnung_version import schnappschuss, json_sicher, SOFTWA
 from nebenkostenfix.anschreiben import ARTEN, PLATZHALTER, text_fuer, vorgabe
 from nebenkostenfix.anschreiben import anrede as anschreiben_anrede, saetze as anschreiben_saetze
 from nebenkostenfix import vorauszahlung as vz
+from nebenkostenfix import fristenkalender
 from nebenkostenfix.ablage import Ablage
 from nebenkostenfix.auth import init_auth
 from nebenkostenfix.backup import init_backup
@@ -1359,6 +1362,39 @@ def delete_vorauszahlung_soll(id):
     db.session.delete(eintrag)
     db.session.commit()
     return jsonify({'message': 'Soll gelöscht'}), 200
+
+
+# --- Fristenkalender (NK-262, R-FRIST-05) ---
+def _fristen(heute):
+    """Alle Termine ab heute, ueber alle Immobilien."""
+    berichte = TenantBillingReport.query.all()
+    letzte = {}
+    for r in berichte:
+        haus = r.tenant.apartment.property
+        if haus.id not in letzte or r.end_date > letzte[haus.id][2]:
+            letzte[haus.id] = (haus.id, haus.name, r.end_date)
+    abgeloest = {m.ersetzt_id for m in Meter.query.filter(Meter.ersetzt_id.isnot(None))}
+    zaehler = [(m.id, f'{m.category.name} {m.meter_number} ({m.property.name})', m.geeicht_bis)
+               for m in Meter.query.filter(Meter.geeicht_bis.isnot(None))
+               if m.id not in abgeloest]
+    return fristenkalender.termine(
+        [(r.id, r.tenant.name, r.frist_ende, r.zugestellt_am) for r in berichte],
+        list(letzte.values()),
+        [(s.id, s.tenant.name, s.gueltig_ab, s.betrag) for s in VorauszahlungSoll.query.all()],
+        zaehler, heute)
+
+
+@app.route('/api/fristen', methods=['GET'])
+def get_fristen():
+    return jsonify({'termine': _fristen(zeit.als_ortsdatum(zeit.jetzt_utc()))}), 200
+
+
+@app.route('/api/fristen.ics', methods=['GET'])
+def get_fristen_ics():
+    jetzt = zeit.jetzt_utc()
+    text = fristenkalender.ics(_fristen(zeit.als_ortsdatum(jetzt)), jetzt)
+    return send_file(io.BytesIO(text.encode('utf-8')), mimetype='text/calendar; charset=utf-8',
+                     as_attachment=True, download_name='fristen.ics')
 
 
 # --- Providers ---

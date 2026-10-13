@@ -6665,6 +6665,7 @@ async function fetchAnalytics() {
         renderFinanceCharts(dataB.cashflow);
     } else if (currentAnalyticsView === 'dataquality') {
         viewDQ.style.display = 'flex';
+        ladeFristen();
         const resDQ = await fetch(`/api/analytics/data-quality/${propId}`);
         const dataDQ = await resDQ.json();
         renderDataQuality(dataDQ);
@@ -6674,6 +6675,22 @@ async function fetchAnalytics() {
         const dataA = await resA.json();
         renderAptConsumptionChart(dataA.own_consumption);
         renderAptCostsChart(dataA.cost_distribution);
+    }
+}
+
+/* NK-262 (R-FRIST-05): die kommenden Termine aller Immobilien. Der Kalender
+   ist informativ; laedt er nicht, bleibt die uebrige Ansicht stehen. */
+async function ladeFristen() {
+    const liste = document.getElementById('fristen-liste');
+    try {
+        const res = await fetch('/api/fristen');
+        if (!res.ok) throw await serverFehler(res);
+        const { termine } = await res.json();
+        liste.innerHTML = termine.length === 0
+            ? '<li class="text-muted">Keine anstehenden Termine.</li>'
+            : termine.map(t => `<li><strong>${escapeHtml(datumText(t.datum))}</strong> · ${escapeHtml(t.titel)}</li>`).join('');
+    } catch (e) {
+        liste.innerHTML = `<li class="text-muted">${escapeHtml(meldungZu(e, 'Die Fristen ließen sich nicht laden.'))}</li>`;
     }
 }
 

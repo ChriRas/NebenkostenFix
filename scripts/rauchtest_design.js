@@ -603,6 +603,43 @@ async function vorauszahlungPruefen() {
         && html.includes('id="vorauszahlung-modal"'));
 }
 
+// --- NK-262: Fristenkalender in der Datenqualität ----------------------------
+async function fristenPruefen() {
+    const m = appQuelle.match(/async function ladeFristen\(\) \{[\s\S]*?\n\}/);
+    if (!m) throw new Error('ladeFristen nicht gefunden');
+    const lauf = async (antwort) => {
+        const liste = { innerHTML: '' };
+        const aufrufe = [];
+        const holen = url => {
+            aufrufe.push(url);
+            return Promise.resolve({ ok: antwort !== null, json: () => Promise.resolve(antwort) });
+        };
+        await new Function('document', 'fetch', 'serverFehler', 'meldungZu', 'escapeHtml', 'datumText',
+            m[0] + '; return ladeFristen();')(
+            { getElementById: id => (id === 'fristen-liste' ? liste : null) }, holen,
+            async () => new Error('Server'), (e, ersatz) => ersatz,
+            t => String(t).replace(/</g, '&lt;'), iso => 'D' + iso);
+        return { liste: liste.innerHTML, aufrufe };
+    };
+    const voll = await lauf({ termine: [
+        { datum: '2025-04-01', art: 'vorauszahlung', titel: 'Neue <b>Vorauszahlung', uid: 'v-1@n' },
+        { datum: '2025-12-31', art: 'eichfrist', titel: 'Eichfrist endet: W', uid: 'e-1@n' },
+    ] });
+    pruefe('NK-262: Termine in Reihenfolge, Datum formatiert, Titel maskiert',
+        voll.aufrufe[0] === '/api/fristen'
+        && voll.liste.indexOf('D2025-04-01') < voll.liste.indexOf('D2025-12-31')
+        && voll.liste.includes('Neue &lt;b>Vorauszahlung') && !voll.liste.includes('<b>'));
+    const leer = await lauf({ termine: [] });
+    pruefe('NK-262: ohne Termine ein Hinweis statt einer leeren Liste',
+        /Keine anstehenden Termine/.test(leer.liste));
+    const kaputt = await lauf(null);
+    pruefe('NK-262: Ladefehler bleibt in der Karte',
+        /ließen sich nicht laden/.test(kaputt.liste));
+    pruefe('NK-262: Karte mit Download-Link, die Datenqualität lädt die Fristen',
+        html.includes('id="fristen-karte"') && html.includes('href="/api/fristen.ics" download')
+        && /viewDQ\.style\.display = 'flex';\s*ladeFristen\(\);/.test(appQuelle));
+}
+
 // --- NK-201: Warnleiste im offenen Modus -------------------------------------
 // Der Rauchtest gibt die Antwort von /api/auth/me vor: offen in Docker zeigt
 // die Warnleiste, offen in der Windows-App bleibt sie verborgen.
@@ -1380,4 +1417,6 @@ warnLeistePruefen()
                                     .catch(e => pruefe('NK-258: Zählerpflege-Prüfung lief durch — ' + e.message, false))
                                     .then(() => vorauszahlungPruefen()
                                         .catch(e => pruefe('NK-261: Vorauszahlung-Prüfung lief durch — ' + e.message, false))
-                                        .then(() => process.exit(fehler ? 1 : 0)))))))))));
+                                        .then(() => fristenPruefen()
+                                            .catch(e => pruefe('NK-262: Fristen-Prüfung lief durch — ' + e.message, false))
+                                            .then(() => process.exit(fehler ? 1 : 0))))))))))));

@@ -140,6 +140,8 @@ ROUTEN_INVENTAR = frozenset({
     'get_vorauszahlungen',
     'save_vorauszahlung_soll',
     'delete_vorauszahlung_soll',
+    'get_fristen',
+    'get_fristen_ics',
     'save_tenant_profiles',
     'setze_vermieterdaten',
     'static',
