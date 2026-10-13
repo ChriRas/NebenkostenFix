@@ -2118,6 +2118,21 @@
                             leeren Tage trägt der Vermieter.
                         </small>
                     </div>
+                    <!-- NK-268 (R-35A-01): der Lohnanteil nach § 35a EStG, umgelegt wie die Rechnung. -->
+                    <div class="form-group">
+                        <label for="invoice-art-35a">Lohnanteil nach § 35a EStG (optional)</label>
+                        <select id="invoice-art-35a">
+                            <option value="">keine Angabe</option>
+                            <option value="haushaltsnah">Haushaltsnahe Dienstleistungen</option>
+                            <option value="handwerker">Handwerkerleistungen</option>
+                        </select>
+                        <input type="number" id="invoice-lohnanteil" step="0.01" min="0"
+                            placeholder="davon Lohnanteil (€), z. B. 400,00" aria-label="Lohnanteil (€)">
+                        <small class="text-muted">
+                            Der Lohnanteil laut Rechnung. Er wird wie die Rechnung umgelegt und
+                            steht als Tabelle in der Abrechnung, ohne steuerliche Prüfung.
+                        </small>
+                    </div>
                     <div class="form-group">
                         <label>Rechnungs-Nr. (Optional)</label>
                         <input type="text" id="invoice-number">

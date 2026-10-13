@@ -3859,6 +3859,9 @@ async function openAddInvoiceModal(editInvoiceId = null) {
             document.getElementById('invoice-preis-ht').value = i.preis_ht ?? '';
             document.getElementById('invoice-preis-nt').value = i.preis_nt ?? '';
             document.getElementById('invoice-grundpreis').value = i.grundpreis ?? '';
+            // NK-268: Art und Lohnanteil nach § 35a EStG.
+            document.getElementById('invoice-art-35a').value = i.art_35a || '';
+            document.getElementById('invoice-lohnanteil').value = i.lohnanteil ?? '';
             document.getElementById('invoice-pages').value = i.document_pages || '';
             // NK-125: Anlage, Posten und CO2-Angaben des Belegs.
             await populateInvoiceHeizung(i.heizungsanlage_id || null);
@@ -3890,6 +3893,8 @@ async function openAddInvoiceModal(editInvoiceId = null) {
         document.getElementById('invoice-preis-ht').value = '';
         document.getElementById('invoice-preis-nt').value = '';
         document.getElementById('invoice-grundpreis').value = '';
+        document.getElementById('invoice-art-35a').value = '';
+        document.getElementById('invoice-lohnanteil').value = '';
         document.getElementById('invoice-pages').value = '';
         if (provSelect) provSelect.value = '';
         docSelect.value = '';
@@ -4132,6 +4137,15 @@ async function saveInvoice() {
     // F-137: leer heisst keine Angabe, der Server rechnet dann wie bisher.
     const grundpreis = document.getElementById('invoice-grundpreis').value;
     if (grundpreis !== '') formData.append('grundpreis', grundpreis);
+    // NK-268: Art und Lohnanteil nach § 35a EStG gehoeren zusammen (R-35A-01).
+    const art35a = document.getElementById('invoice-art-35a').value;
+    const lohnanteil = document.getElementById('invoice-lohnanteil').value;
+    if ((art35a === '') !== (lohnanteil === '')) {
+        showError('Der Lohnanteil nach § 35a EStG braucht beides: die Art der Leistung und den Betrag, oder keines von beiden.');
+        return;
+    }
+    if (art35a !== '') formData.append('art_35a', art35a);
+    if (lohnanteil !== '') formData.append('lohnanteil', lohnanteil);
     // NK-125: Anlage und Posten gehoeren zusammen (D-44); die CO2-Angaben
     // des Belegs kommen dazu, sobald eine Anlage gewaehlt ist.
     const heizungsanlageId = document.getElementById('invoice-heizungsanlage').value;

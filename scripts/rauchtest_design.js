@@ -403,6 +403,12 @@ pruefe('K4: leere Rechnungsliste blendet die Filterleiste aus',
     html.includes('id="invoice-filter"')
     && app.includes("leiste.hidden = invoices.length === 0;")
     && css.includes('.controls-bar[hidden]'));
+// NK-268: Art und Lohnanteil nach § 35a EStG gehen nur gemeinsam an den Server.
+pruefe('NK-268: Rechnungsdialog trägt Art und Lohnanteil nach § 35a, nur gemeinsam',
+    html.includes('id="invoice-art-35a"') && html.includes('id="invoice-lohnanteil"')
+    && app.includes("if ((art35a === '') !== (lohnanteil === '')) {")
+    && app.includes("formData.append('art_35a', art35a)")
+    && app.includes("formData.append('lohnanteil', lohnanteil)"));
 
 // --- NK-103: Erste Schritte neu gesetzt (K5) ---
 pruefe('B7: die Liste trägt ihre Klasse — die Regeln greifen',

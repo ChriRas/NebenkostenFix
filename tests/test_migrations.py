@@ -41,7 +41,8 @@ BASISREVISION = "63738d5329b4"
 # NK-264: ``b4d8e2a61f37`` fuegt ``tenants.anrede`` und ``vermieterdaten.art`` hinzu.
 # NK-258: ``c7e1f94a2b05`` fuegt ``meters.ersetzt_id``, ``geeicht_bis`` und ``ort`` hinzu.
 # NK-261: ``d9a3f2c6e1b4`` legt die Tabelle ``vorauszahlung_soll`` an (R-VZ-02).
-KOPFREVISION = "d9a3f2c6e1b4"
+# NK-268: ``a8c4e2f61d93`` fuegt ``cost_invoices.art_35a`` und ``lohnanteil`` hinzu (R-35A-01).
+KOPFREVISION = "a8c4e2f61d93"
 
 
 def _umgebung(dbdatei: Path, tmp_path: Path) -> dict:

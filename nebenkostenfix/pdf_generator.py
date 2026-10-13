@@ -424,9 +424,40 @@ class PDFGenerator:
 
         return elemente
 
+    def _ausweis_35a_elemente(self, ausweis_35a):
+        """Die Lohnanteile nach § 35a EStG (NK-268, R-35A-01).
+
+        Eine Tabelle je Art (haushaltsnahe Dienstleistungen,
+        Handwerkerleistungen) mit der Summe darunter -- nur Beträge, kein
+        Steuersatz und kein Höchstbetrag; der Hinweis sagt, woher sie
+        kommen. Ohne Angabe an einer Rechnung bleibt der Abschnitt weg.
+        """
+        if not ausweis_35a:
+            return []
+        elemente = [Spacer(1, 20), Paragraph(
+            "Lohnanteile nach § 35a EStG", self.styles['TitleBold'])]
+        for gruppe in ausweis_35a['gruppen']:
+            daten = [[Paragraph(f"<b>{gruppe['art_text']}</b>", self.styles['TableCell']),
+                      Paragraph("<b>Ihr Anteil</b>", self.styles['TableCellRight'])]]
+            daten += [[Paragraph(escape(z['kostenart']), self.styles['TableCell']),
+                       Paragraph(f"{self._deutsch(z['betrag'])} €", self.styles['TableCellRight'])]
+                      for z in gruppe['zeilen']]
+            daten.append([Paragraph("Summe", self.styles['TotalCell']),
+                          Paragraph(f"{self._deutsch(gruppe['summe'])} €",
+                                    self.styles['TotalCellRight'])])
+            tabelle = Table(daten, colWidths=[380, 100])
+            tabelle.setStyle(TableStyle([
+                ('LINEBELOW', (0, 0), (-1, 0), 0.5, colors.HexColor('#9ca3af')),
+                ('LINEABOVE', (0, -1), (-1, -1), 0.5, colors.HexColor('#9ca3af')),
+                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ]))
+            elemente += [tabelle, Spacer(1, 8)]
+        elemente.append(Paragraph(escape(ausweis_35a['hinweis']), self.styles['Fussnote']))
+        return elemente
+
     def generate(self, line_items, total_amount, prepaid_amount=NULL,
                  co2_ausweis=None, landlord_share=None, anschreiben=None,
-                 vorbehalt=None):
+                 vorbehalt=None, ausweis_35a=None):
         buffer = BytesIO()
         doc = SimpleDocTemplate(buffer, pagesize=A4,
                                 rightMargin=56.7, leftMargin=56.7,
@@ -720,6 +751,9 @@ class PDFGenerator:
         # Vermieter sendet nur eine der beiden Fassungen.
         elements.extend(self._heizung_co2_elemente(
             line_items, co2_ausweis, landlord_share))
+
+        # NK-268: die Lohnanteile nach § 35a EStG, auf beiden Fassungen.
+        elements.extend(self._ausweis_35a_elemente(ausweis_35a))
 
         # R-DOC-01 Punkt 8: die Belegliste gehoert auf beide Wege des
         # Dokuments -- der Vermieter sendet nur eine der beiden Fassungen,

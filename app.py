@@ -288,6 +288,7 @@ from nebenkostenfix.models import db, User, Property, Apartment, Tenant, Haushal
 from nebenkostenfix.girocode_generator import iban_pruefen, iban_saeubern, vermieter_art, vermieter_ausweis
 from nebenkostenfix.abrechnung_version import schnappschuss, json_sicher, SOFTWARE_VERSION, REGEL_VERSION, aenderungen_seit, gleich_gerechnet
 from nebenkostenfix.anschreiben import ARTEN, PLATZHALTER, text_fuer, vorgabe
+from nebenkostenfix.lohnausweis import ARTEN as ARTEN_35A
 from nebenkostenfix.anschreiben import anrede as anschreiben_anrede, saetze as anschreiben_saetze
 from nebenkostenfix import vorauszahlung as vz
 from nebenkostenfix import fristenkalender
@@ -2181,11 +2182,32 @@ def _rechnungsfelder(eingabe):
             'Der Grundpreis ist ein Teil des Rechnungsbetrags und kann nicht '
             'größer sein als er.', 'grundpreis')
 
+    # NK-268 (R-35A-01): der Lohnanteil nach § 35a EStG steht an der
+    # Rechnung, mit seiner Art; beides oder keines (derselbe CHECK steht in
+    # der Datenbank).
+    art_35a = eingabe.text('art_35a') or None
+    lohnanteil = eingabe.geldbetrag('lohnanteil', min_wert=0)
+    if art_35a is not None and art_35a not in ARTEN_35A:
+        raise EingabeFehler(
+            'Unbekannte Art nach § 35a EStG. Wählen Sie haushaltsnahe '
+            'Dienstleistungen oder Handwerkerleistungen.', 'art_35a')
+    if (art_35a is None) != (lohnanteil is None):
+        raise EingabeFehler(
+            'Der Lohnanteil nach § 35a EStG braucht beides: die Art der '
+            'Leistung und den Betrag, oder keines von beiden.',
+            'lohnanteil' if art_35a else 'art_35a')
+    if lohnanteil is not None and lohnanteil > amount:
+        raise EingabeFehler(
+            'Der Lohnanteil ist ein Teil des Rechnungsbetrags und kann nicht '
+            'größer sein als er.', 'lohnanteil')
+
     return {
         'category_id': eingabe.ganzzahl('category_id', pflicht=True),
         'property_id': eingabe.ganzzahl('property_id', pflicht=True),
         'amount': amount,
         'grundpreis': grundpreis,
+        'art_35a': art_35a,
+        'lohnanteil': lohnanteil,
         'invoice_number': eingabe.text('invoice_number', standard='', maxlaenge=100),
         'provider_id': eingabe.ganzzahl('provider_id'),
         'start_date': eingabe.datum('start_date', pflicht=True),
@@ -2237,6 +2259,8 @@ def get_invoices():
             'preis_ht': i.preis_ht,
             'preis_nt': i.preis_nt,
             'grundpreis': i.grundpreis,
+            'art_35a': i.art_35a,
+            'lohnanteil': i.lohnanteil,
             # Die Heizkosten-Felder (NK-125, D-44): Anlage und Posten des
             # § 7 Abs. 2 stehen an der Rechnung; die CO2-Angaben kommen
             # vom Lieferantenbeleg (D-54, uebernehmen statt rechnen).
@@ -2291,6 +2315,8 @@ def create_invoice():
         preis_ht=felder['preis_ht'],
         preis_nt=felder['preis_nt'],
         grundpreis=felder['grundpreis'],
+        art_35a=felder['art_35a'],
+        lohnanteil=felder['lohnanteil'],
         heizungsanlage_id=felder['heizungsanlage_id'],
         heizkostenart=felder['heizkostenart'],
         co2_kosten=felder['co2_kosten'],
@@ -2344,6 +2370,8 @@ def update_invoice(id):
     invoice.preis_ht = felder['preis_ht']
     invoice.preis_nt = felder['preis_nt']
     invoice.grundpreis = felder['grundpreis']
+    invoice.art_35a = felder['art_35a']
+    invoice.lohnanteil = felder['lohnanteil']
     invoice.heizungsanlage_id = felder['heizungsanlage_id']
     invoice.heizkostenart = felder['heizkostenart']
     invoice.co2_kosten = felder['co2_kosten']
@@ -2788,6 +2816,7 @@ def finalize_bill():
         landlord_share=bill_data.get('landlord_share'),
         anschreiben=anschreiben_text,
         vorbehalt=bill_data.get('vorbehalt'),
+        ausweis_35a=bill_data.get('ausweis_35a'),
     )
         
     # Save to NAS with type-specific filename
@@ -3816,6 +3845,7 @@ def korrigiere_billing_report(id):
             landlord_share=bill_data.get('landlord_share'),
             anschreiben=anschreiben_text,
             vorbehalt=bill_data.get('vorbehalt'),
+            ausweis_35a=bill_data.get('ausweis_35a'),
         )
         pdf_path, _ = nas_handler.save_billing_report(
             DummyFile(dateiname, pdf_bytes), prop.name,

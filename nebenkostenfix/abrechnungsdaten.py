@@ -132,6 +132,8 @@ def _rechnung(invoice: CostInvoice) -> Rechnung:
         preis_ht=invoice.preis_ht,
         preis_nt=invoice.preis_nt,
         grundpreis=invoice.grundpreis,
+        art_35a=invoice.art_35a,
+        lohnanteil=invoice.lohnanteil,
     )
 
 

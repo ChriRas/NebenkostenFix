@@ -19,7 +19,7 @@ CREATE TABLE providers (name);
 CREATE TABLE vermieterdaten (name);
 CREATE TABLE users (username);
 CREATE TABLE meters (meter_number);
-CREATE TABLE cost_invoices (invoice_number, amount, co2_kosten, grundpreis, start_date, end_date,
+CREATE TABLE cost_invoices (invoice_number, amount, co2_kosten, grundpreis, lohnanteil, start_date, end_date,
                             rechnungsdatum);
 CREATE TABLE payments (amount, payment_date);
 CREATE TABLE meter_readings (value, value_nt, reading_date);
@@ -32,7 +32,7 @@ def _bestand():
     db.execute("INSERT INTO tenants VALUES ('Quendolin Traxmeier', '2023-03-17', NULL)")
     db.execute("INSERT INTO properties VALUES ('Haus Vermieter')")
     db.execute("INSERT INTO meters VALUES ('ZX-77413')")
-    db.execute("INSERT INTO cost_invoices VALUES (NULL, 873.46, 0, 37.19, '2025-01-01', '2025-12-31', NULL)")
+    db.execute("INSERT INTO cost_invoices VALUES (NULL, 873.46, 0, 37.19, 212.57, '2025-01-01', '2025-12-31', NULL)")
     db.execute("INSERT INTO meter_readings VALUES (4711.3, NULL, '2025-12-31')")
     db.execute("INSERT INTO meter_readings VALUES (121, NULL, '2025-12-31')")
     return w.werte(db)
@@ -47,6 +47,7 @@ def test_echte_werte_schlagen_an():
     assert _arten("nummer='zx-77413'") == ['Name']
     assert _arten("betrag=Decimal('873,46')") == ['Betrag']
     assert _arten("grundpreis=Decimal('37.19')") == ['Betrag']
+    assert _arten("lohnanteil=Decimal('212.57')") == ['Betrag']  # NK-268
     assert _arten('stand = 4711.3') == ['Zählerstand']
     assert _arten('einzug = date(2023, 3, 17)') == ['Datum']
     assert _arten('Einzug am 17.03.2023') == ['Datum']
@@ -62,6 +63,6 @@ def test_alltag_und_runde_werte_bleiben_still():
 
 def test_kopie_vor_der_grundpreis_migration():
     db = sqlite3.connect(':memory:')
-    db.executescript(SCHEMA.replace(' grundpreis,', ''))
+    db.executescript(SCHEMA.replace(' grundpreis, lohnanteil,', ''))
     db.execute("INSERT INTO cost_invoices VALUES (NULL, 873.46, 0, '2025-01-01', '2025-12-31', NULL)")
     assert w.werte(db)['betraege'] == {Decimal('873.46')}

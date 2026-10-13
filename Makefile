@@ -52,7 +52,7 @@ kern:
 	  tests/test_rechnungen_bestand.py tests/test_rechnungsabdeckung.py \
 	  tests/test_grundpreis_leerstand.py tests/test_stichtagswerte.py \
 	  tests/test_allgemein_messabschnitte.py tests/test_allgemein_negativ.py \
-	  tests/test_zahlformat_umlage.py \
+	  tests/test_zahlformat_umlage.py tests/test_lohnausweis_35a.py \
 	  tests/test_vorauszahlung.py tests/test_vorauszahlung_soll_ist.py tests/test_jahressprung.py \
 	  tests/test_fristenkalender.py \
 	  tests/test_mehrjahresblick.py \

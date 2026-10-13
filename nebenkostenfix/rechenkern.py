@@ -151,6 +151,7 @@ from nebenkostenfix import betrkv
 from nebenkostenfix import co2
 from nebenkostenfix.geld import NULL, dec, restcent_auf_letzte, runde, runde_einheitspreis, summe
 from nebenkostenfix import heizung
+from nebenkostenfix import lohnausweis
 from nebenkostenfix.haushalt import Stand as Haushaltsstand
 # Zwei Vorgaben mit demselben Namen, aber verschiedenen Dingen: die
 # Abrechnungsart 'qm' fuer Kostenarten ohne Profil (oben), und die
@@ -346,6 +347,10 @@ class Rechnung:
     # Wohnungsrechnung mit Zaehler folgt er den Tagen, nur der Rest dem
     # Zaehler. ``None`` heisst keine Angabe: alles nach Zaehler wie bisher.
     grundpreis: Optional[Decimal] = None
+    # Art und Lohnanteil nach § 35a EStG (NK-268, R-35A-01). Nur fuer den
+    # Ausweis; kein Betrag haengt daran. ``None`` heisst keine Angabe.
+    art_35a: Optional[str] = None
+    lohnanteil: Optional[Decimal] = None
 
     @property
     def ende_grenze(self) -> date:
@@ -2007,7 +2012,8 @@ def _verteilzeile(vorgang: Vorgang, anlage, rechnungen: Sequence[Rechnung],
                   vermieter_positionen: list, *, zweck: str, ww_anteil,
                   wohnungen: list, ids: set, gesamt_qm,
                   zaehler: dict, trennungsgrund,
-                  co2_aufteilung: Optional[dict] = None) -> Optional[dict]:
+                  co2_aufteilung: Optional[dict] = None,
+                  lohn_35a: Optional[dict] = None) -> Optional[dict]:
     """Eine Abrechnungszeile fuer **einen Zweck** einer Anlage, oder ``None``.
 
     ``None`` heisst: keine der Rechnungen faellt in den Abrechnungszeitraum.
@@ -2173,11 +2179,23 @@ def _verteilzeile(vorgang: Vorgang, anlage, rechnungen: Sequence[Rechnung],
             co2_verbrauchsteil, co2_grundteil = heizung.teile_masse(
                 co2_mieter, satz)
 
-        verbrauchsanteil += heizung.nach_verbrauch(
+        nach_verbrauch = heizung.nach_verbrauch(
             verbrauchsteil, eigen, summe_zaehler)
         grundteil_anteilig = grundteil * time_fraction
-        flaechenanteil += heizung.nach_flaeche(
+        nach_flaeche = heizung.nach_flaeche(
             grundteil_anteilig, vorgang.wohnung.qm or 0, gesamt_qm)
+        verbrauchsanteil += nach_verbrauch
+        flaechenanteil += nach_flaeche
+        # § 35a (R-35A-01): der Lohn wird getrennt wie der Betrag und folgt
+        # dem Anteil des Mieters an der Masse ohne CO2 -- Lohn ist nie CO2.
+        if inv.lohnanteil is not None and lohn_35a is not None:
+            lohn_warm, lohn_heiz = heizung.trenne_verbundene(
+                inv.lohnanteil, ww_anteil)
+            schluessel = (f"{heizung.ZEILENTITEL[zweck]} ({anlage.name})",
+                          inv.art_35a)
+            lohn_35a[schluessel] = lohn_35a.get(schluessel, NULL) + lohnausweis.mieteranteil(
+                lohn_warm if zweck == heizung.WARMWASSER else lohn_heiz,
+                nach_verbrauch + nach_flaeche, betrag)
         co2_verbrauchsanteil += heizung.nach_verbrauch(
             co2_verbrauchsteil, eigen, summe_zaehler)
         co2_flaechenanteil += heizung.nach_flaeche(
@@ -2480,7 +2498,8 @@ def _verteilzeile(vorgang: Vorgang, anlage, rechnungen: Sequence[Rechnung],
 
 def _anlagenzeilen(vorgang: Vorgang, anlage, rechnungen: Sequence[Rechnung],
                    mehrere: bool, vermieter_positionen: list,
-                   co2_aufteilung: Optional[dict] = None) -> list:
+                   co2_aufteilung: Optional[dict] = None,
+                   lohn_35a: Optional[dict] = None) -> list:
     """Die Zeilen einer Anlage -- eine je Zweck, hoechstens zwei.
 
     Eine leere Liste heisst: diese Anlage versorgt den Mieter nicht (er ist
@@ -2519,7 +2538,7 @@ def _anlagenzeilen(vorgang: Vorgang, anlage, rechnungen: Sequence[Rechnung],
             zweck=zweck, ww_anteil=ww_anteil, wohnungen=wohnungen, ids=ids,
             gesamt_qm=gesamt_qm, zaehler=zaehler,
             trennungsgrund=trennungsgrund,
-            co2_aufteilung=co2_aufteilung)
+            co2_aufteilung=co2_aufteilung, lohn_35a=lohn_35a)
         if zeile is not None:
             zeilen.append(zeile)
     return zeilen
@@ -2821,6 +2840,8 @@ def rechne(vorgang: Vorgang) -> dict:
 
     # F-125: geschaetzter Preisfuss je (Kostenart, Zaehler) -> Rechnungszeitraeume
     preis_geschaetzt: dict[tuple[str, str], list[str]] = {}
+    # § 35a (NK-268): Mieteranteil am Lohn je (Kostenart, Art), ungerundet.
+    lohn_35a: dict[tuple[str, str], Decimal] = {}
     for inv in invoices:
         cat = inv.kategorie
         billing_type = abrechnungsart_von(profiles, cat)
@@ -3422,6 +3443,10 @@ def rechne(vorgang: Vorgang) -> dict:
                 'rechenweg': rechenweg,
             })
             total_amount += runde(tenant_cost)
+            if inv.lohnanteil is not None:
+                lohn_35a[(cat.name, inv.art_35a)] = lohn_35a.get(
+                    (cat.name, inv.art_35a), NULL) + lohnausweis.mieteranteil(
+                        inv.lohnanteil, tenant_cost, inv.betrag)
 
     for (kategorie, zaehler), spannen in preis_geschaetzt.items():
         warnings.append(HINWEIS_PREIS_HOCHGERECHNET.format(
@@ -3442,7 +3467,7 @@ def rechne(vorgang: Vorgang) -> dict:
             raise BillingDataError(area_blocker)
         for zeile in _anlagenzeilen(
                 vorgang, anlage, gruppe, mehrere, vermieter_positionen,
-                co2_aufteilung):
+                co2_aufteilung, lohn_35a):
             line_items.append(zeile)
             total_amount += zeile['tenant_cost']
             details = zeile['heizung_details']
@@ -3539,6 +3564,9 @@ def rechne(vorgang: Vorgang) -> dict:
         # Anteile in Prozent und Euro, Herkunft der Zahlen. None heisst:
         # keine Einstufung -- dann erklaert die blockierende Warnung, warum.
         'co2': co2_ausweis,
+        # Der Ausweis der Lohnanteile nach § 35a EStG (NK-268, R-35A-01).
+        # None heisst: keine Rechnung mit Angabe -- dann keine Tabelle.
+        'ausweis_35a': lohnausweis.ausweis(lohn_35a),
         # Der Satz fuers PDF, wenn Rechnungen im Zeitraum fehlen (F-115).
         'vorbehalt': abdeckungs_vorbehalt(luecken),
         # D-116: dieselbe Meldung nur einmal, in der Reihenfolge des Auftretens.

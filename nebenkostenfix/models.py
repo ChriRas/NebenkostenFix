@@ -6,6 +6,7 @@ from nebenkostenfix.abrechnungsart import GUELTIG, VORGABE
 from nebenkostenfix.betrkv import NUMMERN as BETRKV_NUMMERN
 from nebenkostenfix.geld import Einheitspreis, Geld
 from nebenkostenfix.haushalt import personen_am
+from nebenkostenfix.lohnausweis import ARTEN as ARTEN_35A
 from nebenkostenfix.heizung import (
     ANTEIL_MAX, ANTEIL_MIN, ANTEIL_VORGABE, ABLESUNG, HEIZUNG, VERBUNDEN,
     WW_KALTWASSER_GRAD, ZWISCHENABLESUNG, ABLESUNGSARTEN,
@@ -407,6 +408,12 @@ class CostInvoice(db.Model):
     # BGB). NULL heisst keine Angabe: dann wie bisher alles nach Zaehler.
     grundpreis = db.Column(Geld, nullable=True)
 
+    # Der Lohnanteil nach § 35a EStG und seine Art (NK-268, R-35A-01): nur
+    # ausgewiesen, nie gerechnet. Die Art haengt an der Rechnung, nicht an
+    # der Kostenart -- wie die Heizkostenart (D-44). NULL heisst keine Angabe.
+    art_35a = db.Column(db.String(20), nullable=True)
+    lohnanteil = db.Column(Geld, nullable=True)
+
     __table_args__ = (
         db.CheckConstraint(
             'heizkostenart IS NULL OR heizkostenart IN (%s)' % ', '.join(
@@ -447,6 +454,18 @@ class CostInvoice(db.Model):
         db.CheckConstraint(
             'grundpreis IS NULL OR (grundpreis >= 0 AND grundpreis <= amount)',
             name='ck_cost_invoices_grundpreis_im_betrag'),
+        # § 35a (R-35A-01): Art und Lohn beides oder keines, und der Lohn ist
+        # ein Teil des Betrags.
+        db.CheckConstraint(
+            'art_35a IS NULL OR art_35a IN (%s)' % ', '.join(
+                "'%s'" % a for a in sorted(ARTEN_35A)),
+            name='ck_cost_invoices_art_35a'),
+        db.CheckConstraint(
+            '(art_35a IS NULL) = (lohnanteil IS NULL)',
+            name='ck_cost_invoices_35a_vollstaendig'),
+        db.CheckConstraint(
+            'lohnanteil IS NULL OR (lohnanteil >= 0 AND lohnanteil <= amount)',
+            name='ck_cost_invoices_lohnanteil_im_betrag'),
     )
 
 class InvoiceDocument(db.Model):
