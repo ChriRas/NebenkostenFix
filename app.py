@@ -3477,7 +3477,12 @@ def loesche_anschreiben_vorlage(property_id):
 
 @app.route('/api/billing/reports/<int:id>/belege', methods=['GET'])
 def get_billing_report_belege(id):
-    """Alle Belege der Abrechnung als ZIP zum Mitgeben (§ 556 Abs. 4 BGB).
+    """Das Belegeinsicht-Paket der Abrechnung als ZIP (§ 556 Abs. 4 BGB).
+
+    NK-266 (R-DSGVO-03): die Abrechnung, der Rechenweg, die Belege der
+    Abrechnung und die Ablesefotos der Zähler seiner Wohnung -- nichts
+    von anderen Mietern. Die Namen im Archiv sind neutral (NK-131): sie
+    nennen Kostenart, Zähler und Datum, keine Person.
 
     Die Rechnungen der Abrechnung sind die, auf die die Zeilen des
     Ergebnisses verweisen -- gelesen aus dem gespeicherten Ergebnis,
@@ -3499,7 +3504,7 @@ def get_billing_report_belege(id):
 
     eintraege = []  # (Name im Archiv, Pfad auf der Platte)
     fehlen = []
-    for rid in rechnungs_ids:
+    for nummer, rid in enumerate(rechnungs_ids, start=1):
         rechnung = db.session.get(CostInvoice, rid)
         name = (rechnung.invoice_number if rechnung is not None
                 and rechnung.invoice_number else f'Rechnung Nr. {rid}')
@@ -3518,15 +3523,24 @@ def get_billing_report_belege(id):
         if datei is None:
             fehlen.append(f'{name}: die Datei liegt nicht (mehr) am angegebenen Ort.')
             continue
-        eintrag = os.path.basename(pfad)
-        eintraege.append((eintrag, datei))
+        eintraege.append((f'Belege/{nummer:02d}_{_dateiname_teil(rechnung.category.name)}'
+                          f'{os.path.splitext(pfad)[1].lower()}', datei))
 
     if not eintraege and not fehlen:
         return jsonify({
             'error': 'Für diese Abrechnung gibt es keine Belege.'}), 404
 
+    pdf = _beleg_datei(report.document_path) if report.document_path else None
+    if pdf:
+        eintraege.insert(0, ('Abrechnung.pdf', pdf))
+    else:
+        fehlen.insert(0, 'Abrechnung: das PDF liegt nicht vor.')
+    eintraege.extend(_ablesefotos(report))
+
+    from nebenkostenfix.csv_export import positionen_csv
     archiv = BytesIO()
     with zipfile.ZipFile(archiv, 'w', zipfile.ZIP_DEFLATED) as paket:
+        paket.writestr('Rechenweg.csv', '\ufeff' + positionen_csv(ergebnis))
         vergeben = set()
         for name, datei in eintraege:
             ziel, n = name, 2
@@ -3552,6 +3566,36 @@ def get_billing_report_belege(id):
         f'{report.start_date.strftime("%Y%m%d")}-{report.end_date.strftime("%Y%m%d")}.zip')
     return send_file(archiv, mimetype='application/zip', as_attachment=True,
                      download_name=download_name)
+
+
+def _dateiname_teil(text) -> str:
+    """Ein Stück Dateiname ohne Pfad- und Sonderzeichen."""
+    return ''.join(z if z.isalnum() or z in '-_' else '_' for z in str(text)).strip('_') or 'Datei'
+
+
+def _ablesefotos(report) -> list:
+    """NK-266: die Fotos der Stände, auf denen die Abrechnung ruht.
+
+    Nur Zähler der Wohnung des Mieters, keine Hauptzähler und keine fremden
+    (R-DSGVO-03). Je Zähler die Stände im Zeitraum und je der letzte davor
+    und der erste danach -- zwischen ihnen wird gerechnet.
+    """
+    mieter = report.tenant
+    if mieter is None or mieter.apartment_id is None:
+        return []
+    fotos = []
+    for zaehler in Meter.query.filter_by(apartment_id=mieter.apartment_id).order_by(Meter.id):
+        staende = sorted(zaehler.readings, key=lambda r: r.reading_date)
+        davor = [r for r in staende if r.reading_date < report.start_date][-1:]
+        danach = [r for r in staende if r.reading_date > report.end_date][:1]
+        drin = [r for r in staende if report.start_date <= r.reading_date <= report.end_date]
+        for stand in davor + drin + danach:
+            datei = _beleg_datei(stand.document_path) if stand.document_path else None
+            if datei:
+                fotos.append((f'Ablesefotos/Zaehler_{_dateiname_teil(zaehler.meter_number)}_'
+                              f'{stand.reading_date.isoformat()}'
+                              f'{os.path.splitext(stand.document_path)[1].lower()}', datei))
+    return fotos
 
 
 @app.route('/api/billing/reports/<int:id>/positionen.csv', methods=['GET'])

@@ -6158,7 +6158,7 @@ async function openReportDetails(id) {
             </div>
             <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px;">
                 <a class="btn-secondary" href="/api/billing/reports/${id}/belege" download
-                   title="Alle Belege dieser Abrechnung als ZIP für den Mieter (§ 556 Abs. 4 BGB)">
+                   title="Abrechnung, Rechenweg, Belege und Ablesefotos der eigenen Zähler als ZIP für den Mieter (§ 556 Abs. 4 BGB)">
                     <i class="ph ph-file-zip"></i> Belege herunterladen
                 </a>
                 <a class="btn-secondary" href="/api/billing/reports/${id}/positionen.csv" download

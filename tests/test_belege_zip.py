@@ -102,7 +102,8 @@ def _archiv_inhalt(antwort):
 def test_das_archiv_traegt_die_belege_der_abrechnung(auth_client, app_ctx,
                                                      monkeypatch, tmp_path):
     """Das ZIP enthält die Dateien zu den Rechnungen aus dem Ergebnis --
-    unter ihrem eigenen Namen, aus der NAS-Sandbox geholt."""
+    aus der NAS-Sandbox geholt, unter neutralem Namen (NK-266: Nummer und
+    Kostenart statt des Ablagenamens)."""
     nas = tmp_path / 'nas'
     nas.mkdir()
     mieter = _welt(app_ctx, monkeypatch, nas)
@@ -111,10 +112,9 @@ def test_das_archiv_traegt_die_belege_der_abrechnung(auth_client, app_ctx,
     antwort = auth_client.get(f'/api/billing/reports/{report.id}/belege')
     assert antwort.status_code == 200, antwort.get_data(as_text=True)
     inhalt = _archiv_inhalt(antwort)
-    assert 'stadtwerke-wasser-2025.pdf' in inhalt
-    assert 'wasserwerk-2025.pdf' in inhalt
-    assert inhalt['stadtwerke-wasser-2025.pdf'] == \
+    assert inhalt['Belege/01_Wasserversorgung.pdf'] == \
         b'%PDF-1.4 Stadtwerke Wasser 2025'
+    assert inhalt['Belege/02_Wasserversorgung.pdf'] == b'%PDF-1.4 Wasserwerk 2025'
 
     # Der Name des Pakets nennt Mieter und Zeitraum; der Name des Mieters
     # bleibt lesbar, nur Sonderzeichen werden ersetzt.
@@ -172,7 +172,9 @@ def test_die_verweise_kommen_aus_dem_ergebnis(auth_client, app_ctx,
 
     antwort = auth_client.get(f'/api/billing/reports/{report.id}/belege')
     inhalt = _archiv_inhalt(antwort)
-    assert 'spaeter-kommend.pdf' not in inhalt
+    assert b'%PDF-1.4 spaeter' not in inhalt.values()
+    assert sorted(n for n in inhalt if n.startswith('Belege/')) == [
+        'Belege/01_Wasserversorgung.pdf', 'Belege/02_Wasserversorgung.pdf']
     assert 'NEU-1' not in inhalt.get('FEHLENDE_BELEGE.txt', b'').decode('utf-8')
 
 
