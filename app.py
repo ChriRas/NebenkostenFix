@@ -276,9 +276,9 @@ from nebenkostenfix.heizung import (
     pruefe_warmwasserweg,
 )
 from nebenkostenfix.models import db, User, Property, Apartment, Tenant, Haushaltsgroesse, CostCategory, CostInvoice, Meter, MeterReading, TenantCostProfile, InvoiceDocument, Provider, TenantBillingReport, BillingReportCategory, BillingReportVersion, AnschreibenVorlage, Vermieterdaten, Heizungsanlage, Payment
-from nebenkostenfix.girocode_generator import iban_pruefen, iban_saeubern, vermieter_ausweis
+from nebenkostenfix.girocode_generator import iban_pruefen, iban_saeubern, vermieter_art, vermieter_ausweis
 from nebenkostenfix.abrechnung_version import schnappschuss, json_sicher, SOFTWARE_VERSION, REGEL_VERSION, aenderungen_seit, gleich_gerechnet
-from nebenkostenfix.anschreiben import VORGABE, PLATZHALTER, text_fuer
+from nebenkostenfix.anschreiben import ARTEN, PLATZHALTER, text_fuer, vorgabe
 from nebenkostenfix import vorauszahlung as vz
 from nebenkostenfix.ablage import Ablage
 from nebenkostenfix.auth import init_auth
@@ -1102,10 +1102,16 @@ def get_tenants():
             'apartment_name': t.apartment.name if t.apartment else 'Unknown',
             'property_name': t.apartment.property.name if t.apartment and t.apartment.property else 'Unknown',
             'gesperrt_bis': t.gesperrt_bis.isoformat() if t.gesperrt_bis else None,
+            'anrede': t.anrede,
             'ist_beispiel': beispielimmobilie.ist_beispiel(
                 t.apartment.property if t.apartment else None),
         })
     return jsonify(result), 200
+
+def _anrede_aus(eingabe):
+    """Die eigene Anrede des Mieters (NK-264); leer heißt neutraler Gruß."""
+    return eingabe.text('anrede', standard='', maxlaenge=200).strip() or None
+
 
 @app.route('/api/tenants', methods=['POST'])
 def create_tenant():
@@ -1116,7 +1122,8 @@ def create_tenant():
         name=eingabe.text('name', pflicht=True, maxlaenge=200),
         move_in_date=eingabe.datum('move_in_date', pflicht=True),
         move_out_date=eingabe.datum('move_out_date'),
-        last_billed_until=eingabe.datum('last_billed_until')
+        last_billed_until=eingabe.datum('last_billed_until'),
+        anrede=_anrede_aus(eingabe),
     )
     db.session.add(new_tenant)
     db.session.flush() # get id
@@ -1197,6 +1204,8 @@ def update_delete_tenant(id):
         tenant.move_out_date = eingabe.datum('move_out_date')
     if eingabe.vorhanden('last_billed_until'):
         tenant.last_billed_until = eingabe.datum('last_billed_until')
+    if eingabe.vorhanden('anrede'):
+        tenant.anrede = _anrede_aus(eingabe)
 
     vertrag = eingabe.datei('contract_file')
     if vertrag:
@@ -2525,13 +2534,15 @@ def finalize_bill():
         return jsonify({'error': str(e)}), 400
     
     # Generate PDF (NK-057: ein Generator, der Umfang steht auf dem Schalter)
+    mieter = Tenant.query.get(tenant_id)
     pdf_gen = PDFGenerator(
         property_name=bill_data['property'],
         apartment_name=bill_data['apartment'],
         tenant_name=bill_data['tenant_name'],
         start_date=bill_data['start_date'],
         end_date=bill_data['end_date'],
-        detailliert=is_detailed
+        detailliert=is_detailed,
+        tenant_anrede=mieter.anrede,
     )
     
     # Kein eigenes try mehr (NK-030): der zentrale Handler rollt zurueck,
@@ -2540,7 +2551,6 @@ def finalize_bill():
     # Vermieter bekam "PDF Error: list index out of range" zu lesen.
     # NK-064: das Anschreiben des Objekts (oder der Vorgabetext) spricht
     # auf dem Deckblatt, mit den Zahlen aus diesem Ergebnis.
-    mieter = Tenant.query.get(tenant_id)
     anschreiben_text = _anschreiben_fuer(mieter, bill_data, vorauszahlung=(
         _vorauszahlung_vorschlag(mieter, bill_data, category_ids)))
     pdf_bytes = pdf_gen.generate(
@@ -2661,6 +2671,7 @@ def _vermieter_stand():
         'name_quelle': quelle(name_tabelle, name_umgebung),
         'iban_quelle': quelle(iban_tabelle, iban_umgebung),
         'girocode_bereit': bool(name and iban),
+        'art': zeile.art if zeile else None,
         'logo': vermieter_logo.pfad() is not None,
     }
 
@@ -2813,6 +2824,12 @@ def setze_vermieterdaten():
 
     zeile.name = name or None
     zeile.iban = iban_pruefen(iban_roh) if iban_roh.strip() else None
+    # NK-264: nur wenn geschickt -- ältere Oberflächen lassen die Art stehen.
+    if eingabe.vorhanden('art'):
+        art = eingabe.text('art', standard='', maxlaenge=10).strip()
+        if art and art not in ARTEN:
+            raise EingabeFehler('Die Art des Vermieters ist „privat“ oder „firma“.', 'art')
+        zeile.art = art or None
     zeile.aktualisiert_am = date.today()
     db.session.commit()
     return jsonify(_vermieter_stand())
@@ -3048,7 +3065,7 @@ def _anschreiben_fuer(mieter, bill_data, report=None, vorauszahlung=None):
     """
     vorlage_zeile = AnschreibenVorlage.query.filter_by(
         property_id=mieter.apartment.property_id).first()
-    vorlage = vorlage_zeile.text if vorlage_zeile else VORGABE
+    vorlage = vorlage_zeile.text if vorlage_zeile else vorgabe(vermieter_art())
 
     anfang = datetime.fromisoformat(bill_data['start_date']).strftime('%d.%m.%Y')
     ende = datetime.fromisoformat(bill_data['end_date']).strftime('%d.%m.%Y')
@@ -3073,6 +3090,7 @@ def _anschreiben_fuer(mieter, bill_data, report=None, vorauszahlung=None):
         einwendungsfrist=frist_text,
         vermieter_name=vermieter_ausweis()[0],
         vorauszahlung=vorauszahlung,
+        mieter_anrede=mieter.anrede,
     )
 
 
@@ -3183,7 +3201,7 @@ def get_anschreiben_vorlage(property_id):
         return jsonify({'error': 'Objekt nicht gefunden.'}), 404
     vorlage_zeile = AnschreibenVorlage.query.filter_by(property_id=property_id).first()
     return jsonify({
-        'text': vorlage_zeile.text if vorlage_zeile else VORGABE,
+        'text': vorlage_zeile.text if vorlage_zeile else vorgabe(vermieter_art()),
         'ist_vorgabe': vorlage_zeile is None,
         'platzhalter': PLATZHALTER,
     })
@@ -3226,7 +3244,8 @@ def loesche_anschreiben_vorlage(property_id):
     if vorlage_zeile is not None:
         db.session.delete(vorlage_zeile)
         db.session.commit()
-    return jsonify({'text': VORGABE, 'ist_vorgabe': True, 'platzhalter': PLATZHALTER})
+    return jsonify({'text': vorgabe(vermieter_art()), 'ist_vorgabe': True,
+                    'platzhalter': PLATZHALTER})
 
 
 @app.route('/api/billing/reports/<int:id>/belege', methods=['GET'])
@@ -3512,7 +3531,8 @@ def korrigiere_billing_report(id):
             tenant_name=bill_data['tenant_name'],
             start_date=bill_data['start_date'],
             end_date=bill_data['end_date'],
-            detailliert=detailliert
+            detailliert=detailliert,
+            tenant_anrede=tenant.anrede,
         )
         suffix = ("_Detailliert" if detailliert else "_Einfach") + zusatz
         dateiname = (f"Nebenkostenabrechnung_{tenant.name.replace(' ', '_')}"

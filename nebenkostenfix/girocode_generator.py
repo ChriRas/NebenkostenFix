@@ -85,6 +85,19 @@ def vermieter_ausweis():
     return name.strip(), iban_saeubern(iban)
 
 
+def vermieter_art():
+    """'privat', 'firma' oder None (NK-264) -- None heißt neutrale Sätze.
+
+    Ohne Anwendungskontext gibt es keine Einstellung, also neutral.
+    """
+    try:
+        from nebenkostenfix.models import Vermieterdaten
+        zeile = Vermieterdaten.einziger()
+    except RuntimeError:  # kein Anwendungskontext
+        return None
+    return zeile.art if zeile is not None else None
+
+
 # --- Color Palette (matching cover page) ---
 COLOR_DARK = colors.HexColor('#1f2937')
 COLOR_MUTED = colors.HexColor('#6b7280')

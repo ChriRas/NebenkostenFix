@@ -62,6 +62,7 @@ OBERFLAECHE = {
     },
     'Tenant': {
         'apartment_id': 'id="tenant-apartment"',
+        'anrede': 'id="tenant-anrede"',
         'name': 'id="tenant-name"',
         'move_in_date': 'id="tenant-move-in"',
         'move_out_date': 'id="tenant-move-out"',
@@ -142,6 +143,7 @@ OBERFLAECHE = {
     'Vermieterdaten': {
         'name': 'id="vermieter-name"',
         'iban': 'id="vermieter-iban"',
+        'art': 'id="vermieter-art"',
     },
     'TenantBillingReport': {
         'zugestellt_am': 'zustellung-datum-',

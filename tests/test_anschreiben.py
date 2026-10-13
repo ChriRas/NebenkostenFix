@@ -397,7 +397,8 @@ def test_die_korrektur_wickelt_dieselbe_vorlage(auth_client, app_ctx, unkomprimi
 def test_anrede_steht_an_einer_stelle():
     """NK-247: neutral statt „Sehr geehrte/r“, für Vorlage und Deckblatt gleich."""
     from nebenkostenfix import anschreiben, pdf_cover_page
-    assert anschreiben.VORGABE.startswith(anschreiben.ANREDE)
+    # NK-264: die Anrede ist ein Platzhalter, gefüllt aus anrede().
+    assert anschreiben.VORGABE.startswith('{anrede}')
     assert anschreiben.anrede('Anna Mieterin') == 'Guten Tag Anna Mieterin,'
     quelle = Path(pdf_cover_page.__file__).read_text(encoding='utf-8')
     assert 'geehrte' not in quelle and 'anrede(' in quelle

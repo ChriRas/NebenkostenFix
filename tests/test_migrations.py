@@ -38,7 +38,8 @@ BASISREVISION = "63738d5329b4"
 # NK-188: ``a4d7e1c9b3f5`` fuegt ``properties.abrechnungsjahr_beginn`` hinzu (D-114).
 # F-137: ``e3c5a7f9b1d2`` fuegt ``cost_invoices.grundpreis`` hinzu.
 # NK-217: ``670627ef0699`` fuegt ``tenant_billing_reports.regelstand_geprueft`` hinzu.
-KOPFREVISION = "670627ef0699"
+# NK-264: ``b4d8e2a61f37`` fuegt ``tenants.anrede`` und ``vermieterdaten.art`` hinzu.
+KOPFREVISION = "b4d8e2a61f37"
 
 
 def _umgebung(dbdatei: Path, tmp_path: Path) -> dict:
@@ -2477,3 +2478,60 @@ print(json.dumps({"tabellen": tabellen}))
 """
     stand = _lauf(code, datei, tmp_path)
     assert "billing_report_versions" not in stand["tabellen"]
+
+
+CODE_ANREDE_WANDERUNG = """
+import json
+from sqlalchemy import text
+from flask_migrate import downgrade, upgrade
+import app as anwendung
+from nebenkostenfix.models import db
+
+
+def spalten(tabelle):
+    return [z[1] for z in db.session.execute(
+        text(f"PRAGMA table_info('{tabelle}')")).all()]
+
+
+with anwendung.app.app_context():
+    downgrade(revision="670627ef0699")
+    db.session.execute(text(
+        "INSERT INTO properties (id, name, is_standalone) VALUES (1, 'Altbau', 0)"))
+    db.session.execute(text(
+        "INSERT INTO apartments (id, property_id, name, sqm, is_active)"
+        " VALUES (1, 1, 'EG links', 60.0, 1)"))
+    db.session.execute(text(
+        "INSERT INTO tenants (id, apartment_id, name, move_in_date)"
+        " VALUES (1, 1, 'Altmieter', '2024-01-01')"))
+    db.session.execute(text("INSERT INTO vermieterdaten (id, name) VALUES (1, 'Erika')"))
+    db.session.commit()
+    vorher = spalten("tenants") + spalten("vermieterdaten")
+
+    upgrade()
+    nachher = spalten("tenants") + spalten("vermieterdaten")
+    werte = [list(db.session.execute(text("SELECT name, anrede FROM tenants")).one()),
+             list(db.session.execute(text("SELECT name, art FROM vermieterdaten")).one())]
+    stand = db.session.execute(text("SELECT version_num FROM alembic_version")).scalar()
+
+    downgrade(revision="670627ef0699")
+    zurueck = spalten("tenants") + spalten("vermieterdaten")
+    namen = [db.session.execute(text("SELECT name FROM tenants")).scalar(),
+             db.session.execute(text("SELECT name FROM vermieterdaten")).scalar()]
+
+print(json.dumps({"vorher": vorher, "nachher": nachher, "werte": werte,
+                  "stand": stand, "zurueck": zurueck, "namen": namen}))
+"""
+
+
+def test_die_anredewanderung_legt_die_spalten_leer_an(tmp_path):
+    """NK-264: Anrede und Art kommen leer dazu -- leer ist der bisherige
+    Stand (neutraler Gruss, neutrale Saetze); der Rueckweg nimmt sie
+    wieder weg und laesst die Zeilen stehen."""
+    stand = _lauf(CODE_ANREDE_WANDERUNG, tmp_path / "anrede.db", tmp_path)
+
+    assert "anrede" not in stand["vorher"] and "art" not in stand["vorher"]
+    assert "anrede" in stand["nachher"] and "art" in stand["nachher"]
+    assert stand["werte"] == [["Altmieter", None], ["Erika", None]]
+    assert stand["stand"] == KOPFREVISION
+    assert "anrede" not in stand["zurueck"] and "art" not in stand["zurueck"]
+    assert stand["namen"] == ["Altmieter", "Erika"]

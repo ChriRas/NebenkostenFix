@@ -1883,6 +1883,8 @@ async function saveTenant() {
         formData.append('name', name);
         formData.append('apartment_id', parseInt(aptId));
         formData.append('move_in_date', moveIn);
+        // NK-264: immer mitschicken, damit Leeren die eigene Anrede löscht.
+        formData.append('anrede', document.getElementById('tenant-anrede').value.trim());
         if (moveOut) formData.append('move_out_date', moveOut);
         if (lastBilled) formData.append('last_billed_until', lastBilled);
         
@@ -2207,6 +2209,7 @@ function openAddTenantModal(tenant = null) {
     if (tenant && tenant.id) {
         editingTenantId = tenant.id;
         document.getElementById('tenant-name').value = tenant.name;
+        document.getElementById('tenant-anrede').value = tenant.anrede || '';
         
         // Ensure the dropdown shows the correct option
         setTimeout(() => {
@@ -2244,6 +2247,7 @@ function openAddTenantModal(tenant = null) {
     } else {
         editingTenantId = null;
         document.getElementById('tenant-name').value = '';
+        document.getElementById('tenant-anrede').value = '';
         document.getElementById('tenant-move-in').value = '';
         document.getElementById('tenant-move-out').value = '';
         document.getElementById('tenant-last-billed').value = '';
@@ -4062,6 +4066,7 @@ async function fetchVermieterdaten() {
         const stand = await res.json();
         document.getElementById('vermieter-name').value = stand.name || '';
         document.getElementById('vermieter-iban').value = stand.iban || '';
+        document.getElementById('vermieter-art').value = stand.art || '';
         const quelle = [];
         if (stand.name_quelle === 'umgebung') quelle.push('Name aus der Umgebungsvariable VERMIETER_NAME');
         if (stand.iban_quelle === 'umgebung') quelle.push('IBAN aus der Umgebungsvariable VERMIETER_IBAN');
@@ -4120,11 +4125,12 @@ window.vermieterLogoLoeschen = vermieterLogoLoeschen;
 async function saveVermieterdaten() {
     const name = document.getElementById('vermieter-name').value.trim();
     const iban = document.getElementById('vermieter-iban').value.trim();
+    const art = document.getElementById('vermieter-art').value;
     try {
         const res = await fetch('/api/vermieter', {
             method: 'PUT',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ name, iban })
+            body: JSON.stringify({ name, iban, art })
         });
         if (!res.ok) throw await serverFehler(res);
         showSuccess('Vermieterdaten gespeichert.');

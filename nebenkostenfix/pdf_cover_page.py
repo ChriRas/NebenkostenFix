@@ -145,6 +145,7 @@ def build_cover_page_elements(
     balance,
     anschreiben=None,
     vermieter_name='',
+    tenant_anrede=None,
 ):
     """
     Build a list of reportlab Flowable elements for the billing cover page.
@@ -153,6 +154,7 @@ def build_cover_page_elements(
         property_name: Name of the property (e.g., "Lindenstraße 12")
         apartment_name: Name of the apartment (e.g., "EG links")
         tenant_name: Full name of the tenant (e.g., "Anna Mieterin")
+        tenant_anrede: eigene Anrede des Mieters (NK-264), sonst neutral
         start_date: ISO date string for billing period start
         end_date: ISO date string for billing period end
         total_amount: Total costs for the period
@@ -201,7 +203,7 @@ def build_cover_page_elements(
     elements.append(Spacer(1, 8))
     
     # Subtitle
-    # NK-210 (B3): der Vermieter mit Namen, sonst seine Rolle
+    # NK-210: der Vermieter mit Namen, sonst seine Rolle
     elements.append(Paragraph(
         escape(vermieter_name) or "Hausverwaltung / Vermieter",
         styles['SubHeader']
@@ -210,7 +212,7 @@ def build_cover_page_elements(
     # ──────────────────────────────────────────────
     # RECIPIENT + GREETING
     # ──────────────────────────────────────────────
-    elements.append(Paragraph(f"An: <b>{tenant_name}</b>", styles['Greeting']))
+    elements.append(Paragraph(f"An: <b>{escape(tenant_name)}</b>", styles['Greeting']))
     elements.append(Paragraph(f"Wohnung: {apartment_name}", styles['SubHeader']))
     
     elements.append(Spacer(1, 10))
@@ -225,7 +227,7 @@ def build_cover_page_elements(
         elements.append(Spacer(1, 10))
     else:
         elements.append(Paragraph(
-            f"{anrede(tenant_name)}<br/><br/>"
+            f"{escape(anrede(tenant_name, tenant_anrede))}<br/><br/>"
             f"anbei finden Sie Ihre Nebenkostenabrechnung für den Zeitraum "
             f"<b>{start_fmt}</b> bis <b>{end_fmt}</b>. "
             f"Im Folgenden erhalten Sie einen Überblick über die wichtigsten Kennzahlen.",

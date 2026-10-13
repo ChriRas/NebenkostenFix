@@ -10,8 +10,9 @@ from datetime import datetime
 from decimal import Decimal
 from nebenkostenfix import zeit
 from nebenkostenfix.pdf_cover_page import build_cover_page_elements
+from nebenkostenfix.anschreiben import saetze as anschreiben_saetze
 from nebenkostenfix.girocode_generator import (
-    _format_iban_display, build_girocode_elements, vermieter_ausweis)
+    _format_iban_display, build_girocode_elements, vermieter_art, vermieter_ausweis)
 from nebenkostenfix.geld import NULL
 from nebenkostenfix import betrkv
 from nebenkostenfix.zeitraum import HINWEIS_TAGESKONVENTION
@@ -110,8 +111,9 @@ class PDFGenerator:
     ``abrechnung_version`` -- dieselben, die NK-061 mit der Version der
     finalisierten Abrechnung abspeichert."""
     def __init__(self, property_name, apartment_name, tenant_name, start_date, end_date,
-                 detailliert=False):
+                 detailliert=False, tenant_anrede=None):
         self.detailliert = detailliert
+        self.tenant_anrede = tenant_anrede  # NK-264
         self.property_name = property_name
         self.apartment_name = apartment_name
         self.tenant_name = tenant_name
@@ -434,12 +436,13 @@ class PDFGenerator:
         
         # Prepend cover page (Deckblatt)
         balance = total_amount - prepaid_amount
-        # NK-210 (B3): der Name aus den Einstellungen statt der Rolle
+        # NK-210: der Name aus den Einstellungen statt der Rolle
         vermieter = vermieter_ausweis()[0]
         cover_elements = build_cover_page_elements(
             property_name=self.property_name,
             apartment_name=self.apartment_name,
             tenant_name=self.tenant_name,
+            tenant_anrede=self.tenant_anrede,
             start_date=self.start_date,
             end_date=self.end_date,
             total_amount=total_amount,
@@ -727,13 +730,15 @@ class PDFGenerator:
 
         elements.append(Spacer(1, 40))
         
-        # NK-248: Sätze ohne ich/wir; die hinterlegte IBAN steht im Satz.
+        # NK-248: die hinterlegte IBAN steht im Satz. NK-264: ich/wir nach
+        # der Art des Vermieters, ohne Angabe neutral.
+        saetze = anschreiben_saetze(vermieter_art())
         if balance > 0:
             iban = vermieter_ausweis()[1]
-            konto = (f"das Konto mit der IBAN {_format_iban_display(iban)}"
-                     if iban else "das bekannte Konto")
+            konto = (f"{saetze['konto']} mit der IBAN {_format_iban_display(iban)}"
+                     if iban else saetze['bekanntes_konto'])
             elements.append(Paragraph(f"Bitte überweisen Sie den ausstehenden Betrag innerhalb von 14 Tagen auf {konto}.", self.styles['HeaderNormal']))
-        elements.append(Paragraph("Rückfragen zur Abrechnung werden gern beantwortet.", self.styles['HeaderNormal']))
+        elements.append(Paragraph(saetze['rueckfragen'], self.styles['HeaderNormal']))
         
 
         # NK-245: ohne Zaehlerzeile kein leerer Nachweisteil samt Umbruch.
@@ -789,7 +794,7 @@ class PDFGenerator:
                     except (ValueError, TypeError): return d
                 
                 def dt_offset(stichtag, offset):
-                    # NK-218 (V1): ein Satz statt „Abweichung X Tage (Fenster Y
+                    # NK-218: ein Satz statt „Abweichung X Tage (Fenster Y
                     # Tage)“; das Warnzeichen davor kannte die Schrift nicht.
                     if offset <= 7:
                         return ""
@@ -870,7 +875,7 @@ class PDFGenerator:
                     box_data.append([Paragraph(f"Gesamtverbrauch Haus (Hauptzähler{zeitraum}):", self.styles['MeterText']), Paragraph(f"{main_c:.1f} {unit}", self.styles['MeterText'])])
                     box_data.append([Paragraph(f"Summe aller Wohnungen:", self.styles['MeterText']), Paragraph(f"{sum_sub:.1f} {unit}", self.styles['MeterText'])])
                     box_data.append([Paragraph(f"Allgemeinverbrauch (Haus − Wohnungen):", self.styles['MeterText']), Paragraph(f"{allg:.1f} {unit}", self.styles['MeterTextBold'])])
-                    # NK-209 (B2): der Anteil, mit dem gerechnet wurde -- nach
+                    # NK-209: der Anteil, mit dem gerechnet wurde -- nach
                     # Personentagen, nicht 1/Zahl der Mieter. Gespeicherte
                     # Abrechnungen von davor kennen ihn nicht; dort fehlt die
                     # Zeile lieber, als dass sie etwas Falsches sagt.

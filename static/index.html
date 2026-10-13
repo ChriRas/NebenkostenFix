@@ -353,6 +353,16 @@
                             <input type="text" id="vermieter-iban" maxlength="34" placeholder="z. B. DE02 1203 0000 0000 2020 51">
                             <small class="text-muted" id="vermieter-quelle"></small>
                         </div>
+                        <!-- NK-264: ich/wir in Anschreiben und Abrechnung. -->
+                        <div class="form-group">
+                            <label for="vermieter-art">Sie schreiben als</label>
+                            <select id="vermieter-art">
+                                <option value="">Neutral (ohne ich/wir)</option>
+                                <option value="privat">Privatperson (ich)</option>
+                                <option value="firma">Firma oder Verwaltung (wir)</option>
+                            </select>
+                            <small class="feld-hilfe">Bestimmt Sätze wie „Rückfragen beantworte ich gern“ im Anschreiben und auf der Abrechnung.</small>
+                        </div>
                         <!-- NK-155: optionales Logo oben rechts auf dem Deckblatt. -->
                         <div class="form-group">
                             <label for="vermieter-logo-datei">Logo auf dem Deckblatt (optional)</label>
@@ -1480,6 +1490,12 @@
                 <div class="form-group">
                     <label for="tenant-name">Name des Mieters</label>
                     <input type="text" id="tenant-name">
+                </div>
+                <!-- NK-264: eigene Anrede, leer = „Guten Tag <Name>,“ -->
+                <div class="form-group">
+                    <label for="tenant-anrede">Anrede im Anschreiben (optional)</label>
+                    <input type="text" id="tenant-anrede" maxlength="200" placeholder="z. B. Sehr geehrte Frau Muster">
+                    <small class="feld-hilfe">Leer lassen für „Guten Tag“ mit dem Namen des Mieters.</small>
                 </div>
                 <div class="form-group">
                     <label for="tenant-apartment">Zugeordnete Wohnung</label>

@@ -95,6 +95,8 @@ class Tenant(db.Model):
     # Anker gesperrt (aus allen Listen ausgeblendet), danach loescht der Start
     # sie ganz.
     gesperrt_bis = db.Column(db.Date, nullable=True)
+    # NK-264: eigene Anrede („Sehr geehrte Frau Muster“); leer = „Guten Tag <Name>,“.
+    anrede = db.Column(db.String(200), nullable=True)
     
     cost_profiles = db.relationship('TenantCostProfile', backref='tenant', lazy=True, cascade="all, delete-orphan")
     payments = db.relationship('Payment', backref='tenant', lazy=True, cascade="all, delete-orphan")
@@ -597,6 +599,8 @@ class Vermieterdaten(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(200), nullable=True)
     iban = db.Column(db.String(34), nullable=True)
+    # NK-264: 'privat' (ich) oder 'firma' (wir); leer = neutrale Sätze (NK-248).
+    art = db.Column(db.String(10), nullable=True)
     aktualisiert_am = db.Column(db.Date)
 
     @classmethod
