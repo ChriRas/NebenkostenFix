@@ -718,7 +718,9 @@ class PDFGenerator:
         # R-DOC-01 Punkt 8: die Belegliste gehoert auf beide Wege des
         # Dokuments -- der Vermieter sendet nur eine der beiden Fassungen,
         # also muss jede fuer sich die Zuordnung Position zu Beleg tragen.
-        elements.extend(self._belegliste_elemente(line_items))
+        # NK-244: genau einmal; die ausfuehrliche Fassung mit Betraegen.
+        elements.extend(self._belegliste_elemente(
+            line_items, mit_betraegen=self.detailliert))
 
         elements.append(Spacer(1, 40))
         
@@ -910,15 +912,7 @@ class PDFGenerator:
                 t.setStyle(TableStyle(box_style))
                 elements.append(t)
                 elements.append(Spacer(1, 20))
-            
-            # ----------------------------------------------------
-            # Belegliste (R-DOC-01 Punkt 8) -- ersetzt die fruehere Tabelle
-            # "Verwendete Rechnungen": dieselben Betraege, aber je Rechnung
-            # und mit Nummer, Datum, Anbieter und Dokumentseite.
-            # ----------------------------------------------------
-            elements.extend(
-                self._belegliste_elemente(line_items, mit_betraegen=True))
-        
+
 
         # GiroCode (EPC-QR) — only rendered for Nachzahlung (balance > 0)
         girocode_elements = build_girocode_elements(

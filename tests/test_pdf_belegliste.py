@@ -383,3 +383,11 @@ def test_die_zeile_des_kerns_traegt_die_belegangaben():
     assert zeile['rechnungsdatum'] == '2024-04-15'
     assert zeile['provider_name'] == 'Stadtwerke Musterstadt'
     assert zeile['doc_name'] == 'rechnung-wasser.pdf, Seiten 3'
+
+
+@pytest.mark.parametrize('detailliert', [False, True], ids=['einfach', 'detailliert'])
+def test_die_belegliste_steht_genau_einmal_da(unkomprimiert, detailliert):
+    """NK-244: die ausführliche Fassung hängte die Liste zweimal an."""
+    pdf = _pdf(detailliert, [_posten()])
+    assert _text(pdf).count('Belegliste') == 1
+    assert ('Zeitanteilig' in _geklebt(pdf)) is detailliert
