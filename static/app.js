@@ -7319,17 +7319,12 @@ function renderBuildingComparison(apartment_comparison) {
     if (chartBuildingComparisonInstance) chartBuildingComparisonInstance.destroy();
     
     const titleEl = document.getElementById('chart-comparison-title');
-    // Leerhinweis neben der Zeichenfläche, nicht an ihrer Stelle: kommen
-    // später Daten, muss die Fläche noch da sein (NK-157).
-    const leerHinweis = document.getElementById('chart-building-comparison-leer');
-    const leer = !apartment_comparison || apartment_comparison.length === 0;
-    ctx.canvas.hidden = leer;
-    leerHinweis.hidden = !leer;
-
-    if (leer) {
-        titleEl.textContent = 'Wohnungsvergleich';
-        return;
-    }
+    // NK-254: ein Vergleich braucht zwei Wohnungen mit Daten, sonst bleibt die
+    // Karte weg. Nur ausblenden: kommen später Daten, muss die Zeichenfläche
+    // noch da sein (NK-157).
+    const wohnungen = new Set((apartment_comparison || []).map(d => d.apartment));
+    titleEl.closest('.dashboard-card').hidden = wohnungen.size < 2;
+    if (wohnungen.size < 2) return;
     
     // Show reading period range in title
     const periods = apartment_comparison.filter(d => d.period).map(d => d.period);

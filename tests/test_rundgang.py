@@ -81,9 +81,19 @@ def test_rundgang_prueft_am_handy_das_kopfmenue():
 
 def test_leere_zeichenflaeche_bleibt_erhalten():
     """Ein Leerhinweis ersetzt die Zeichenfläche nicht per innerHTML: kommen
-    später Daten, fände Chart.js sonst kein <canvas> mehr (Fund des Rundgangs)."""
+    später Daten, fände Chart.js sonst kein <canvas> mehr (Fund des Rundgangs).
+    Den Wohnungsvergleich ohne Daten blendet NK-254 ganz aus."""
     assert not re.search(r'canvas\.parentElement\.innerHTML', SKRIPT)
-    assert 'id="chart-building-comparison-leer"' in SEITE
+    assert 'id="chart-building-comparison"' in SEITE
+
+
+def test_rundgang_prueft_den_wohnungsvergleich():
+    """NK-254: die Vergleichskarte stand auch ohne zwei Wohnungen mit Daten da."""
+    assert "Chart.getChart(document.getElementById('chart-building-comparison'))" in rundgang.VERGLEICH_JS
+    assert 'wohnungen < 2' in rundgang.VERGLEICH_JS
+    quelle = (WURZEL / 'scripts' / 'rundgang.py').read_text(encoding='utf-8')
+    handy = quelle[quelle.index('    def handy(self):'):]
+    assert 'self.seite.evaluate(VERGLEICH_JS)' in handy[:handy.index('\n    def ')]
 
 
 def test_rundgang_sieht_kaputte_werte():

@@ -140,6 +140,14 @@ KOPF_MENUE_JS = """(bereich) => {
   return befunde;
 }"""
 
+# NK-254: ein Vergleich mit nur einer Wohnung sagt nichts; dann keine Karte.
+VERGLEICH_JS = """() => {
+  const karte = document.getElementById('chart-comparison-title').closest('.dashboard-card');
+  const diagramm = Chart.getChart(document.getElementById('chart-building-comparison'));
+  const wohnungen = diagramm ? diagramm.data.labels.length : 0;
+  return karte.offsetParent && wohnungen < 2 ? [`Wohnungsvergleich mit ${wohnungen} Wohnung(en) sichtbar`] : [];
+}"""
+
 
 def _freier_port() -> int:
     with socket.socket() as s:
@@ -226,6 +234,11 @@ class Rundgang:
             self.seite.wait_for_timeout(300)
             for befund in self.seite.evaluate(KOPF_MENUE_JS, bereich):
                 self.befunde.append(f'{self.breite}px handy/{bereich}: {befund}')
+        self.schritt = 'handy-vergleich'
+        self.seite.evaluate("(b) => wechsleZuTab(b)", 'reports')
+        self.seite.wait_for_timeout(1500)
+        for befund in self.seite.evaluate(VERGLEICH_JS):
+            self.befunde.append(f'{self.breite}px handy/reports: {befund}')
 
     def bereich(self, name: str, zustand: str):
         self.schritt = f'{zustand}-{name}'

@@ -996,6 +996,37 @@ async function ablesenPruefen() {
         && !zeilen[2].includes('jahr-sprung') && !zeilen[2].includes('gegenüber dem Vorjahr'));
 }
 
+// --- NK-254: Wohnungsvergleich erst ab zwei Wohnungen mit Daten ---------------
+{
+    const m = appQuelle.match(/function renderBuildingComparison\([\s\S]*?\n\}/);
+    const lauf = daten => {
+        const karte = { hidden: false };
+        const el = {
+            'chart-building-comparison': { getContext: () => ({ canvas: {} }) },
+            'chart-comparison-title': { closest: () => karte },
+            'chart-building-comparison-leer': {},
+        };
+        let gezeichnet = 0;
+        new Function('document', 'Chart', 'DIAGRAMM_FARBE', 'chartBuildingComparisonInstance', 'daten',
+            m[0] + '; renderBuildingComparison(daten);')(
+            { getElementById: id => el[id] },
+            class { constructor() { gezeichnet++; } destroy() {} }, {}, null, daten);
+        return { karte, gezeichnet };
+    };
+    if (!m) {
+        pruefe('NK-254: renderBuildingComparison gibt es', false);
+    } else {
+        const zeile = (apartment, category) => ({ apartment, category, consumption: 10, unit: 'kWh' });
+        const keine = lauf([]);
+        const eine = lauf([zeile('WE 1', 'Strom'), zeile('WE 1', 'Wasser')]);
+        const zwei = lauf([zeile('WE 1', 'Strom'), zeile('WE 2', 'Strom')]);
+        pruefe('NK-254: Wohnungsvergleich bei keiner und einer Wohnung ausgeblendet',
+            keine.karte.hidden === true && eine.karte.hidden === true && eine.gezeichnet === 0);
+        pruefe('NK-254: Wohnungsvergleich bei zwei Wohnungen gezeichnet',
+            zwei.karte.hidden === false && zwei.gezeichnet === 1);
+    }
+}
+
 // --- NK-230: Wie im Vorjahr füllen ---------------------------------------
 // Die Rechnungen des Vorjahres kommen als Zeilen ohne Betrag; getippte Zeilen
 // bleiben, leere machen Platz. Ohne Betrag wird eine solche Zeile nicht
