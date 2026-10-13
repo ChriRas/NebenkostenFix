@@ -74,6 +74,11 @@ OBERFLAECHE = {
         'gueltig_ab': 'gueltig_ab',
         'personenanzahl': 'personenanzahl',
     },
+    'VorauszahlungSoll': {
+        'tenant_id': '/vorauszahlung_soll`',
+        'gueltig_ab': 'vz-gueltig-ab',
+        'betrag': 'vz-betrag',
+    },
     'TenantCostProfile': {
         'tenant_id': '/profiles`',
         'category_id': 'profile-cat-',
@@ -233,6 +238,9 @@ AUSNAHMEN = {
         'id': 'Schlüssel.',
     },
     'Haushaltsgroesse': {
+        'id': 'Schlüssel.',
+    },
+    'VorauszahlungSoll': {
         'id': 'Schlüssel.',
     },
     'TenantCostProfile': {

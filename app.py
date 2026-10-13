@@ -149,6 +149,9 @@ Stammdaten -- Immobilie, Wohnung, Mieter, Anbieter, Kostenart
   POST        /api/tenants/<int:tenant_id>/haushaltsgroessen -> save_haushaltsgroesse
   GET         /api/tenants/<int:tenant_id>/zeitraumvorschlag -> get_zeitraumvorschlag
   DELETE      /api/haushaltsgroessen/<int:id>              -> delete_haushaltsgroesse
+  GET         /api/tenants/<int:tenant_id>/vorauszahlungen -> get_vorauszahlungen
+  POST        /api/tenants/<int:tenant_id>/vorauszahlung_soll -> save_vorauszahlung_soll
+  DELETE      /api/vorauszahlung_soll/<int:id>             -> delete_vorauszahlung_soll
   GET         /api/providers                               -> get_providers
   POST        /api/providers                               -> create_provider
   DELETE      /api/providers/<int:id>                      -> delete_provider
@@ -279,10 +282,11 @@ from nebenkostenfix.heizung import (
     HeizungsFehler, pruefe_anteil, pruefe_kostenart, pruefe_versorgungsart,
     pruefe_warmwasserweg,
 )
-from nebenkostenfix.models import db, User, Property, Apartment, Tenant, Haushaltsgroesse, CostCategory, CostInvoice, Meter, MeterReading, TenantCostProfile, InvoiceDocument, Provider, TenantBillingReport, BillingReportCategory, BillingReportVersion, AnschreibenVorlage, Vermieterdaten, Heizungsanlage, Payment
+from nebenkostenfix.models import db, User, Property, Apartment, Tenant, Haushaltsgroesse, CostCategory, CostInvoice, Meter, MeterReading, TenantCostProfile, InvoiceDocument, Provider, TenantBillingReport, BillingReportCategory, BillingReportVersion, AnschreibenVorlage, Vermieterdaten, Heizungsanlage, Payment, VorauszahlungSoll
 from nebenkostenfix.girocode_generator import iban_pruefen, iban_saeubern, vermieter_art, vermieter_ausweis
 from nebenkostenfix.abrechnung_version import schnappschuss, json_sicher, SOFTWARE_VERSION, REGEL_VERSION, aenderungen_seit, gleich_gerechnet
 from nebenkostenfix.anschreiben import ARTEN, PLATZHALTER, text_fuer, vorgabe
+from nebenkostenfix.anschreiben import anrede as anschreiben_anrede, saetze as anschreiben_saetze
 from nebenkostenfix import vorauszahlung as vz
 from nebenkostenfix.ablage import Ablage
 from nebenkostenfix.auth import init_auth
@@ -1294,6 +1298,68 @@ def delete_haushaltsgroesse(id):
     db.session.delete(eintrag)
     db.session.commit()
     return jsonify({'message': 'Haushaltsgröße gelöscht'}), 200
+
+# --- Soll und Ist der Vorauszahlungen (NK-261, R-VZ-02) ---
+# Eine Serienbuchung legt die Zahlungen im Voraus an und zaehlt sie damit
+# sofort als Ist. Der vereinbarte Betrag steht deshalb in einer eigenen
+# Tabelle: nur gegen ihn laesst sich sagen, ob ein Monat offen ist.
+def _soll_setzen(tenant, gueltig_ab, betrag):
+    """Legt einen Stichtag an oder berichtigt ihn; True, wenn er neu ist."""
+    vorhanden = next(
+        (s for s in tenant.vorauszahlung_soll if s.gueltig_ab == gueltig_ab), None)
+    if vorhanden:
+        vorhanden.betrag = betrag
+        return vorhanden, False
+    eintrag = VorauszahlungSoll(tenant_id=tenant.id, gueltig_ab=gueltig_ab, betrag=betrag)
+    db.session.add(eintrag)
+    return eintrag, True
+
+
+@app.route('/api/tenants/<int:tenant_id>/vorauszahlungen', methods=['GET'])
+def get_vorauszahlungen(tenant_id):
+    tenant = Tenant.query.get_or_404(tenant_id)
+    zahlungen = Payment.query.filter_by(
+        tenant_id=tenant.id, type='Nebenkostenvorauszahlung').all()
+    ergebnis = vz.soll_ist(
+        [(s.gueltig_ab, s.betrag) for s in tenant.vorauszahlung_soll],
+        [(p.payment_date, p.amount) for p in zahlungen],
+        tenant.move_in_date, tenant.move_out_date,
+        zeit.als_ortsdatum(zeit.jetzt_utc()))
+    ergebnis['soll'] = [
+        {'id': s.id, 'gueltig_ab': s.gueltig_ab.isoformat(), 'betrag': f'{s.betrag:.2f}'}
+        for s in tenant.vorauszahlung_soll]
+    ergebnis['erinnerung'] = vz.erinnerung(
+        ergebnis, anschreiben_anrede(tenant.name, tenant.anrede),
+        tenant.apartment.name, anschreiben_saetze(vermieter_art())['bekanntes_konto'],
+        vermieter_ausweis()[0])
+    return jsonify(ergebnis), 200
+
+
+@app.route('/api/tenants/<int:tenant_id>/vorauszahlung_soll', methods=['POST'])
+def save_vorauszahlung_soll(tenant_id):
+    """Wie bei der Haushaltsgroesse: derselbe Stichtag berichtigt."""
+    tenant = Tenant.query.get_or_404(tenant_id)
+    eingabe = Eingabe.aus_request()
+    gueltig_ab = eingabe.datum('gueltig_ab', pflicht=True)
+    betrag = eingabe.geldbetrag('betrag', pflicht=True, min_wert=0)
+    if gueltig_ab < tenant.move_in_date:
+        raise EingabeFehler(
+            f'Der Stichtag {gueltig_ab.isoformat()} liegt vor dem Einzug am '
+            f'{tenant.move_in_date.isoformat()}.', 'gueltig_ab')
+    eintrag, neu = _soll_setzen(tenant, gueltig_ab, betrag)
+    db.session.commit()
+    if neu:
+        return jsonify({'message': 'Soll angelegt', 'id': eintrag.id}), 201
+    return jsonify({'message': 'Soll aktualisiert', 'id': eintrag.id}), 200
+
+
+@app.route('/api/vorauszahlung_soll/<int:id>', methods=['DELETE'])
+def delete_vorauszahlung_soll(id):
+    eintrag = VorauszahlungSoll.query.get_or_404(id)
+    db.session.delete(eintrag)
+    db.session.commit()
+    return jsonify({'message': 'Soll gelöscht'}), 200
+
 
 # --- Providers ---
 @app.route('/api/providers', methods=['GET'])
@@ -3763,6 +3829,12 @@ def add_payment():
             created_count += 1
             if created_count > 120:
                 break
+        # NK-261: die Serie ist der vereinbarte Betrag; er bleibt als Soll
+        # stehen. Vor dem Einzug gibt es kein Soll (wie in der Route dazu).
+        tenant = db.session.get(Tenant, tenant_id)
+        if (type_ == 'Nebenkostenvorauszahlung' and tenant is not None
+                and start_date >= tenant.move_in_date):
+            _soll_setzen(tenant, start_date, amount)
         db.session.commit()
         return jsonify({'message': f'{created_count} Zahlungen erfolgreich erfasst'}), 201
     else:

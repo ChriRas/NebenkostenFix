@@ -520,6 +520,89 @@ async function haushaltPruefen() {
         && gut.liste.zeilen.length === 1 && gut.meldungen.length === 0);
 }
 
+// --- NK-261: Soll und Ist der Vorauszahlungen -------------------------------
+// Der Wächter ruft ladeVorauszahlungen und saveVorauszahlungSoll mit
+// gestubbtem fetch auf: ohne Soll kein Rückstand und keine Erinnerung, der
+// jüngste Monat steht oben, ein Rückstand zeigt die Erinnerung, Speichern
+// schickt Stichtag und Betrag und lädt neu.
+async function vorauszahlungPruefen() {
+    const funktion = name => {
+        const m = appQuelle.match(new RegExp(`async function ${name}\\([^)]*\\) \\{[\\s\\S]*?\\n\\}`));
+        if (!m) throw new Error(`${name} nicht gefunden`);
+        return m[0];
+    };
+    const quelltext = funktion('ladeVorauszahlungen') + funktion('saveVorauszahlungSoll');
+    const lauf = (felder, antworten) => {
+        const aufrufe = [];
+        const meldungen = [];
+        const dokument = {
+            getElementById(id) {
+                if (!(id in felder)) felder[id] = { value: '', innerHTML: '', textContent: '', hidden: false };
+                return felder[id];
+            },
+        };
+        const holen = (url, opt = {}) => {
+            aufrufe.push({ url, methode: opt.method || 'GET', koerper: opt.body });
+            const daten = antworten.shift() ?? {};
+            return Promise.resolve({ ok: true, json: () => Promise.resolve(daten) });
+        };
+        const fns = new Function('document', 'fetch', 'showError', 'serverFehler', 'meldungZu',
+            'escapeHtml', 'datumText', 'euroText',
+            quelltext + '; return { ladeVorauszahlungen, saveVorauszahlungSoll };')(
+            dokument, holen, m => meldungen.push(m), async () => new Error('Server'),
+            (e, ersatz) => ersatz, t => String(t).replace(/</g, '&lt;'), iso => 'D' + iso,
+            v => Number(v).toFixed(2) + ' €');
+        return { fns, aufrufe, meldungen, felder };
+    };
+
+    const leer = lauf({}, [{ soll: [], monate: [
+        { monat: '2024-01', soll: null, ist: '80.00', differenz: null, rueckstand: false, laufend: false },
+    ], saldo: '0.00', erinnerung: null }]);
+    await leer.fns.ladeVorauszahlungen(7);
+    pruefe('NK-261: ohne Soll kein Rückstand und keine Erinnerung',
+        leer.aufrufe[0].url === '/api/tenants/7/vorauszahlungen'
+        && /Noch kein Soll/.test(leer.felder['vz-soll-liste'].innerHTML)
+        && /kein Soll/.test(leer.felder['vz-monate'].innerHTML)
+        && leer.felder['vz-saldo'].textContent === 'Kein Rückstand.'
+        && leer.felder['vz-erinnerung-block'].hidden === true);
+
+    const offen = lauf({}, [{ soll: [{ id: 4, gueltig_ab: '2024-01-01', betrag: '80.00' }], monate: [
+        { monat: '2024-01', soll: '80.00', ist: '0.00', differenz: '80.00', rueckstand: true, laufend: false },
+        { monat: '2024-02', soll: '80.00', ist: '0.00', differenz: '80.00', rueckstand: false, laufend: true },
+    ], saldo: '80.00', erinnerung: 'Sehr geehrte …' }]);
+    await offen.fns.ladeVorauszahlungen(7);
+    const zeilen = offen.felder['vz-monate'].innerHTML;
+    pruefe('NK-261: der jüngste Monat oben, Rückstand markiert, Erinnerung sichtbar',
+        zeilen.indexOf('02/2024') < zeilen.indexOf('01/2024')
+        && /dq-status-badge red">Rückstand/.test(zeilen) && /laufend/.test(zeilen)
+        && /D2024-01-01/.test(offen.felder['vz-soll-liste'].innerHTML)
+        && /Offen sind insgesamt 80\.00 €/.test(offen.felder['vz-saldo'].textContent)
+        && offen.felder['vz-erinnerung'].value === 'Sehr geehrte …'
+        && offen.felder['vz-erinnerung-block'].hidden === false);
+
+    const ohneTag = lauf({ 'vz-tenant-id': { value: '7' }, 'vz-betrag': { value: '80' } }, []);
+    await ohneTag.fns.saveVorauszahlungSoll();
+    pruefe('NK-261: ohne Stichtag geht nichts hinaus',
+        ohneTag.aufrufe.length === 0 && ohneTag.meldungen.length === 1);
+
+    const gut = lauf({
+        'vz-tenant-id': { value: '7' },
+        'vz-gueltig-ab': { value: '2024-01-01' },
+        'vz-betrag': { value: '80' },
+    }, [{ id: 4 }, { soll: [], monate: [], saldo: '0.00', erinnerung: null }]);
+    await gut.fns.saveVorauszahlungSoll();
+    const post = gut.aufrufe[0] || {};
+    pruefe('NK-261: Speichern schickt POST mit Stichtag und Betrag, lädt dann neu',
+        post.methode === 'POST' && post.url === '/api/tenants/7/vorauszahlung_soll'
+        && post.koerper === JSON.stringify({ gueltig_ab: '2024-01-01', betrag: '80' })
+        && gut.aufrufe.length === 2 && gut.aufrufe[1].url === '/api/tenants/7/vorauszahlungen'
+        && gut.meldungen.length === 0);
+
+    pruefe('NK-261: Mieterzeile hat den Knopf, die Seite den Dialog',
+        appQuelle.includes('vzBtn.onclick = () => openVorauszahlungModal(t);')
+        && html.includes('id="vorauszahlung-modal"'));
+}
+
 // --- NK-201: Warnleiste im offenen Modus -------------------------------------
 // Der Rauchtest gibt die Antwort von /api/auth/me vor: offen in Docker zeigt
 // die Warnleiste, offen in der Windows-App bleibt sie verborgen.
@@ -1295,4 +1378,6 @@ warnLeistePruefen()
                                 .catch(e => pruefe('NK-230: Vorjahr-Prüfung lief durch — ' + e.message, false))
                                 .then(() => zaehlerPflegePruefen()
                                     .catch(e => pruefe('NK-258: Zählerpflege-Prüfung lief durch — ' + e.message, false))
-                                    .then(() => process.exit(fehler ? 1 : 0))))))))));
+                                    .then(() => vorauszahlungPruefen()
+                                        .catch(e => pruefe('NK-261: Vorauszahlung-Prüfung lief durch — ' + e.message, false))
+                                        .then(() => process.exit(fehler ? 1 : 0)))))))))));

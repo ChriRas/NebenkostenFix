@@ -1824,6 +1824,14 @@ async function fetchTenants() {
                 householdBtn.title = 'Haushaltsgröße';
                 householdBtn.onclick = () => openHouseholdModal(t);
 
+                // NK-261: Soll und Ist der Vorauszahlungen je Monat.
+                const vzBtn = document.createElement('button');
+                vzBtn.className = 'btn-icon';
+                vzBtn.innerHTML = '<i class="ph ph-coins" aria-hidden="true"></i>';
+                vzBtn.title = 'Vorauszahlungen';
+                vzBtn.setAttribute('aria-label', 'Vorauszahlungen');
+                vzBtn.onclick = () => openVorauszahlungModal(t);
+
                 // NK-078: Auskunft als ZIP -- JSON mit allen Zeilen zum
                 // Mietverhaeltnis und die Dateien dazu.
                 const exportBtn = document.createElement('button');
@@ -1840,6 +1848,7 @@ async function fetchTenants() {
                 tdActions.appendChild(editBtn);
                 tdActions.appendChild(profileBtn);
                 tdActions.appendChild(householdBtn);
+                tdActions.appendChild(vzBtn);
                 tdActions.appendChild(exportBtn);
                 tdActions.appendChild(deleteBtn);
                 
@@ -3088,6 +3097,97 @@ async function deleteHouseholdSize(id, tenantId) {
         await loadHouseholdSizes(tenantId);
     } catch (e) {
         showError(meldungZu(e, 'Fehler beim Löschen des Stichtags.'));
+    }
+}
+
+// --- NK-261 (R-VZ-02): Soll und Ist der Vorauszahlungen ---
+
+async function openVorauszahlungModal(tenant) {
+    document.getElementById('vz-tenant-name').textContent = tenant.name;
+    document.getElementById('vz-tenant-id').value = tenant.id;
+    document.getElementById('vz-betrag').value = '';
+    const daten = await ladeVorauszahlungen(tenant.id);
+    // Ohne Soll ist der Einzug der naheliegende erste Stichtag.
+    document.getElementById('vz-gueltig-ab').value =
+        daten && daten.soll.length === 0 ? String(tenant.move_in_date || '').slice(0, 10) : '';
+    document.getElementById('vorauszahlung-modal').classList.add('active');
+}
+
+function closeVorauszahlungModal() {
+    document.getElementById('vorauszahlung-modal').classList.remove('active');
+}
+
+async function ladeVorauszahlungen(tenantId) {
+    let d;
+    try {
+        const res = await fetch(`/api/tenants/${tenantId}/vorauszahlungen`);
+        if (!res.ok) throw await serverFehler(res);
+        d = await res.json();
+    } catch (e) {
+        showError(meldungZu(e, 'Fehler beim Laden der Vorauszahlungen.'));
+        return null;
+    }
+    document.getElementById('vz-soll-liste').innerHTML = d.soll.length === 0
+        ? '<tr><td colspan="3" class="text-muted" style="padding: 8px;">Noch kein Soll hinterlegt — ohne Soll gibt es keinen Rückstand.</td></tr>'
+        : d.soll.map(s => `<tr>
+            <td style="padding: 8px;">${escapeHtml(datumText(s.gueltig_ab))}</td>
+            <td style="padding: 8px; text-align: right;">${escapeHtml(euroText(s.betrag))}</td>
+            <td><button type="button" class="btn-icon" aria-label="Soll löschen" title="Soll löschen" onclick="loescheVorauszahlungSoll(${Number(s.id)}, ${Number(tenantId)})"><i class="ph ph-trash" aria-hidden="true"></i></button></td>
+        </tr>`).join('');
+    // Der jüngste Monat oben: dort schaut man zuerst hin.
+    document.getElementById('vz-monate').innerHTML = [...d.monate].reverse().map(m => {
+        const [klasse, stand] = m.laufend ? ['text-muted', 'laufend']
+            : m.rueckstand ? ['dq-status-badge red', 'Rückstand']
+            : m.soll === null ? ['text-muted', 'kein Soll']
+            : ['dq-status-badge green', 'bezahlt'];
+        return `<tr>
+            <td style="padding: 6px 8px;">${escapeHtml(m.monat.slice(5) + '/' + m.monat.slice(0, 4))}</td>
+            <td style="padding: 6px 8px; text-align: right;">${escapeHtml(m.soll === null ? '–' : euroText(m.soll))}</td>
+            <td style="padding: 6px 8px; text-align: right;">${escapeHtml(euroText(m.ist))}</td>
+            <td style="padding: 6px 8px; text-align: right;">${escapeHtml(m.differenz === null ? '–' : euroText(m.differenz))}</td>
+            <td style="padding: 6px 8px;"><span class="${escapeHtml(klasse)}">${escapeHtml(stand)}</span></td>
+        </tr>`;
+    }).join('');
+    const saldo = Number(d.saldo);
+    document.getElementById('vz-saldo').textContent = saldo > 0
+        ? `Offen sind insgesamt ${euroText(saldo)} (fällige Monate, Überzahlungen gegengerechnet).`
+        : saldo < 0 ? `Überzahlt um ${euroText(-saldo)}.` : 'Kein Rückstand.';
+    document.getElementById('vz-erinnerung').value = d.erinnerung || '';
+    document.getElementById('vz-erinnerung-block').hidden = !d.erinnerung;
+    return d;
+}
+
+async function saveVorauszahlungSoll() {
+    const tenantId = document.getElementById('vz-tenant-id').value;
+    const gueltigAb = document.getElementById('vz-gueltig-ab').value;
+    const betrag = document.getElementById('vz-betrag').value;
+    if (!gueltigAb || betrag === '') {
+        showError('Bitte geben Sie an, ab wann welcher Monatsbetrag gilt.');
+        return;
+    }
+    try {
+        const res = await fetch(`/api/tenants/${tenantId}/vorauszahlung_soll`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ gueltig_ab: gueltigAb, betrag: betrag })
+        });
+        if (!res.ok) throw await serverFehler(res);
+        document.getElementById('vz-gueltig-ab').value = '';
+        document.getElementById('vz-betrag').value = '';
+        await ladeVorauszahlungen(tenantId);
+    } catch (e) {
+        showError(meldungZu(e, 'Fehler beim Speichern des Solls.'));
+    }
+}
+
+async function loescheVorauszahlungSoll(id, tenantId) {
+    if (!await frageLoeschen('Möchten Sie diesen Monatsbetrag wirklich löschen?')) return;
+    try {
+        const res = await fetch(`/api/vorauszahlung_soll/${id}`, { method: 'DELETE' });
+        if (!res.ok) throw await serverFehler(res);
+        await ladeVorauszahlungen(tenantId);
+    } catch (e) {
+        showError(meldungZu(e, 'Fehler beim Löschen des Solls.'));
     }
 }
 

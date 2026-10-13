@@ -39,7 +39,9 @@ BASISREVISION = "63738d5329b4"
 # F-137: ``e3c5a7f9b1d2`` fuegt ``cost_invoices.grundpreis`` hinzu.
 # NK-217: ``670627ef0699`` fuegt ``tenant_billing_reports.regelstand_geprueft`` hinzu.
 # NK-264: ``b4d8e2a61f37`` fuegt ``tenants.anrede`` und ``vermieterdaten.art`` hinzu.
-KOPFREVISION = "c7e1f94a2b05"
+# NK-258: ``c7e1f94a2b05`` fuegt ``meters.ersetzt_id``, ``geeicht_bis`` und ``ort`` hinzu.
+# NK-261: ``d9a3f2c6e1b4`` legt die Tabelle ``vorauszahlung_soll`` an (R-VZ-02).
+KOPFREVISION = "d9a3f2c6e1b4"
 
 
 def _umgebung(dbdatei: Path, tmp_path: Path) -> dict:
@@ -2590,3 +2592,67 @@ def test_die_wechselwanderung_legt_die_spalten_leer_an(tmp_path):
     assert stand["stand"] == KOPFREVISION
     assert not neu & set(stand["zurueck"])
     assert stand["nummer"] == "W-1"
+
+
+CODE_SOLL_WANDERUNG = """
+import json
+from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
+from flask_migrate import downgrade, upgrade
+import app as anwendung
+from nebenkostenfix.models import db
+
+
+def tabellen():
+    return [z[0] for z in db.session.execute(
+        text("SELECT name FROM sqlite_master WHERE type='table'")).all()]
+
+
+with anwendung.app.app_context():
+    downgrade(revision="c7e1f94a2b05")
+    vorher = tabellen()
+    upgrade()
+    nachher = tabellen()
+    db.session.execute(text(
+        "INSERT INTO properties (id, name, is_standalone) VALUES (1, 'Altbau', 0)"))
+    db.session.execute(text(
+        "INSERT INTO apartments (id, property_id, name, sqm, is_active)"
+        " VALUES (1, 1, 'EG', 50, 1)"))
+    db.session.execute(text(
+        "INSERT INTO tenants (id, apartment_id, name, move_in_date)"
+        " VALUES (1, 1, 'Mieter', '2024-01-01')"))
+    db.session.execute(text(
+        "INSERT INTO vorauszahlung_soll (tenant_id, gueltig_ab, betrag)"
+        " VALUES (1, '2024-01-01', 80)"))
+    db.session.commit()
+    abgewiesen = []
+    for tag, betrag in (("2024-02-01", -1), ("2024-01-01", 90)):
+        try:
+            db.session.execute(text(
+                "INSERT INTO vorauszahlung_soll (tenant_id, gueltig_ab, betrag)"
+                " VALUES (1, :t, :b)"), {"t": tag, "b": betrag})
+            db.session.commit()
+        except IntegrityError:
+            db.session.rollback()
+            abgewiesen.append(tag)
+    stand = db.session.execute(text("SELECT version_num FROM alembic_version")).scalar()
+    downgrade(revision="c7e1f94a2b05")
+    zurueck = tabellen()
+
+print(json.dumps({"vorher": "vorauszahlung_soll" in vorher,
+                  "nachher": "vorauszahlung_soll" in nachher,
+                  "abgewiesen": abgewiesen, "stand": stand,
+                  "zurueck": "vorauszahlung_soll" in zurueck}))
+"""
+
+
+def test_die_sollwanderung_legt_die_tabelle_mit_pruefungen_an(tmp_path):
+    """NK-261: die Tabelle kommt leer dazu -- ohne Soll kein Rueckstand, wie
+    bisher. Negativer Betrag und doppelter Stichtag scheitern schon in der
+    Datenbank; der Rueckweg nimmt die Tabelle wieder weg."""
+    stand = _lauf(CODE_SOLL_WANDERUNG, tmp_path / "soll.db", tmp_path)
+
+    assert stand["vorher"] is False and stand["nachher"] is True
+    assert stand["abgewiesen"] == ["2024-02-01", "2024-01-01"]
+    assert stand["stand"] == KOPFREVISION
+    assert stand["zurueck"] is False

@@ -1604,6 +1604,68 @@
         </div>
     </div>
 
+    <!-- NK-261 (R-VZ-02): Soll und Ist der Vorauszahlungen -->
+    <div class="modal-overlay" id="vorauszahlung-modal">
+        <div class="modal glass-panel" style="max-width: 720px; width: 90%;">
+            <div class="modal-header">
+                <h2>Vorauszahlungen: <span id="vz-tenant-name"></span></h2>
+                <button class="btn-icon" aria-label="Schließen" onclick="closeVorauszahlungModal()"><i class="ph ph-x"></i></button>
+            </div>
+            <div class="modal-body">
+                <p class="karten-text">
+                    Das Soll ist der vereinbarte Monatsbetrag; er gilt ab seinem Stichtag bis zum nächsten.
+                    Eine Serienbuchung hinterlegt ihn selbst. Gezählt werden nur erfasste Zahlungen.
+                </p>
+                <input type="hidden" id="vz-tenant-id">
+                <table style="width: 100%; border-collapse: collapse; margin-bottom: 16px;">
+                    <thead>
+                        <tr>
+                            <th style="text-align: left; padding: 8px;">Gültig ab</th>
+                            <th style="text-align: right; padding: 8px;">Soll je Monat</th>
+                            <th style="width: 48px;"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="vz-soll-liste"></tbody>
+                </table>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="vz-gueltig-ab">Gültig ab</label>
+                        <input type="date" id="vz-gueltig-ab">
+                    </div>
+                    <div class="form-group">
+                        <label for="vz-betrag">Soll je Monat (€)</label>
+                        <input type="number" id="vz-betrag" step="0.01" min="0">
+                    </div>
+                </div>
+                <h3 style="margin: 16px 0 8px 0;">Soll und Ist je Monat</h3>
+                <p id="vz-saldo" class="karten-text"></p>
+                <div style="overflow-x: auto;">
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <thead>
+                            <tr>
+                                <th style="text-align: left; padding: 6px 8px;">Monat</th>
+                                <th style="text-align: right; padding: 6px 8px;">Soll</th>
+                                <th style="text-align: right; padding: 6px 8px;">Ist</th>
+                                <th style="text-align: right; padding: 6px 8px;">Differenz</th>
+                                <th style="text-align: left; padding: 6px 8px;">Stand</th>
+                            </tr>
+                        </thead>
+                        <tbody id="vz-monate"></tbody>
+                    </table>
+                </div>
+                <div id="vz-erinnerung-block" hidden>
+                    <h3 style="margin: 16px 0 8px 0;">Zahlungserinnerung</h3>
+                    <label for="vz-erinnerung" class="karten-text">Vorlage zum Anpassen; zum Übernehmen in Ihr Schreiben markieren und kopieren (Strg+A, Strg+C)</label>
+                    <textarea id="vz-erinnerung" rows="12" style="width: 100%;"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-secondary" onclick="closeVorauszahlungModal()">Schließen</button>
+                <button type="button" class="btn-primary" onclick="saveVorauszahlungSoll()">Soll speichern</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Add Meter Modal -->
     <div class="modal-overlay" id="meter-modal">
         <div class="modal glass-panel">

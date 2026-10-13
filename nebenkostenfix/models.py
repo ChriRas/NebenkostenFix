@@ -103,6 +103,10 @@ class Tenant(db.Model):
     haushaltsgroessen = db.relationship(
         'Haushaltsgroesse', backref='tenant', lazy=True,
         cascade="all, delete-orphan", order_by='Haushaltsgroesse.gueltig_ab')
+    # NK-261: der vereinbarte Monatsbetrag ab Stichtag (R-VZ-02).
+    vorauszahlung_soll = db.relationship(
+        'VorauszahlungSoll', backref='tenant', lazy=True,
+        cascade="all, delete-orphan", order_by='VorauszahlungSoll.gueltig_ab')
 
     def personenanzahl_am(self, stichtag: date) -> int:
         """Wie viele Personen an diesem Tag in der Einheit wohnten.
@@ -151,6 +155,27 @@ class Haushaltsgroesse(db.Model):
                             name='uq_haushaltsgroessen_tenant_gueltig_ab'),
         db.CheckConstraint('personenanzahl >= 1',
                            name='ck_haushaltsgroessen_personenanzahl'),
+    )
+
+
+class VorauszahlungSoll(db.Model):
+    """Die vereinbarte Nebenkostenvorauszahlung je Monat ab einem Stichtag (NK-261).
+
+    Eine Serienbuchung legt die Zahlungen im Voraus an; sie sind damit Ist,
+    kein Soll. Gegen diesen Betrag laesst sich sagen, ob ein Monat offen ist
+    (R-VZ-02). Ein Eintrag gilt ab gueltig_ab bis zum naechsten.
+    """
+
+    __tablename__ = 'vorauszahlung_soll'
+    id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(db.Integer, db.ForeignKey('tenants.id'), nullable=False)
+    gueltig_ab = db.Column(db.Date, nullable=False)
+    betrag = db.Column(Geld, nullable=False)
+
+    __table_args__ = (
+        db.UniqueConstraint('tenant_id', 'gueltig_ab',
+                            name='uq_vorauszahlung_soll_tenant_gueltig_ab'),
+        db.CheckConstraint('betrag >= 0', name='ck_vorauszahlung_soll_betrag'),
     )
 
 class TenantCostProfile(db.Model):

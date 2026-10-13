@@ -8,8 +8,8 @@ weiter im Belegordner liegt, ist nicht geloescht.
 
 Was hier "der Mieter" ist, ist genau umrissen:
 
-    tenants-Zeile, Kostenprofile, Haushaltsgroessen, Zahlungen,
-    Abrechnungsberichte (einfach und detailliert) und die Lesungen an den
+    tenants-Zeile, Kostenprofile, Haushaltsgroessen, Vorauszahlungs-Soll,
+    Zahlungen, Abrechnungsberichte (einfach und detailliert) und die Lesungen an den
     Zaehlern seiner Wohnung samt Lesenachweisen.
 
 Nicht dazu gehoert die Messhistorie: Lesungen und Zaehler haengen an der
@@ -133,6 +133,7 @@ def export_erstellen(tenant) -> tuple[bytes, dict]:
         'mieter': _zeile(tenant),
         'kostenprofile': [_zeile(p) for p in tenant.cost_profiles],
         'haushaltsgroessen': [_zeile(h) for h in tenant.haushaltsgroessen],
+        'vorauszahlung_soll': [_zeile(v) for v in tenant.vorauszahlung_soll],
         'zahlungen': zahlungen,
         'abrechnungsberichte': berichte,
         'ablesungen': [_zeile(l) for l in _lesungen_des_mieters(tenant)],
@@ -235,7 +236,7 @@ def _endgueltig_loeschen(tenant) -> dict:
     """Dateien und Zeilen des Mietverhaeltnisses entfernen.
 
     Erst die Dateien sammeln und loeschen, dann die Zeile -- mit den
-    Kaskaden fuer Profile, Haushaltsgroessen, Zahlungen und Berichte. Eine
+    Kaskaden fuer Profile, Haushaltsgroessen, Soll, Zahlungen und Berichte. Eine
     Datei, die im Belegordner schon fehlt, bricht nichts ab: sie steht im
     Bericht unter 'fehlende_dateien', damit der Vermieter Bescheid weiß.
     """
