@@ -123,9 +123,10 @@ class PDFGenerator:
         self.styles.add(ParagraphStyle(name='TitleBold', fontName='Helvetica-Bold', fontSize=18, leading=22, spaceAfter=20))
         self.styles.add(ParagraphStyle(name='HeaderNormal', fontName='Helvetica', fontSize=10, leading=14))
         self.styles.add(ParagraphStyle(name='HeaderRight', fontName='Helvetica', fontSize=10, leading=14, alignment=2))
-        self.styles.add(ParagraphStyle(name='TableCell', fontName='Helvetica', fontSize=9, leading=12, wordWrap='CJK'))
-        self.styles.add(ParagraphStyle(name='TableCellRight', fontName='Helvetica', fontSize=9, leading=12, alignment=2, wordWrap='CJK'))
-        self.styles.add(ParagraphStyle(name='SubTableCell', fontName='Helvetica', fontSize=8, leading=11, leftIndent=10, textColor=colors.HexColor('#4b5563'), wordWrap='CJK'))
+        # NK-250: kein wordWrap='CJK' -- es brach Wörter an beliebiger Stelle.
+        self.styles.add(ParagraphStyle(name='TableCell', fontName='Helvetica', fontSize=9, leading=12))
+        self.styles.add(ParagraphStyle(name='TableCellRight', fontName='Helvetica', fontSize=9, leading=12, alignment=2))
+        self.styles.add(ParagraphStyle(name='SubTableCell', fontName='Helvetica', fontSize=8, leading=11, leftIndent=10, textColor=colors.HexColor('#4b5563')))
         self.styles.add(ParagraphStyle(name='SectionHeader', fontName='Helvetica-Bold', fontSize=10, leading=14, textColor=colors.white))
         self.styles.add(ParagraphStyle(name='TotalCell', fontName='Helvetica-Bold', fontSize=10, leading=14))
         self.styles.add(ParagraphStyle(name='TotalCellRight', fontName='Helvetica-Bold', fontSize=10, leading=14, alignment=2))
@@ -250,9 +251,8 @@ class PDFGenerator:
                 ]
             data.append(row)
 
-        breiten = [110, 90, 80, 100]
-        if mit_betraegen:
-            breiten += [50, 51]
+        # NK-250: die Kopfwörter der Betragsspalten passen ungebrochen hinein.
+        breiten = [105, 78, 74, 73, 89, 62] if mit_betraegen else [110, 90, 80, 100]
         tabelle = Table(data, colWidths=breiten, repeatRows=1)
         tabelle.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#f3f4f6')),

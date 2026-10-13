@@ -437,3 +437,33 @@ def test_der_schluss_ohne_iban_bleibt_beim_bekannten_konto(unkomprimiert, monkey
     assert 'innerhalbvon14TagenaufdasbekannteKonto.' in geklebt
     assert 'IBAN' not in geklebt
     assert 'stehenwir' not in geklebt
+
+
+# --- Umbruch an Wortgrenzen (NK-250) -----------------------------------------
+
+
+def _zeilen(pdf: bytes) -> list[str]:
+    """Jedes Textstück des Stroms für sich -- eine gesetzte Zeile je Stück."""
+    stuecke = []
+    for roh in pdf.split(b'stream')[1:]:
+        roh = roh.split(b'endstream')[0]
+        stuecke.extend(_entschluesselt(m) for m in re.findall(
+            r'\(((?:\\.|[^\\)])*)\)', roh.decode('latin-1', 'replace')))
+    return stuecke
+
+
+@pytest.mark.parametrize('detailliert', [False, True], ids=['einfach', 'detailliert'])
+def test_kein_wort_bricht_mitten_in_der_zelle(unkomprimiert, detailliert):
+    """NK-250: lange Kostenart und Spaltenköpfe brechen an Wortgrenzen."""
+    reinigung, heizung = _posten(), _posten()
+    reinigung['category'] = 'Gebäudereinigung und Ungezieferbekämpfung'
+    reinigung['provider_name'] = 'Abfallwirtschaft Musterstadt'
+    heizung['category'] = 'Heizkosten (Zentralheizung)'
+    heizung['provider_name'] = 'Stadt Musterstadt'
+    zeilen = _zeilen(_pdf(detailliert, [reinigung, heizung]))
+    woerter = ['Gebäudereinigung', 'Ungezieferbekämpfung', 'Abfallwirtschaft',
+               '(Zentralheizung)', 'Musterstadt', 'Abrechnungszeitraum']
+    if detailliert:
+        woerter += ['Rechnungsbetrag', 'Zeitanteilig']
+    for wort in woerter:
+        assert any(wort in z for z in zeilen), (wort, [z for z in zeilen if wort[:5] in z])
