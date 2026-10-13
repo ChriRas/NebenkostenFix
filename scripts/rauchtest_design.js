@@ -935,7 +935,14 @@ async function ablesenPruefen() {
     pruefe('NK-227: NT-Feld nur beim Doppeltarif',
         zeilen.includes('id="ablesen-nt-1"') && !zeilen.includes('id="ablesen-nt-2"'));
     pruefe('NK-227: das Foto kommt direkt von der Kamera',
-        /<input type="file" id="ablesen-foto-1" accept="image\/\*" capture="environment">/.test(zeilen));
+        /<input type="file" id="ablesen-foto-1" accept="image\/\*" capture="environment"[\s>]/.test(zeilen));
+    pruefe('NK-255: die Einheit des Zählers steht am Feld',
+        zeilen.includes('>Stand (HT, kWh)</label>') && zeilen.includes('>Stand (NT, kWh)</label>')
+        && zeilen.includes('>Stand (m³)</label>')
+        && baue({}, 'ablesenZeilen')({}, meters, readings)(9).includes('>Stand</label>'));
+    pruefe('NK-255: das Foto-Feld trägt den Stil der App',
+        zeilen.includes('<div class="file-upload-wrapper">')
+        && zeilen.includes('<label for="ablesen-foto-1" class="file-upload-label">'));
 
     const lauf = async (werte, antworten) => {
         const el = {}, gesendet = [], fehler = [];
@@ -994,6 +1001,31 @@ async function ablesenPruefen() {
         && zeilen[0].includes('Anschreiben (Schritt 5)')
         && zeilen[1].includes('−30 % gegenüber dem Vorjahr')
         && !zeilen[2].includes('jahr-sprung') && !zeilen[2].includes('gegenüber dem Vorjahr'));
+}
+
+// --- NK-255: Einheit am Feld auch im Einzel-Ablesedialog ----------------
+{
+    const m = appQuelle.match(/function handleReadingMeterChange\([\s\S]*?\n\}/);
+    const lauf = (zaehler) => {
+        const el = {};
+        const hole = id => (el[id] = el[id] || { id, value: '', textContent: '', style: {} });
+        hole('reading-meter').value = '1';
+        new Function('document', 'meters', m[0] + '; handleReadingMeterChange();')(
+            { getElementById: hole }, [zaehler]);
+        return el;
+    };
+    if (!m) {
+        pruefe('NK-255: handleReadingMeterChange gibt es', false);
+    } else {
+        const doppelt = lauf({ id: 1, einheit: 'kWh', has_dual_tariff: true });
+        const einfach = lauf({ id: 1, einheit: 'm³', has_dual_tariff: false });
+        const ohne = lauf({ id: 1, has_dual_tariff: false });
+        pruefe('NK-255: der Ablesedialog nennt die Einheit des Zählers am Feld',
+            doppelt['label-reading-value'].textContent === 'Zählerstand (HT, kWh)'
+            && doppelt['label-reading-value-nt'].textContent === 'Zählerstand (NT, kWh)'
+            && einfach['label-reading-value'].textContent === 'Zählerstand (m³)'
+            && ohne['label-reading-value'].textContent === 'Zählerstand');
+    }
 }
 
 // --- NK-254: Wohnungsvergleich erst ab zwei Wohnungen mit Daten ---------------

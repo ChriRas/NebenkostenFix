@@ -3244,11 +3244,14 @@ async function deleteReading(id) {
 function handleReadingMeterChange() {
     const meterId = document.getElementById('reading-meter').value;
     const meter = meters.find(m => m.id == meterId);
+    // NK-255: die Einheit des Zählers steht am Feld, nicht nur im letzten Stand.
+    const einheit = meter && meter.einheit ? meter.einheit : '';
     if (meter && meter.has_dual_tariff) {
-        document.getElementById('label-reading-value').textContent = 'Zählerstand (HT)';
+        document.getElementById('label-reading-value').textContent = `Zählerstand (HT${einheit && ', ' + einheit})`;
+        document.getElementById('label-reading-value-nt').textContent = `Zählerstand (NT${einheit && ', ' + einheit})`;
         document.getElementById('group-reading-value-nt').style.display = 'block';
     } else {
-        document.getElementById('label-reading-value').textContent = 'Zählerstand';
+        document.getElementById('label-reading-value').textContent = einheit ? `Zählerstand (${einheit})` : 'Zählerstand';
         document.getElementById('group-reading-value-nt').style.display = 'none';
         document.getElementById('reading-value-nt').value = '';
     }
@@ -3387,17 +3390,27 @@ function ablesenZeilen(propertyId) {
                 : `${fmt.format(letzte.value)}${einheit}`)
               + ` am ${new Date(letzte.reading_date).toLocaleDateString('de-DE')}`);
         const nameHtml = escapeHtml(`${m.is_main_meter ? 'Allgemein' : (m.apartment_name || '')} · ${zaehlerArtName(m.category_name)} (${m.meter_number})`);
-        const ntHtml = m.has_dual_tariff ? `<div class="form-group feld-breit"><label for="ablesen-nt-${m.id}">Stand (NT)</label>
+        // NK-255: die Einheit gehört an das Feld, nicht nur in den letzten Stand.
+        const stand = tarif => {
+            const zusatz = [tarif, m.einheit].filter(Boolean).join(', ');
+            return escapeHtml(zusatz ? `Stand (${zusatz})` : 'Stand');
+        };
+        const ntHtml = m.has_dual_tariff ? `<div class="form-group feld-breit"><label for="ablesen-nt-${m.id}">${stand('NT')}</label>
                     <input type="number" inputmode="decimal" step="0.01" id="ablesen-nt-${m.id}"></div>` : '';
         return `<div class="glass-panel ablesen-zeile" id="ablesen-zeile-${m.id}" style="padding: 12px; margin-bottom: 12px;">
             <strong>${nameHtml}</strong><br><small style="color: var(--text-muted)">${standHtml}</small>
             <div class="felder-nebeneinander">
-                <div class="form-group feld-breit"><label for="ablesen-wert-${m.id}">${m.has_dual_tariff ? 'Stand (HT)' : 'Stand'}</label>
+                <div class="form-group feld-breit"><label for="ablesen-wert-${m.id}">${stand(m.has_dual_tariff && 'HT')}</label>
                     <input type="number" inputmode="decimal" step="0.01" id="ablesen-wert-${m.id}"></div>
                 ${ntHtml}
             </div>
-            <div class="form-group"><label for="ablesen-foto-${m.id}">Foto (optional)</label>
-                <input type="file" id="ablesen-foto-${m.id}" accept="image/*" capture="environment"></div>
+            <div class="form-group"><label>Foto (optional)</label>
+                <div class="file-upload-wrapper">
+                    <input type="file" id="ablesen-foto-${m.id}" accept="image/*" capture="environment"
+                        onchange="this.nextElementSibling.lastElementChild.textContent = this.files[0] ? this.files[0].name : 'Foto auswählen...'">
+                    <label for="ablesen-foto-${m.id}" class="file-upload-label">
+                        <i class="ph ph-camera" aria-hidden="true"></i><span>Foto auswählen...</span></label>
+                </div></div>
             <small class="ablesen-meldung" id="ablesen-meldung-${m.id}" role="status"></small>
         </div>`;
     }).join('') || '<p style="color: var(--text-muted)">Diese Immobilie hat noch keine Zähler.</p>';
