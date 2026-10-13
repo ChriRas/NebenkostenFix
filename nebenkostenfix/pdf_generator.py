@@ -4,7 +4,7 @@ from xml.sax.saxutils import escape  # nosec B406
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
-from reportlab.platypus import PageBreak
+from reportlab.platypus import KeepTogether, PageBreak
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from datetime import datetime
 from decimal import Decimal
@@ -767,12 +767,24 @@ class PDFGenerator:
         # NK-248: die hinterlegte IBAN steht im Satz. NK-264: ich/wir nach
         # der Art des Vermieters, ohne Angabe neutral.
         saetze = anschreiben_saetze(vermieter_art())
+        zahlungsblock = []
         if balance > 0:
             iban = vermieter_ausweis()[1]
             konto = (f"{saetze['konto']} mit der IBAN {_format_iban_display(iban)}"
                      if iban else saetze['bekanntes_konto'])
-            elements.append(Paragraph(f"Bitte überweisen Sie den ausstehenden Betrag innerhalb von 14 Tagen auf {konto}.", self.styles['HeaderNormal']))
-        elements.append(Paragraph(saetze['rueckfragen'], self.styles['HeaderNormal']))
+            zahlungsblock.append(Paragraph(f"Bitte überweisen Sie den ausstehenden Betrag innerhalb von 14 Tagen auf {konto}.", self.styles['HeaderNormal']))
+        zahlungsblock.append(Paragraph(saetze['rueckfragen'], self.styles['HeaderNormal']))
+        # GiroCode (EPC-QR) -- nur bei Nachzahlung. NK-270: Satz und Kasten
+        # bleiben zusammen direkt nach der Belegliste; passt der Block nicht
+        # mehr, rueckt er als Ganzes auf die naechste Seite.
+        zahlungsblock.extend(build_girocode_elements(
+            balance=balance,
+            tenant_name=self.tenant_name,
+            apartment_name=self.apartment_name,
+            start_date=self.start_date,
+            end_date=self.end_date,
+        ))
+        elements.append(KeepTogether(zahlungsblock))
         
 
         # NK-245: ohne Zaehlerzeile kein leerer Nachweisteil samt Umbruch.
@@ -974,16 +986,6 @@ class PDFGenerator:
                 elements.append(Spacer(1, 20))
 
 
-        # GiroCode (EPC-QR) — only rendered for Nachzahlung (balance > 0)
-        girocode_elements = build_girocode_elements(
-            balance=balance,
-            tenant_name=self.tenant_name,
-            apartment_name=self.apartment_name,
-            start_date=self.start_date,
-            end_date=self.end_date,
-        )
-        elements.extend(girocode_elements)
-        
         doc.build(elements, onFirstPage=_fuss_zeichnen, onLaterPages=_fuss_zeichnen)
         
         pdf_data = buffer.getvalue()
