@@ -64,8 +64,8 @@ MAX_INSTALLER = 500 * 1024 * 1024
 AUTOMATISCH_ZEIT_S = 5
 AUTOMATISCH_ABSTAND = timedelta(hours=24)
 
-# Öffentlicher Ed25519-Schlüssel des Herausgebers (32 Byte, base64). Fabi
-# erzeugt das Paar einmal offline (``scripts/update_signieren.py schluessel``),
+# Öffentlicher Ed25519-Schlüssel des Herausgebers (32 Byte, base64). Der
+# Herausgeber erzeugt das Paar einmal offline (``scripts/update_signieren.py schluessel``),
 # der private Teil liegt nur als Actions-Secret ``UPDATE_SCHLUESSEL`` bei
 # GitHub. Solange das hier leer ist, nimmt die App kein Manifest an.
 HERAUSGEBER_SCHLUESSEL = 'D2DuitCVsfZ2Cr+Vk8mRI4NhS8mvgRMXlQMLia7H7XY='
