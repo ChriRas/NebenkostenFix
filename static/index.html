@@ -967,13 +967,13 @@
                             </div>
                         </div>
                     </div>
-                    <div class="dashboard-card glass-panel" id="mehrjahresblick-karte" style="margin-top: 24px;">
+                    <div class="dashboard-card glass-panel abstand-oben-gross" id="mehrjahresblick-karte">
                         <div class="karten-kopf">
                             <h3>Mehrjahresblick</h3>
                         </div>
                         <p class="karten-text text-muted">Euro je m² und Jahr aus den festgesetzten Abrechnungen, mit der Fläche, auf der jede stand. Leerstand ist herausgerechnet.</p>
-                        <div style="overflow-x: auto;">
-                            <table style="width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums;">
+                        <div class="tabellen-rolle">
+                            <table class="tabelle tabular-nums">
                                 <thead>
                                     <tr id="mjb-kopf"></tr>
                                 </thead>
@@ -1007,13 +1007,13 @@
 
                     <!-- Fristenkalender (NK-262, R-FRIST-05) -->
                     <div class="dashboard-card glass-panel" id="fristen-karte">
-                        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
-                            <div style="max-width: 640px;">
-                                <h3 style="margin: 0 0 8px 0; display: flex; align-items: center; gap: 8px;">
+                        <div class="kopf-mit-knopf">
+                            <div class="kopf-text">
+                                <h3>
                                     <i class="ph ph-calendar-dots text-primaer" aria-hidden="true"></i>
                                     Fristenkalender
                                 </h3>
-                                <p style="margin: 0; color: var(--text-muted); font-size: 0.92em;">
+                                <p>
                                     Die kommenden Termine aller Immobilien: Abrechnungs- und Einwendungsfristen,
                                     Ablesestichtage, neue Vorauszahlungen und Eichfristen. Die Einwendungsfrist
                                     steht erst hier, wenn der Zugang der Abrechnung erfasst ist.
@@ -1024,7 +1024,7 @@
                                 <i class="ph ph-calendar-plus" aria-hidden="true"></i> Kalender herunterladen
                             </a>
                         </div>
-                        <ul id="fristen-liste" style="margin: 16px 0 0 0; padding-left: 20px;"></ul>
+                        <ul id="fristen-liste"></ul>
                     </div>
 
                     <!-- Warnings Section -->
@@ -1715,7 +1715,7 @@
 
     <!-- NK-261 (R-VZ-02): Soll und Ist der Vorauszahlungen -->
     <div class="modal-overlay" id="vorauszahlung-modal">
-        <div class="modal glass-panel" style="max-width: 720px; width: 90%;">
+        <div class="modal glass-panel dialog-vorauszahlung">
             <div class="modal-header">
                 <h2>Vorauszahlungen: <span id="vz-tenant-name"></span></h2>
                 <button class="btn-icon" aria-label="Schließen" onclick="closeVorauszahlungModal()"><i class="ph ph-x"></i></button>
@@ -1726,12 +1726,12 @@
                     Eine Serienbuchung hinterlegt ihn selbst. Gezählt werden nur erfasste Zahlungen.
                 </p>
                 <input type="hidden" id="vz-tenant-id">
-                <table style="width: 100%; border-collapse: collapse; margin-bottom: 16px;">
+                <table class="tabelle tabelle-luftig abstand-unten-klein">
                     <thead>
                         <tr>
-                            <th style="text-align: left; padding: 8px;">Gültig ab</th>
-                            <th style="text-align: right; padding: 8px;">Soll je Monat</th>
-                            <th style="width: 48px;"></th>
+                            <th>Gültig ab</th>
+                            <th class="text-right">Soll je Monat</th>
+                            <th class="spalte-knopf"></th>
                         </tr>
                     </thead>
                     <tbody id="vz-soll-liste"></tbody>
@@ -1746,26 +1746,26 @@
                         <input type="number" id="vz-betrag" step="0.01" min="0">
                     </div>
                 </div>
-                <h3 style="margin: 16px 0 8px 0;">Soll und Ist je Monat</h3>
+                <h3 class="zwischentitel">Soll und Ist je Monat</h3>
                 <p id="vz-saldo" class="karten-text"></p>
-                <div style="overflow-x: auto;">
-                    <table style="width: 100%; border-collapse: collapse;">
+                <div class="tabellen-rolle">
+                    <table class="tabelle tabelle-kompakt">
                         <thead>
                             <tr>
-                                <th style="text-align: left; padding: 6px 8px;">Monat</th>
-                                <th style="text-align: right; padding: 6px 8px;">Soll</th>
-                                <th style="text-align: right; padding: 6px 8px;">Ist</th>
-                                <th style="text-align: right; padding: 6px 8px;">Differenz</th>
-                                <th style="text-align: left; padding: 6px 8px;">Stand</th>
+                                <th>Monat</th>
+                                <th class="text-right">Soll</th>
+                                <th class="text-right">Ist</th>
+                                <th class="text-right">Differenz</th>
+                                <th>Stand</th>
                             </tr>
                         </thead>
                         <tbody id="vz-monate"></tbody>
                     </table>
                 </div>
                 <div id="vz-erinnerung-block" hidden>
-                    <h3 style="margin: 16px 0 8px 0;">Zahlungserinnerung</h3>
+                    <h3 class="zwischentitel">Zahlungserinnerung</h3>
                     <label for="vz-erinnerung" class="karten-text">Vorlage zum Anpassen; zum Übernehmen in Ihr Schreiben markieren und kopieren (Strg+A, Strg+C)</label>
-                    <textarea id="vz-erinnerung" rows="12" style="width: 100%;"></textarea>
+                    <textarea id="vz-erinnerung" rows="12" class="breite-voll"></textarea>
                 </div>
             </div>
             <div class="modal-footer">

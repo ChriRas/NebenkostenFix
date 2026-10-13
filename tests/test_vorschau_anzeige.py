@@ -75,7 +75,7 @@ def test_was_tun_steht_sichtbar_vor_dem_aufklappen():
                'Wohnungszähler mehr Verbrauch als der Hauptzähler: -1,3 m³. '
                'Angesetzt wird nichts. Lesen Sie alle Zähler am selben Tag ab — am '
                'Einzugs- bzw. Auszugstag — und erstellen Sie die Abrechnung erneut.')
-    html = _node(''.join(_funktionsrumpf(n) for n in ('escapeHtml', 'warnungenBuendeln', 'warnungenHtml'))
+    html = _node(''.join(_funktionsrumpf(n) for n in ('escapeHtml', 'warnungenBuendeln', 'hinweiseKappen', 'warnungenHtml'))
                  + f'console.log(JSON.stringify(warnungenHtml({json.dumps([warnung])})));')
     sichtbar, _, aufgeklappt = html.partition('<details>')
     assert '<strong>Was tun:</strong> Lesen Sie alle Zähler am selben Tag ab — am Einzugs- bzw. ' \
