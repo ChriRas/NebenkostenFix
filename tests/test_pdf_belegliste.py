@@ -467,3 +467,15 @@ def test_kein_wort_bricht_mitten_in_der_zelle(unkomprimiert, detailliert):
         woerter += ['Rechnungsbetrag', 'Zeitanteilig']
     for wort in woerter:
         assert any(wort in z for z in zeilen), (wort, [z for z in zeilen if wort[:5] in z])
+
+
+@pytest.mark.parametrize('detailliert', [False, True], ids=['einfach', 'detailliert'])
+def test_allgemeinstrom_steht_bei_den_betriebskosten(unkomprimiert, detailliert):
+    """NK-251: Nr. 11 (Beleuchtung) ist Betriebskostenart, nicht Heizkosten."""
+    strom, gas = _posten(), _posten()
+    strom['category'] = 'Allgemeinstrom'
+    gas['category'] = 'Heizkosten'
+    zeilen = _zeilen(_pdf(detailliert, [strom, gas]))
+    gruppen = [z for z in zeilen if z in ('Energie', 'Betriebskosten')]
+    assert gruppen == ['Energie', 'Betriebskosten'], gruppen
+    assert zeilen.index('Allgemeinstrom') > zeilen.index('Betriebskosten')

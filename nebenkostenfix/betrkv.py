@@ -376,13 +376,14 @@ EINHEITEN = {
     16: 'Einheiten', 17: 'Einheiten',
 }
 
-#: Die Rubrik der Auswertung (Analytics), in die die Nummer fällt. Energie
-#: sind die vier brennenden Posten samt Allgemeinstrom; Wasser & Abwasser
+#: Die Rubrik der Auswertung (Analytics) und der Kostenaufstellung im PDF.
+#: Energie sind die Heiz- und Warmwasserposten Nr. 4 bis 6; Wasser & Abwasser
 #: sind Wasserversorgung und Entwässerung (beide Nr.-3-Eintraege); alles
-#: andere sind Betriebskosten.
+#: andere sind Betriebskosten -- auch der Allgemeinstrom, der als Beleuchtung
+#: nach Nr. 11 keine Heizkosten ist (NK-251, R-DOC-04).
 RUBRIKEN = {
     2: 'Wasser & Abwasser', 3: 'Wasser & Abwasser',
-    4: 'Energie', 5: 'Energie', 6: 'Energie', 11: 'Energie',
+    4: 'Energie', 5: 'Energie', 6: 'Energie',
 }
 
 #: Der Bereich der Zeitreihe (Analytics). Strom ist allein die Nr. 11;
