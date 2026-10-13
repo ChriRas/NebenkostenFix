@@ -8,6 +8,10 @@ Rechenweg.
 
     GET /api/jahresabrechnung?property_id=<id>&jahr=<JJJJ>
 
+Das Jahr ist das Abrechnungsjahr des Hauses (D-114), das in ``jahr``
+beginnt, beim 01.01. also das Kalenderjahr. Summen sind zeitanteilig: eine
+Rechnung über die Jahresgrenze zählt mit den Tagen im Jahr (NK-242).
+
 - **Kostenarten** (Schritt 2): jede übliche Kostenart und jede, zu der es im
   Jahr oder im Vorjahr Rechnungen gibt, mit Summe, Anzahl und Vorjahres-
   summe. ``fehlt`` heißt: im Vorjahr gab es eine, in diesem Jahr keine.
@@ -49,10 +53,21 @@ def _ueberlappt(beginn: date, ende: date, von: date, bis: date) -> bool:
     return beginn <= bis and ende >= von
 
 
+def _anteil(rechnung, von: date, bis: date) -> Decimal:
+    """Der Teil der Rechnung in ``von``–``bis``, nach Tagen wie im Rechenkern."""
+    from nebenkostenfix.geld import dec, runde
+    from nebenkostenfix.rechenkern import ueberschneidungstage
+
+    beginn, ende = rechnung.start_date, rechnung.end_date
+    return runde(dec(rechnung.amount) * dec(ueberschneidungstage(beginn, ende, von, bis))
+                 / dec(ueberschneidungstage(beginn, ende, beginn, ende)))
+
+
 def stand(property_id: int, jahr: int, heute: date | None = None) -> dict:
     from nebenkostenfix.frist import frist_status
     from nebenkostenfix.models import (CostCategory, CostInvoice, Meter, Property, Tenant,
                         TenantBillingReport)
+    from nebenkostenfix.zeitraumvorschlag import jahresbeginn
 
     heute = heute or date.today()
     if not 2000 <= jahr <= heute.year:
@@ -60,8 +75,10 @@ def stand(property_id: int, jahr: int, heute: date | None = None) -> dict:
     haus = Property.query.get(property_id)
     if haus is None:
         raise StandFehler('Diese Immobilie gibt es nicht.')
-    von, bis = date(jahr, 1, 1), date(jahr, 12, 31)
-    vorjahr_von, vorjahr_bis = date(jahr - 1, 1, 1), date(jahr - 1, 12, 31)
+    # NK-242: das Abrechnungsjahr des Hauses (D-114), das im Jahr ``jahr`` beginnt.
+    monat, tag, _ = jahresbeginn(haus)
+    von, bis = date(jahr, monat, tag), date(jahr + 1, monat, tag) - timedelta(days=1)
+    vorjahr_von, vorjahr_bis = date(jahr - 1, monat, tag), von - timedelta(days=1)
 
     # --- Schritt 2: Kostenarten --------------------------------------------------
     rechnungen = CostInvoice.query.filter_by(property_id=haus.id).all()
@@ -73,8 +90,8 @@ def stand(property_id: int, jahr: int, heute: date | None = None) -> dict:
                   and _ueberlappt(r.start_date, r.end_date, vorjahr_von, vorjahr_bis)]
         if not (diese or vorige or kat.name in UEBLICH):
             continue
-        summe = sum((r.amount for r in diese), start=0)
-        summe_vorjahr = sum((r.amount for r in vorige), start=0)
+        summe = sum((_anteil(r, von, bis) for r in diese), start=Decimal(0))
+        summe_vorjahr = sum((_anteil(r, vorjahr_von, vorjahr_bis) for r in vorige), start=Decimal(0))
         if diese:
             zustand = 'erfasst'
         elif vorige:

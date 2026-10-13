@@ -60,3 +60,34 @@ def test_ohne_rechnung_im_jahr_kein_sprung(app_ctx):
     k = _art(app_ctx, None, 1000.0)
     assert k['zustand'] == 'fehlt'
     assert (k['aenderung'], k['sprung']) == (None, False)
+
+
+# --- NK-242: das Abrechnungsjahr des Hauses, Beträge zeitanteilig -----------------
+
+def _april_haus(preis_ab_oktober_2025):
+    """Abrechnungsjahr 01.04.–31.03., Rechnungen jeweils 01.10.–30.09."""
+    haus = house('Aprilhaus')
+    haus.abrechnungsjahr_beginn = '04-01'
+    kat = category('Grundsteuer')
+    for nummer, (jahr, betrag) in enumerate(((2023, 1200.0), (2024, 1200.0),
+                                             (2025, preis_ab_oktober_2025))):
+        invoice(haus, kat, betrag, date(jahr, 10, 1), date(jahr + 1, 9, 30),
+                invoice_number=f'INV-{nummer}')
+    ergebnis = stand(haus.id, JAHR, heute=date(2026, 6, 1))
+    return ergebnis, next(k for k in ergebnis['kostenarten'] if k['id'] == kat.id)
+
+
+def test_abweichendes_abrechnungsjahr_rechnet_zeitanteilig(app_ctx):
+    # 183/365 von 1.200 + 182/365 von 1.800; Vorjahr 183/366 + 182/365 von 1.200.
+    ergebnis, k = _april_haus(1800.0)
+
+    assert (ergebnis['von'], ergebnis['bis']) == ('2025-04-01', '2026-03-31')
+    assert (k['anzahl'], k['summe'], k['summe_vorjahr']) == (2, 1499.17, 1198.36)
+    assert (k['aenderung'], k['sprung']) == (25, True)
+
+
+def test_gleicher_preis_ueber_die_jahresgrenze_ist_kein_sprung(app_ctx):
+    _, k = _april_haus(1200.0)
+
+    assert (k['summe'], k['summe_vorjahr']) == (1200.0, 1198.36)
+    assert (k['aenderung'], k['sprung']) == (0, False)
