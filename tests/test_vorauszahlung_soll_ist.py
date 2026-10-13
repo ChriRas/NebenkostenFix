@@ -138,6 +138,14 @@ def test_das_soll_anlegen_berichtigen_und_loeschen(auth_client, mieter):
                             data={'gueltig_ab': '2024-01-01', 'betrag': '1'}).status_code == 404
 
 
+def test_ein_soll_nach_dem_auszug_wird_abgelehnt(auth_client, mieter):
+    # NK-269: Nach dem Auszug am 31.03. ist kein Monat mehr zu zahlen.
+    url = f'/api/tenants/{mieter.id}/vorauszahlung_soll'
+    danach = auth_client.post(url, data={'gueltig_ab': '2024-04-01', 'betrag': '90'})
+    assert danach.status_code == 400 and danach.get_json()['feld'] == 'gueltig_ab'
+    assert auth_client.post(url, data={'gueltig_ab': '2024-03-31', 'betrag': '90'}).status_code == 201
+    assert [s.gueltig_ab for s in mieter.vorauszahlung_soll] == [D(2024, 3, 31)]
+
 def test_die_ansicht_zeigt_soll_ist_und_die_erinnerung(auth_client, mieter):
     auth_client.post(f'/api/tenants/{mieter.id}/vorauszahlung_soll',
                      data={'gueltig_ab': '2024-01-01', 'betrag': '100'})

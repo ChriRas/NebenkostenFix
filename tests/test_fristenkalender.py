@@ -156,6 +156,36 @@ def test_die_ics_datei_wird_heruntergeladen(auth_client, bestand):
     assert 'DTSTAMP:20250110T120000Z' in text
 
 
+def test_eine_auszugsabrechnung_verschiebt_den_ablesestichtag_nicht(auth_client, bestand):
+    # Der Stichtag ist das Ende des Abrechnungsjahres des Hauses, nicht der Auszugstag.
+    wohnung = f.apt(bestand.apartment.property, 'OG', 40)
+    b = f.tenant(wohnung, 'Mieter B', D(2024, 1, 1), D(2025, 3, 15))
+    db.session.add(TenantBillingReport(
+        tenant_id=b.id, start_date=D(2025, 1, 1), end_date=D(2025, 3, 15),
+        frist_ende=frist_ende(D(2025, 3, 15))))
+    db.session.commit()
+    liste = auth_client.get('/api/fristen').get_json()['termine']
+    assert [t['datum'] for t in liste if t['art'] == 'ablesung'] == ['2025-12-31']
+
+
+def test_gesperrte_mieter_stehen_nicht_im_kalender(auth_client, bestand):
+    # Gesperrte Mieter sind aus allen Listen ausgeblendet (R-DSGVO-02); der
+    # Ablesestichtag des Hauses bleibt, er nennt keinen Mieter.
+    bestand.gesperrt_bis = D(2027, 1, 1)
+    db.session.commit()
+    liste = auth_client.get('/api/fristen').get_json()['termine']
+    assert 'Mieter A' not in str(liste)
+    assert [t['art'] for t in liste] == ['ablesung', 'eichfrist']
+    assert 'Mieter A' not in auth_client.get('/api/fristen.ics').get_data(as_text=True)
+
+
+def test_ein_soll_nach_dem_auszug_steht_nicht_im_kalender(auth_client, bestand):
+    # NK-269: Das Soll ab 01.04. gilt nicht mehr, der Mieter zieht am 31.03. aus.
+    bestand.move_out_date = D(2025, 3, 31)
+    db.session.commit()
+    liste = auth_client.get('/api/fristen').get_json()['termine']
+    assert 'vorauszahlung' not in [t['art'] for t in liste]
+
 def test_ohne_bestand_ist_der_kalender_leer_aber_gueltig(auth_client):
     assert auth_client.get('/api/fristen').get_json() == {'termine': []}
     text = auth_client.get('/api/fristen.ics').get_data(as_text=True)

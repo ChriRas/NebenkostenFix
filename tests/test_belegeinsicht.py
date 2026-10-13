@@ -101,6 +101,23 @@ def test_nichts_vom_nachbarn_und_kein_name_im_dateinamen(auth_client, welt):
         assert 'Bert' not in text and 'Nachbar' not in text and 'WA-OG' not in text
 
 
+def test_kein_foto_eines_hauptzaehlers_auch_wenn_er_an_der_wohnung_haengt(auth_client, welt):
+    # Über API oder Import kann ein Hauptzähler eine Wohnung tragen; er misst
+    # trotzdem das ganze Haus und gehört nicht ins Paket (R-DSGVO-03).
+    import os
+    from nebenkostenfix.models import Apartment, db
+
+    eg = db.session.get(Apartment, welt.apartment_id)
+    haupt = meter(eg.property, category('Allgemeinstrom'), 'HZ-1', is_main=True, apartment=eg)
+    stand = reading(haupt, D(2025, 12, 31), 900.0)
+    datei = os.path.join(os.environ['NAS_MOUNT_PATH'], 'haupt.jpg')
+    with open(datei, 'wb') as f:
+        f.write(b'JPEG haupt')
+    stand.document_path = datei
+    db.session.commit()
+    assert not any('HZ-1' in name for name in _paket(auth_client, welt))
+
+
 def test_fehlt_das_pdf_steht_es_in_der_liste(auth_client, welt):
     from nebenkostenfix.models import TenantBillingReport, db
 

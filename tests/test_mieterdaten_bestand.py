@@ -90,7 +90,7 @@ def test_uebersicht_zaehlt_den_auszugstag_noch_mit(auth_client, app_ctx):
 
 
 def test_uebersicht_zaehlt_fehlende_endabrechnungen(auth_client, app_ctx):
-    """NK-211 (B4): ausgezogen und nicht bis zum Auszug abgerechnet ist offen.
+    """NK-211: ausgezogen und nicht bis zum Auszug abgerechnet ist offen.
 
     Vorher zaehlten nur Mieter, die heute wohnen -- die Endabrechnung nach
     einem Auszug fehlte in der Kachel. Wer vor mehr als zwei Jahren auszog,
@@ -156,6 +156,27 @@ def test_uebersicht_zaehlt_abgelaufene_zeitraeume(auth_client, app_ctx):
     kpis = auth_client.get(f'/api/analytics/building/{haus.id}').get_json()['kpis']
 
     assert kpis['open_tasks'] == 2
+
+
+def test_uebersicht_zaehlt_gesperrte_mieter_nicht(auth_client, app_ctx):
+    """NK-269: ein gesperrter Mieter ist geloescht bis auf den Anker (R-DSGVO-02).
+
+    Er steht in keiner Liste und laesst sich nicht abrechnen -- als offene
+    Aufgabe bliebe er stehen, ohne dass sie sich erledigen liesse.
+    """
+    heute = date.today()
+    haus = f.house()
+    lang = heute - timedelta(days=2000)
+    wohnt = f.tenant(f.apt(haus, 'EG', 50), 'Wohnt', move_in=lang)
+    weg = f.tenant(f.apt(haus, 'OG', 50), 'Ausgezogen', move_in=lang)
+    weg.move_out_date = heute - timedelta(days=50)
+    for mieter in (wohnt, weg):
+        mieter.gesperrt_bis = date(heute.year + 10, 12, 31)
+    db.session.commit()
+
+    kpis = auth_client.get(f'/api/analytics/building/{haus.id}').get_json()['kpis']
+
+    assert kpis['open_tasks'] == 0
 
 
 # --- H8:ohne Kostenprofil, ohne Rechnungen -----------------------------------------

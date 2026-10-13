@@ -80,6 +80,14 @@ def test_kostenarten_getrennt_gesamt_und_ohne_flaeche_kein_wert():
     assert ohne[0]['je_qm'] == {'Wasser': None} and ohne[0]['je_qm_gesamt'] is None
 
 
+def test_eine_abrechnung_ohne_flaeche_macht_das_ganze_jahr_ohne_wert():
+    # NK-269: Sonst zählten ihre Kosten, ihre Tage aber nicht -- der Wert je m²
+    # stiege auf das Doppelte. Die Fläche 0 ist erlaubt (Stellplatz, Lager).
+    liste = mj.verlauf([(D(2024, 1, 1), D(2024, 6, 30), 0, [('Wasser', 300)], 0),
+                        (D(2024, 7, 1), D(2024, 12, 31), 50, [('Wasser', 300)], 0)], 1, 1)
+    assert liste[0]['je_qm'] == {'Wasser': None} and liste[0]['je_qm_gesamt'] is None
+
+
 def test_ohne_abrechnung_kein_verlauf():
     assert mj.verlauf([], 1, 1) == []
 
