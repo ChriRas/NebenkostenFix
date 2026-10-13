@@ -7053,9 +7053,9 @@ function renderBuildingVitalSigns(kpis) {
     const powerPeriod = kpis.power_period ? kpis.power_period : kpis.reference_year;
 
     container.innerHTML = `
-        <div class="dashboard-card glass-panel" style="padding: 20px; border-left: 4px solid var(--success-color);">
-            <div style="font-size: 0.9em; color: var(--text-muted); margin-bottom: 8px;">Überschuss im laufenden Jahr (${new Date().getFullYear()})</div>
-            <div style="font-size: 1.8em; font-weight: 600; color: ${kpis.cashflow_ytd >= 0 ? 'var(--success-color)' : 'var(--danger-color)'}">
+        <div class="dashboard-card glass-panel" style="padding: 20px; border-left: 4px solid var(--primary-color);">
+            <div style="font-size: 0.9em; color: var(--text-muted); margin-bottom: 8px;">Kontobewegung ${new Date().getFullYear()}</div>
+            <div style="font-size: 1.8em; font-weight: 600;">
                 ${kpis.cashflow_ytd.toLocaleString('de-DE', {style: 'currency', currency: 'EUR'})}
             </div>
         </div>

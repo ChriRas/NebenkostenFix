@@ -3723,8 +3723,11 @@ def analytics_building(property_id):
     # --- KPIs ---
     payments = db.session.query(Payment).join(Tenant).join(Apartment).filter(Apartment.property_id == property_id).all()
     today = datetime.date.today()
-    cashflow_in_current = sum(p.amount for p in payments if p.payment_date.year == current_year and p.type != 'Kaution')
-    cashflow_out_current = sum(inv.amount for inv in invoices if _zufluss_datum(inv).year == current_year)
+    # NK-241: Kontobewegung bis heute, wie in_actual/out_actual der Jahreszeile.
+    cashflow_in_current = sum(p.amount for p in payments if p.payment_date.year == current_year
+                              and p.payment_date <= today and p.type != 'Kaution')
+    cashflow_out_current = sum(inv.amount for inv in invoices
+                               if _zufluss_datum(inv).year == current_year and _zufluss_datum(inv) <= today)
     cashflow_ytd = cashflow_in_current - cashflow_out_current
     
     # Betriebskosten: exact date range from invoices
