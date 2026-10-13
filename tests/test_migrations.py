@@ -268,18 +268,29 @@ def test_zwei_starts_gleichzeitig_bauen_die_datenbank_nur_einmal(tmp_path):
     datei = tmp_path / "gleichzeitig.db"
     umgebung = _umgebung(datei, tmp_path)
 
-    prozesse = [
-        subprocess.Popen(
-            [sys.executable, "-c", CODE_START],
-            cwd=str(WURZEL),
-            env=umgebung,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-        )
-        for _ in range(2)
-    ]
-    ausgaben = [p.communicate(timeout=180) for p in prozesse]
+    # Ausgaben in Dateien, nicht in Pipes: nacheinander gelesen, stand der
+    # zweite Prozess mit der Sperre am vollen Puffer (Windows: 4 KB, das Log
+    # der Wanderung ist laenger), der erste wartete auf die Sperre.
+    dateien = [(tmp_path / f"start{n}.out", tmp_path / f"start{n}.err") for n in range(2)]
+    prozesse = []
+    try:
+        for aus, fehler in dateien:
+            with open(aus, "wb") as a, open(fehler, "wb") as f:
+                prozesse.append(subprocess.Popen(
+                    [sys.executable, "-c", CODE_START],
+                    cwd=str(WURZEL),
+                    env=umgebung,
+                    stdout=a,
+                    stderr=f,
+                ))
+        for prozess in prozesse:
+            prozess.wait(timeout=180)
+    finally:
+        for prozess in prozesse:
+            if prozess.poll() is None:
+                prozess.kill()
+    ausgaben = [(aus.read_text(errors="replace"), fehler.read_text(errors="replace"))
+                for aus, fehler in dateien]
 
     for prozess, (aus, fehler) in zip(prozesse, ausgaben):
         assert prozess.returncode == 0, f"{aus}\n{fehler}"
