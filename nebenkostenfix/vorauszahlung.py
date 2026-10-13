@@ -10,7 +10,7 @@ Belastbares sagen kann, nennt sie den Grund statt einer Zahl.
 from __future__ import annotations
 
 import calendar
-from datetime import date
+from datetime import date, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
 
@@ -45,14 +45,27 @@ def bisherige_hoehe(zahlungen) -> Decimal:
     Gleichstand der jüngste: eine einzelne Sammel- oder Teilzahlung
     verfälscht die Höhe nicht (NK-237).
     """
-    # ponytail: eine Erhöhung zählt erst ab dem zweiten Monat; eine
-    # Serienkennung der Zahlungen gibt es nicht.
+    # Eine Erhöhung zählt hier erst ab dem zweiten Monat; mit laufender
+    # Serienbuchung gilt vorher laufende_hoehe (NK-259).
     je_monat = {}
     for tag, betrag in zahlungen:
         monat = (tag.year, tag.month)
         je_monat[monat] = je_monat.get(monat, Decimal(0)) + Decimal(betrag)
     letzte = [je_monat[m] for m in sorted(je_monat)[-3:]]
     return max(reversed(letzte), key=letzte.count)
+
+
+def laufende_hoehe(zahlungen, stichtag: date) -> Decimal | None:
+    """Die Höhe der laufenden Serienbuchung, oder None ohne eine (NK-259).
+
+    Was für den Monat nach dem Stichtag schon gebucht ist, kommt aus einer
+    Serienbuchung; erfasst wird sonst nur, was gezahlt ist. Deren Monatsbetrag
+    gilt sofort, auch wenn die Erhöhung erst in diesem Monat begann.
+    """
+    naechster = ab_datum(stichtag) - timedelta(days=1)
+    gebucht = [Decimal(b) for d, b in zahlungen
+               if (d.year, d.month) == (naechster.year, naechster.month)]
+    return sum(gebucht) if gebucht else None
 
 
 def vorschlag(kosten, beginn: date, ende: date, auszug: date | None,
@@ -78,7 +91,7 @@ def vorschlag(kosten, beginn: date, ende: date, auszug: date | None,
     if auszug is not None and auszug < ab:
         return {'grund': f'Der Auszug liegt vor dem {ab:%d.%m.%Y}.'}
     anzahl = monate(beginn, ende)
-    bisher = bisherige_hoehe(bisherige)
+    bisher = laufende_hoehe(zahlungen, stichtag) or bisherige_hoehe(bisherige)
     neu = (Decimal(kosten) / anzahl).quantize(Decimal('1'), ROUND_HALF_UP)
     return {
         'ab': ab.isoformat(),

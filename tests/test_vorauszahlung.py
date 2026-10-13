@@ -91,6 +91,33 @@ def test_bisher_uebergeht_eine_sammelzahlung():
     assert _bisher(zahlungen) == '80.00'
 
 
+def test_bisher_kommt_sofort_aus_der_laufenden_serienbuchung():
+    """NK-259: Erhöhung ab diesem Monat per Serienbuchung, der April ist schon
+    gebucht. Die Historie allein sähe zweimal 80 gegen einmal 100."""
+    zahlungen = ACHTZIG + [(date(2026, m, 1), Decimal('80')) for m in (1, 2)] \
+        + [(date(2026, m, 1), Decimal('100')) for m in range(3, 13)]
+    assert _bisher(zahlungen) == '100.00'
+
+
+def test_bisher_ohne_serienbuchung_aus_der_historie():
+    """NK-259: ohne Buchung im Monat nach dem Stichtag bleibt NK-237."""
+    zahlungen = ACHTZIG + [(date(2026, 1, 1), Decimal('80')),
+                           (date(2026, 2, 1), Decimal('80')),
+                           (date(2026, 3, 1), Decimal('100'))]
+    assert _bisher(zahlungen) == '80.00'
+
+
+def test_laufende_hoehe_summiert_den_monat_nach_dem_stichtag():
+    zahlungen = [(date(2026, 4, 1), Decimal('60')), (date(2026, 4, 15), Decimal('40')),
+                 (date(2026, 5, 1), Decimal('999'))]
+    assert vorauszahlung.laufende_hoehe(zahlungen, date(2026, 3, 15)) == Decimal('100')
+    assert vorauszahlung.laufende_hoehe(zahlungen, date(2026, 4, 15)) == Decimal('999')
+    assert vorauszahlung.laufende_hoehe(zahlungen, date(2026, 5, 15)) is None
+    # Jahreswechsel: der Monat nach dem 10.12. ist der Januar.
+    assert vorauszahlung.laufende_hoehe([(date(2027, 1, 1), Decimal('90'))],
+                                        date(2026, 12, 10)) == Decimal('90')
+
+
 def test_bisher_erkennt_eine_erhoehung_ab_zwei_monaten():
     zahlungen = ACHTZIG + [(date(2026, 1, 1), Decimal('95')),
                            (date(2026, 2, 1), Decimal('95'))]
