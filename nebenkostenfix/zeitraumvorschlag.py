@@ -134,6 +134,27 @@ def abgerechnet_bis(t) -> date | None:
     return max(filter(None, (letzte and letzte.end_date, t.last_billed_until)), default=None)
 
 
+def naechster_zeitraum(t) -> dict | None:
+    """Regel 1 und 2: ``{'beginn', 'ziel', 'abgerechnet', 'jahr'}`` des nächsten Zeitraums.
+
+    ``abgerechnet`` ist ``None``, wenn der Beginn der Einzug ist; ``jahr`` ist
+    (Monat, Tag, Quelle) aus :func:`jahresbeginn`. ``None``, wenn das
+    Mietverhältnis bis zum Auszug abgerechnet ist. Fällig ist der Zeitraum ab
+    dem Tag ``ziel`` (Regel 3) -- Vorschlag und Übersicht fragen beide hier.
+    """
+    abgerechnet = abgerechnet_bis(t)
+    if not (abgerechnet and abgerechnet >= t.move_in_date):
+        abgerechnet = None
+    beginn = abgerechnet + EIN_TAG if abgerechnet else t.move_in_date
+    auszug = t.move_out_date
+    if auszug and auszug < beginn:
+        return None
+    jahr = jahresbeginn(t.apartment.property)
+    jahresende = _jahresende(beginn, jahr[0], jahr[1])
+    ziel = auszug if auszug and auszug <= jahresende else jahresende
+    return {'beginn': beginn, 'ziel': ziel, 'abgerechnet': abgerechnet, 'jahr': jahr}
+
+
 def vorschlag(tenant_id: int, heute: date) -> dict:
     """``{'beginn', 'ende', 'gruende'}``; ohne Vorschlag sind beide ``None``."""
     from nebenkostenfix.models import CostInvoice, Tenant, TenantBillingReport, db
@@ -141,34 +162,28 @@ def vorschlag(tenant_id: int, heute: date) -> dict:
     t = db.session.get(Tenant, tenant_id)
     gruende = []
 
-    abgerechnet = abgerechnet_bis(t)
-    if abgerechnet and abgerechnet >= t.move_in_date:
-        beginn = abgerechnet + EIN_TAG
+    auszug = t.move_out_date
+    zeitraum = naechster_zeitraum(t)
+    if zeitraum is None:
+        return _ohne([f'Das Mietverhältnis ist bis zum Auszug am {_d(auszug)} abgerechnet.'])
+    beginn, ziel, abgerechnet = zeitraum['beginn'], zeitraum['ziel'], zeitraum['abgerechnet']
+    monat, tag, quelle = zeitraum['jahr']
+    if abgerechnet:
         gruende.append(f'Abgerechnet ist bis {_d(abgerechnet)}, '
                        f'weiter geht es ab {_d(beginn)}.')
     else:
-        beginn = t.move_in_date
         gruende.append(f'Noch keine Abrechnung: Beginn ist der Einzug am {_d(beginn)}.')
 
-    auszug = t.move_out_date
-    if auszug and auszug < beginn:
-        return _ohne([f'Das Mietverhältnis ist bis zum Auszug am {_d(auszug)} abgerechnet.'])
-
-    monat, tag, quelle = jahresbeginn(t.apartment.property)
-    jahresende = _jahresende(beginn, monat, tag)
-    if auszug and auszug <= jahresende:
-        ziel = auszug
+    if ziel == auszug:
         gruende.append(f'Der letzte Miettag ist der {_d(auszug)}.')
+    elif (monat, tag) == (1, 1):
+        gruende.append('Abgerechnet wird je Kalenderjahr, höchstens zwölf Monate '
+                       '(§ 556 Abs. 3 BGB).')
     else:
-        ziel = jahresende
-        if (monat, tag) == (1, 1):
-            gruende.append('Abgerechnet wird je Kalenderjahr, höchstens zwölf Monate '
-                           '(§ 556 Abs. 3 BGB).')
-        else:
-            woher = {'feld': 'so eingestellt am Haus',
-                     'abrechnungen': 'wie die bisherigen Abrechnungen des Hauses'}[quelle]
-            gruende.append(f'Das Abrechnungsjahr beginnt am {jahresbeginn_text(monat, tag)} '
-                           f'({woher}), höchstens zwölf Monate (§ 556 Abs. 3 BGB).')
+        woher = {'feld': 'so eingestellt am Haus',
+                 'abrechnungen': 'wie die bisherigen Abrechnungen des Hauses'}[quelle]
+        gruende.append(f'Das Abrechnungsjahr beginnt am {jahresbeginn_text(monat, tag)} '
+                       f'({woher}), höchstens zwölf Monate (§ 556 Abs. 3 BGB).')
     if ziel > heute:
         return _ohne(gruende + [f'Der Zeitraum läuft noch bis {_d(ziel)}. '
                                 'Abrechnen lässt er sich erst danach.'])

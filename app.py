@@ -3692,7 +3692,7 @@ def analytics_building(property_id):
     from nebenkostenfix.models import CostInvoice, Payment, CostCategory, Meter, Tenant, Apartment, db
     import datetime
     from nebenkostenfix.billing_engine import BillingEngine
-    from nebenkostenfix.zeitraumvorschlag import abgerechnet_bis
+    from nebenkostenfix.zeitraumvorschlag import naechster_zeitraum
     
     def _zufluss_datum(inv):
         """Tag, an dem die Rechnung im Cashflow zählt (NK-120).
@@ -3882,14 +3882,6 @@ def analytics_building(property_id):
         db.or_(Tenant.move_out_date == None, Tenant.move_out_date >= today)
     ).all()
     
-    open_tasks = 0
-    one_year_ago = today - datetime.timedelta(days=365)
-    for t in active_tenants:
-        # F-127: auch wer in der App abgerechnet wurde, ist erledigt.
-        bis = abgerechnet_bis(t)
-        if not bis or bis < one_year_ago:
-            open_tasks += 1
-
     # NK-211 (B4): wer ausgezogen ist, braucht eine Endabrechnung bis zum
     # Auszug. Zwei Jahre nach dem Auszug ist auch die Frist des Zeitraums
     # vorbei, in dem er liegt (§ 556 Abs. 3 BGB: zwölf Monate nach dessen
@@ -3899,9 +3891,12 @@ def analytics_building(property_id):
         Tenant.move_out_date < today,
         Tenant.move_out_date >= today - datetime.timedelta(days=730),
     ).order_by(Tenant.id).all()
-    for t in ausgezogene:
-        bis = abgerechnet_bis(t)
-        if not bis or bis < t.move_out_date:
+    # NK-240: offen ist ein Zeitraum, der vorbei ist -- dieselbe Regel wie
+    # der Zeitraumvorschlag, nicht „abgerechnet in den letzten 365 Tagen“.
+    open_tasks = 0
+    for t in active_tenants + ausgezogene:
+        zeitraum = naechster_zeitraum(t)
+        if zeitraum and zeitraum['ziel'] <= today:
             open_tasks += 1
 
     kpis = {
