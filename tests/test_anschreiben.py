@@ -262,7 +262,7 @@ def test_die_vorlage_spricht_auf_dem_deckblatt(unkomprimiert):
         saldo=Decimal('900.00'))
     blatt = _deckblatt(unkomprimiert, anschreiben)
 
-    assert 'Sehrgeehrte/rAnnaMieterin,' in blatt
+    assert 'GutenTagAnnaMieterin,' in blatt and 'geehrte' not in blatt
     assert 'DieAbrechnungergibtbeiGesamtkostenvon1200,00€' in blatt
     assert 'WirbittenSie,denausstehendenBetraginHöhevon900,00€auszugleichen.' in blatt
     # Der feste Gruß der Software ist verdrängt.
@@ -272,7 +272,7 @@ def test_die_vorlage_spricht_auf_dem_deckblatt(unkomprimiert):
 def test_ohne_vorlage_bleibt_es_beim_festen_gruß(unkomprimiert):
     """Kein Anschreiben hinterlegt: der Deckblatt-Gruß wie bisher."""
     blatt = _deckblatt(unkomprimiert)
-    assert 'Sehrgeehrte/rAnnaMieterin,' in blatt
+    assert 'GutenTagAnnaMieterin,' in blatt and 'geehrte' not in blatt
     assert 'ImFolgenden' in blatt
 
 
@@ -352,7 +352,7 @@ def test_ohne_eigene_vorlage_druckt_die_vorgabe(auth_client, app_ctx, unkomprimi
 
     pdf = (Path(os.environ['NAS_MOUNT_PATH']) / report.document_path).read_bytes()
     blatt = _geklebt(pdf)
-    assert 'Sehrgeehrte/rAnnaMieterin,' in blatt
+    assert 'GutenTagAnnaMieterin,' in blatt and 'geehrte' not in blatt
     assert 'WohnungEGlinks' in blatt
     assert 'Gesamtkostenvon1200,00€' in blatt
     assert 'Vorauszahlungenvon300,00€' in blatt
@@ -386,3 +386,12 @@ def test_die_korrektur_wickelt_dieselbe_vorlage(auth_client, app_ctx, unkomprimi
     pdf = (Path(os.environ['NAS_MOUNT_PATH']) / frisch.document_path).read_bytes()
     blatt = _geklebt(pdf)
     assert 'KorrigierterGrußanAnnaMieterin.' in blatt
+
+
+def test_anrede_steht_an_einer_stelle():
+    """NK-247: neutral statt „Sehr geehrte/r“, für Vorlage und Deckblatt gleich."""
+    from nebenkostenfix import anschreiben, pdf_cover_page
+    assert anschreiben.VORGABE.startswith(anschreiben.ANREDE)
+    assert anschreiben.anrede('Anna Mieterin') == 'Guten Tag Anna Mieterin,'
+    quelle = Path(pdf_cover_page.__file__).read_text(encoding='utf-8')
+    assert 'geehrte' not in quelle and 'anrede(' in quelle

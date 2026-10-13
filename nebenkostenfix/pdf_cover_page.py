@@ -17,7 +17,7 @@ from datetime import datetime
 from nebenkostenfix import zeit
 
 from nebenkostenfix.geld import NULL
-from nebenkostenfix.anschreiben import absaetze
+from nebenkostenfix.anschreiben import absaetze, anrede
 # Bandit-Ausnahme: maskiert Text fuer reportlab, parst kein XML
 from xml.sax.saxutils import escape  # nosec B406
 
@@ -220,7 +220,7 @@ def build_cover_page_elements(
         elements.append(Spacer(1, 10))
     else:
         elements.append(Paragraph(
-            f"Sehr geehrte/r {tenant_name},<br/><br/>"
+            f"{anrede(tenant_name)}<br/><br/>"
             f"anbei finden Sie Ihre Nebenkostenabrechnung für den Zeitraum "
             f"<b>{start_fmt}</b> bis <b>{end_fmt}</b>. "
             f"Im Folgenden erhalten Sie einen Überblick über die wichtigsten Kennzahlen.",

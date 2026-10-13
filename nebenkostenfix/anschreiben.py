@@ -21,9 +21,18 @@ from xml.sax.saxutils import escape  # nosec B406
 
 from nebenkostenfix.rechenkern import euro_text
 
+# NK-247: neutrale Anrede statt „Sehr geehrte/r“ -- eine Stelle für die
+# Vorlage und den festen Gruß des Deckblatts.
+ANREDE = 'Guten Tag {mieter_name},'
+
+
+def anrede(mieter_name: str) -> str:
+    return ANREDE.format(mieter_name=mieter_name)
+
+
 # Die Vorlage, solange der Vermieter nichts Eigenes hinterlegt hat.
 VORGABE = (
-    'Sehr geehrte/r {mieter_name},\n\n'
+    ANREDE + '\n\n'
     'anbei erhalten Sie die Nebenkostenabrechnung für die Wohnung '
     '{wohnung_name} für den Zeitraum {zeitraum}.\n\n'
     'Die Abrechnung ergibt bei Gesamtkosten von {gesamtsumme} und '
