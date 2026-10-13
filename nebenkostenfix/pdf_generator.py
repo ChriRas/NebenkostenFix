@@ -729,7 +729,8 @@ class PDFGenerator:
         elements.append(Paragraph("Bei Fragen zur Abrechnung stehen wir Ihnen gerne zur Verfügung.", self.styles['HeaderNormal']))
         
 
-        if self.detailliert:
+        # NK-245: ohne Zaehlerzeile kein leerer Nachweisteil samt Umbruch.
+        if self.detailliert and any(item.get('meter_details') for item in line_items):
             elements.append(Paragraph(
                 '<i>Detaillierte Verbrauchsnachweise auf den folgenden Seiten</i>',
                 self.styles['HeaderNormal']))

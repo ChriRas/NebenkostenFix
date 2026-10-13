@@ -9,12 +9,13 @@ darunter die Ablesungen, aus denen sie kommen.
 
 from __future__ import annotations
 
+import re
 from datetime import date
 from decimal import Decimal
 
 from nebenkostenfix import heizung
 from nebenkostenfix.rechenkern import Stand, Zaehler, verbrauch_in
-from tests.test_pdf_rechenweg import _erzeuge, _geklebt, unkomprimiert  # noqa: F401
+from tests.test_pdf_rechenweg import _erzeuge, _geklebt, _qmzeile, unkomprimiert  # noqa: F401
 
 
 def zaehler(staende):
@@ -173,3 +174,22 @@ def test_hauptzaehler_nennt_seinen_zeitraum(unkomprimiert):
 
     alt = _geklebt(_erzeuge([allgemeinzeile()], detailliert=True))
     assert 'GesamtverbrauchHaus(Hauptzähler):100.0m³' in alt
+
+
+def _seiten(pdf: bytes) -> int:
+    return len(re.findall(rb'/Type /Page(?![sA-Za-z])', pdf))
+
+
+def test_ohne_zaehler_kein_leerer_nachweisteil(unkomprimiert):
+    """NK-245: ohne Zählerzeile weder Überschrift noch leere Folgeseite."""
+    ausfuehrlich = _erzeuge([_qmzeile()], detailliert=True)
+    assert 'Verbrauchsnachweise' not in _geklebt(ausfuehrlich)
+    assert _seiten(ausfuehrlich) == _seiten(_erzeuge([_qmzeile()]))
+
+
+def test_mit_zaehler_bleibt_der_nachweisteil(unkomprimiert):
+    tm = verbrauch_in(zaehler([Stand(date(2024, 1, 1), 10.0), Stand(date(2025, 1, 1), 20.0)]),
+                      date(2024, 1, 1), date(2025, 1, 1))
+    pdf = _erzeuge([_qmzeile(), zaehlerzeile(tm)], detailliert=True)
+    assert 'DetaillierteVerbrauchsnachweise' in _geklebt(pdf)
+    assert _seiten(pdf) > _seiten(_erzeuge([_qmzeile(), zaehlerzeile(tm)]))
