@@ -791,6 +791,70 @@ async function jahreswechselPruefen() {
         && /onclick="oeffneJahreswechsel\(\)"[^>]*>[\s\S]{0,80}Jahreswechsel öffnen\s*<\/button>/.test(html));
 }
 
+// --- NK-265: Prüfstand vor dem Festsetzen -------------------------------------
+// Der Block läuft mit der echten Kappung (D-116) und Attrappen der Öffner;
+// geprüft werden Seite, Knöpfe und dass jeder Knopf die richtige Stelle öffnet.
+async function pruefstandPruefen() {
+    const m = appQuelle.match(/\n\/\/ --- NK-265[\s\S]*?(?=\n\/\/ --- )/);
+    const kappen = appQuelle.match(/function hinweiseKappen\(zeilen\) \{[\s\S]*?\n\}/);
+    const anzahl = appQuelle.match(/function anzahlText\([^)]*\) \{[\s\S]*?\n\}/);
+    if (!m || !kappen || !anzahl) throw new Error('NK-265-Block oder Helfer nicht gefunden');
+    const seite = (befunde) => {
+        const el = {};
+        const aufrufe = [];
+        const umgebung = {
+            document: { getElementById: id => (el[id] = el[id] || { value: '', innerHTML: '' }) },
+            window: {}, jahrStand: { pruefstand: befunde }, jahrAktuell: 5,
+            jahrZeigen: () => aufrufe.push('zeigen'),
+            escapeHtml: t => String(t).replace(/</g, '&lt;'),
+            openAddInvoiceModal: id => aufrufe.push('rechnung:' + id),
+            openHistoryModal: id => aufrufe.push('zaehler:' + id),
+            openAddReadingModal: id => aufrufe.push('ablesung:' + id),
+            openAddTenantModal: () => aufrufe.push('mieter'),
+            openAddPaymentModal: () => aufrufe.push('zahlung'),
+            toggleBillingReportField: () => aufrufe.push('umschalten'),
+        };
+        const namen = Object.keys(umgebung);
+        const f = new Function(...namen, kappen[0] + anzahl[0] + m[0]
+            + '; return { jahrPruefstandZeigen, jahrPruefstandOeffnen, schritt: () => jahrAktuell };')(
+            ...namen.map(n => umgebung[n]));
+        f.jahrPruefstandZeigen();
+        return { f, el, aufrufe, html: () => el['jahr-pruefstand'].innerHTML };
+    };
+    const befund = (art, aktion, id) => ({ art, text: `<b>${art}`, tun: `Prüfen Sie ${art}.`, ziel: { aktion, id } });
+    const alle = [befund('kosten_je_qm', 'rechnungen', null), befund('zaehlersprung', 'zaehler', 11),
+        befund('ohne_beleg', 'rechnung', 21), befund('wechsel_ablesung', 'ablesung', 12),
+        befund('leerstand', 'mieter', 31), befund('ohne_vorauszahlung', 'zahlung', 41)];
+    const voll = seite(alle);
+    const liste = voll.html();
+    const sichtbar = liste.split('<details')[0];
+    pruefe('NK-265: drei Warnungen sichtbar, drei aufklappbar, Text maskiert, blockiert nichts',
+        (sichtbar.match(/jahrPruefstandOeffnen\(/g) || []).length === 3
+        && /<summary>3 weitere Hinweise<\/summary>/.test(liste)
+        && liste.includes('6 Hinweise vor dem Festsetzen') && liste.includes('Sie können trotzdem festsetzen')
+        && liste.includes('&lt;b>leerstand') && !liste.includes('<b>')
+        && (liste.match(/<strong>Was tun:<\/strong>/g) || []).length === 6);
+    pruefe('NK-265: jede Warnung hat ihren Knopf',
+        ['Rechnungen prüfen', 'Zählerstände ansehen', 'Rechnung öffnen', 'Ablesung erfassen',
+         'Mieter erfassen', 'Zahlung erfassen'].every(k => liste.includes(`>${k}</button>`)));
+    alle.forEach((_, i) => voll.f.jahrPruefstandOeffnen(i));
+    pruefe('NK-265: jeder Knopf öffnet die Stelle, die die Warnung behebt',
+        voll.f.schritt() === 2
+        && voll.aufrufe.join() === 'zeigen,zaehler:11,rechnung:21,ablesung:12,mieter,zahlung,umschalten'
+        && voll.el['tenant-apartment'].value === '31' && voll.el['payment-tenant'].value === '41'
+        && voll.el['payment-type'].value === 'Nebenkostenvorauszahlung');
+    const eine = seite([alle[2]]).html();
+    pruefe('NK-265: eine Warnung in der Einzahl, ohne Aufklappen',
+        eine.includes('1 Hinweis vor dem Festsetzen') && !eine.includes('<details'));
+    const leer = seite([]).html();
+    pruefe('NK-265: ohne Befund die Entwarnung',
+        /nichts Auffälliges/.test(leer) && !leer.includes('<li'));
+    pruefe('NK-265: Prüfstand in Schritt 5, beim Laden und beim Schritt auf 5 gefüllt',
+        /data-jahr-schritt="5"[\s\S]{0,300}id="jahr-pruefstand"/.test(html)
+        && /jahrFristZeigen\(\);\s*jahrPruefstandZeigen\(\);/.test(appQuelle)
+        && /richtung > 0 && jahrAktuell === 4\) await jahrNeuLaden\(\)/.test(appQuelle));
+}
+
 // --- NK-201: Warnleiste im offenen Modus -------------------------------------
 // Der Rauchtest gibt die Antwort von /api/auth/me vor: offen in Docker zeigt
 // die Warnleiste, offen in der Windows-App bleibt sie verborgen.
@@ -1574,4 +1638,6 @@ warnLeistePruefen()
                                                 .catch(e => pruefe('NK-263: Mehrjahresblick-Prüfung lief durch — ' + e.message, false))
                                                 .then(() => jahreswechselPruefen()
                                                     .catch(e => pruefe('NK-267: Jahreswechsel-Prüfung lief durch — ' + e.message, false))
-                                                    .then(() => process.exit(fehler ? 1 : 0))))))))))))));
+                                                    .then(() => pruefstandPruefen()
+                                                        .catch(e => pruefe('NK-265: Prüfstand-Prüfung lief durch — ' + e.message, false))
+                                                        .then(() => process.exit(fehler ? 1 : 0)))))))))))))));

@@ -5376,13 +5376,16 @@ function warnungenBuendeln(warnungen) {
     });
 }
 
-// D-116: höchstens drei Meldungen sichtbar, der Rest aufklappbar.
 function warnungenHtml(warnungen) {
-    const zeilen = warnungenBuendeln(warnungen).map(w =>
+    return hinweiseKappen(warnungenBuendeln(warnungen).map(w =>
         `<li title="${escapeHtml(w.kennung)}">${escapeHtml(w.kurz)}`
         + (w.tun ? ` <strong>Was tun:</strong> ${escapeHtml(w.tun)}` : '')
         + (w.rest ? ` <details><summary>Mehr</summary>${escapeHtml(w.rest)}</details>` : '')
-        + '</li>');
+        + '</li>'));
+}
+
+// D-116: höchstens drei Meldungen sichtbar, der Rest aufklappbar.
+function hinweiseKappen(zeilen) {
     if (zeilen.length <= 3) return zeilen.join('');
     const weitere = zeilen.length - 3;
     return zeilen.slice(0, 3).join('')
@@ -5439,6 +5442,8 @@ async function jahrSchritt(richtung) {
     try {
         if (richtung > 0 && jahrAktuell === 1 && !(await jahrNeuLaden())) return;
         if (richtung > 0 && jahrAktuell === 3) await jahrVorschauLaden();
+        // NK-265: der Prüfstand zeigt, was seit Schritt 1 behoben wurde.
+        if (richtung > 0 && jahrAktuell === 4) await jahrNeuLaden();
         jahrAktuell = Math.min(5, Math.max(1, jahrAktuell + richtung));
         jahrZeigen();
     } finally {
@@ -5461,6 +5466,7 @@ async function jahrNeuLaden() {
     jahrKostenartenZeigen();
     jahrAblesungenZeigen();
     jahrFristZeigen();
+    jahrPruefstandZeigen();
     return true;
 }
 window.jahrNeuLaden = jahrNeuLaden;
@@ -5616,6 +5622,57 @@ async function jahrFestsetzen() {
     }
 }
 window.jahrFestsetzen = jahrFestsetzen;
+
+// --- NK-265: Prüfstand vor dem Festsetzen ---
+// Die Warnungen rechnet der Server (jahrStand.pruefstand). Jede führt mit
+// einem Knopf zu der Stelle, die sie behebt; festsetzen geht trotzdem.
+const PRUEFSTAND_ZIELE = {
+    rechnungen: ['Rechnungen prüfen', () => jahrGeheZu(2)],
+    rechnung: ['Rechnung öffnen', id => openAddInvoiceModal(id)],
+    zaehler: ['Zählerstände ansehen', id => openHistoryModal(id)],
+    ablesung: ['Ablesung erfassen', id => openAddReadingModal(id)],
+    mieter: ['Mieter erfassen', id => {
+        openAddTenantModal();
+        document.getElementById('tenant-apartment').value = String(id);
+    }],
+    zahlung: ['Zahlung erfassen', id => {
+        openAddPaymentModal();
+        document.getElementById('payment-tenant').value = String(id);
+        document.getElementById('payment-type').value = 'Nebenkostenvorauszahlung';
+        toggleBillingReportField();
+    }],
+};
+
+function jahrGeheZu(schritt) {
+    jahrAktuell = schritt;
+    jahrZeigen();
+}
+
+function jahrPruefstandZeigen() {
+    const befunde = jahrStand.pruefstand || [];
+    const ziel = document.getElementById('jahr-pruefstand');
+    if (!befunde.length) {
+        ziel.innerHTML = '<p class="karten-text">Der Prüfstand findet nichts Auffälliges.</p>';
+        return;
+    }
+    const zeilen = befunde.map((b, i) => {
+        const beschriftung = (PRUEFSTAND_ZIELE[b.ziel.aktion] || [])[0];
+        const knopfHtml = beschriftung
+            ? ` <button type="button" class="btn-tint btn-klein" onclick="jahrPruefstandOeffnen(${Number(i)})">${escapeHtml(beschriftung)}</button>`
+            : '';
+        return `<li>${escapeHtml(b.text)} <strong>Was tun:</strong> ${escapeHtml(b.tun)}${knopfHtml}</li>`;
+    });
+    const listeHtml = hinweiseKappen(zeilen);
+    ziel.innerHTML = `<p class="karten-text">${escapeHtml(anzahlText(befunde.length, 'Hinweis', 'Hinweise'))} vor dem Festsetzen. `
+        + 'Sie können trotzdem festsetzen.</p>'
+        + `<ul class="jahr-warnungen">${listeHtml}</ul>`;
+}
+
+function jahrPruefstandOeffnen(index) {
+    const befund = jahrStand.pruefstand[index];
+    PRUEFSTAND_ZIELE[befund.ziel.aktion][1](befund.ziel.id);
+}
+window.jahrPruefstandOeffnen = jahrPruefstandOeffnen;
 
 // --- Anschreiben-Vorlage des Objekts (NK-124, Backend seit NK-064) ---
 
