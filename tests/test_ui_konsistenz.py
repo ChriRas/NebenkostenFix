@@ -359,3 +359,25 @@ def test_zaehlertabelle_wird_am_handy_zur_karte():
     assert karte and "display: block" in karte.group(1) and "overflow-x: visible" in karte.group(1)
     assert re.search(r"\.zaehler-tabelle \.zaehler-kopf \{\s*display: none;", schmal)
     assert "content: attr(data-label)" in schmal
+
+
+def test_kopfaktionen_am_handy_im_menue():
+    """NK-253: unter 720 px stapelten sich die Kopfknöpfe (vier bei den
+    Zählern) über dem Inhalt; ein Menüknopf neben dem Titel trägt sie."""
+    app = _liest(APP)
+    start = app[app.index("function initApp("):]
+    assert "initKopfMenues();" in start[:start.index("\n}\n")]
+    menue = app[app.index("function initKopfMenues("):]
+    menue = menue[:menue.index("\n}\n")]
+    assert "querySelectorAll('.section-header > .kopf-aktionen')" in menue
+    for merkmal in ("'btn-secondary kopf-menue-knopf'", "'aria-haspopup'", "'aria-expanded'",
+                    "'aria-label', 'Aktionen'", "classList.add('mit-menue')", "'Escape'"):
+        assert merkmal in menue, merkmal
+    css = _liest(STYLE)
+    # Am Schreibtisch bleibt der Kopf wie er war.
+    assert re.search(r"^\.kopf-menue-knopf \{\s*display: none;", css, re.M)
+    schmal = _schmal(css)
+    assert re.search(r"\.kopf-menue-knopf \{\s*display: inline-flex;", schmal)
+    zu = re.search(r"\.kopf-aktionen\.mit-menue \{([^}]*)\}", schmal)
+    assert zu and "display: none" in zu.group(1) and "position: absolute" in zu.group(1)
+    assert re.search(r"\.kopf-aktionen\.mit-menue\.offen \{\s*display: flex;", schmal)

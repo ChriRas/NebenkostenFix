@@ -259,6 +259,7 @@ function initApp() {
     initTabs();
     initModalBedienung();
     initBarrierearm();
+    initKopfMenues();
     fetchProperties();
     fetchTenants();
     fetchAllApartments();
@@ -855,6 +856,38 @@ function ersterFokus(overlay) {
         .filter(el => ['INPUT', 'SELECT', 'TEXTAREA'].includes(el.tagName));
     const ziel = felder[0] || fokussierbar(modal)[0];
     if (ziel && !modal.contains(document.activeElement)) ziel.focus();
+}
+
+// NK-253: Am Handy stapelten sich die Kopfknöpfe über dem Inhalt. Unter
+// 720 px trägt ein Menüknopf neben dem Titel die Aktionen (CSS blendet um).
+function initKopfMenues() {
+    const schalte = (aktionen, offen) => {
+        aktionen.classList.toggle('offen', offen);
+        aktionen.parentElement.querySelector('.kopf-menue-knopf')
+            .setAttribute('aria-expanded', String(offen));
+    };
+    document.querySelectorAll('.section-header > .kopf-aktionen').forEach(aktionen => {
+        if (aktionen.querySelectorAll('button').length < 2) return;
+        const knopf = document.createElement('button');
+        knopf.type = 'button';
+        knopf.className = 'btn-secondary kopf-menue-knopf';
+        knopf.setAttribute('aria-haspopup', 'true');
+        knopf.setAttribute('aria-expanded', 'false');
+        // Nur das Symbol: mit Text bricht der Knopf unter lange Titel um.
+        knopf.setAttribute('aria-label', 'Aktionen');
+        knopf.title = 'Aktionen';
+        knopf.innerHTML = '<i class="ph ph-dots-three-vertical" aria-hidden="true"></i>';
+        knopf.addEventListener('click', () => schalte(aktionen, !aktionen.classList.contains('offen')));
+        aktionen.classList.add('mit-menue');
+        // Direkt hinter den Titel, damit Filter-Pillen nicht dazwischen umbrechen.
+        aktionen.parentElement.firstElementChild.after(knopf);
+        aktionen.addEventListener('click', e => { if (e.target.closest('button')) schalte(aktionen, false); });
+    });
+    const schliesseAlle = () => document.querySelectorAll('.kopf-aktionen.offen').forEach(a => schalte(a, false));
+    document.addEventListener('click', e => {
+        if (!e.target.closest || !e.target.closest('.kopf-menue-knopf, .kopf-aktionen')) schliesseAlle();
+    });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') schliesseAlle(); });
 }
 
 function initModalBedienung() {

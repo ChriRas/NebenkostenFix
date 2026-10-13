@@ -1051,7 +1051,7 @@ input[type="number"] {
        IMMER, d.h. ohne offenes Modal kam eine leere Seite heraus. Die
        allgemeine Regel ist darum an :has gebunden. */
     .sidebar, .top-header, .toast-stapel, .background-blobs,
-    .modal-overlay, .kopf-aktionen, .btn, .filter-pill,
+    .modal-overlay, .kopf-aktionen, .kopf-menue-knopf, .btn, .filter-pill,
     .nav-menu, .feld-hilfe, .no-print {
         display: none !important;
     }
@@ -1442,6 +1442,11 @@ input[type="number"] {
     gap: 12px;
     align-items: center;
     flex-wrap: wrap;
+}
+
+/* NK-253: der Menüknopf für die Kopfaktionen gilt nur am Handy (unten). */
+.kopf-menue-knopf {
+    display: none;
 }
 
 /* Tabellen (F-44): die Klassen, die der Bestand benutzt, ohne dass sie
@@ -1912,6 +1917,39 @@ a.btn-secondary {
    Viertel der Breite nahm. Die Leiste wird zur Leiste unten, Tabellen
    rollen in ihrer Karte statt auf der Seite. */
 @media (max-width: 720px) {
+    /* NK-253: Kopf einzeilig; die Aktionen klappen als Menü unter dem Knopf auf. */
+    .section-header {
+        position: relative;
+    }
+
+    .kopf-menue-knopf {
+        display: inline-flex;
+        justify-content: center;
+        width: var(--knopf-hoehe);
+        padding: 0;
+        margin-left: auto;
+    }
+
+    .kopf-aktionen.mit-menue {
+        display: none;
+        position: absolute;
+        top: 100%;
+        right: 0;
+        z-index: 20;
+        flex-direction: column;
+        align-items: stretch;
+        gap: var(--space-2);
+        padding: var(--space-2);
+        background: white;
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-md);
+        box-shadow: var(--glass-shadow);
+    }
+
+    .kopf-aktionen.mit-menue.offen {
+        display: flex;
+    }
+
     .dashboard-card table,
     .glass-panel table,
     .modal table {

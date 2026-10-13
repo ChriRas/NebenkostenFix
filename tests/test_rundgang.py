@@ -69,6 +69,16 @@ def test_rundgang_prueft_am_handy_die_zaehleraktionen():
     assert re.search(r'if breite < 720:\n\s+gang\.handy\(\)', quelle)
 
 
+def test_rundgang_prueft_am_handy_das_kopfmenue():
+    """NK-253: bei 390 px stapelten sich die Kopfknöpfe über dem Inhalt."""
+    for merkmal in ('.kopf-menue-knopf', 'knopf.click()', 'titel.bottom', 'window.innerWidth'):
+        assert merkmal in rundgang.KOPF_MENUE_JS, merkmal
+    quelle = (WURZEL / 'scripts' / 'rundgang.py').read_text(encoding='utf-8')
+    handy = quelle[quelle.index('    def handy(self):'):]
+    assert re.search(r'for bereich in BEREICHE:[^\n]*\n(.*\n){1,4}.*evaluate\(KOPF_MENUE_JS, bereich\)',
+                     handy[:handy.index('\n    def ')])
+
+
 def test_leere_zeichenflaeche_bleibt_erhalten():
     """Ein Leerhinweis ersetzt die Zeichenfläche nicht per innerHTML: kommen
     später Daten, fände Chart.js sonst kein <canvas> mehr (Fund des Rundgangs)."""

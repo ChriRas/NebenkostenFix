@@ -118,6 +118,28 @@ ZAEHLER_AKTIONEN_JS = """() => {
     .map(k => `Aktion „${k.title || k.textContent.trim()}“ liegt außerhalb des Bilds`);
 }"""
 
+# NK-253: am Handy stapelten sich die Kopfknöpfe; ein Menüknopf neben dem Titel
+# trägt sie. Prüft den Kopf eines Bereichs mit mindestens zwei Aktionen.
+KOPF_MENUE_JS = """(bereich) => {
+  const kopf = document.querySelector(`#tab-${bereich} .section-header:has(.kopf-aktionen)`);
+  const aktionen = kopf && [...kopf.querySelectorAll('.kopf-aktionen button')];
+  if (!kopf || aktionen.length < 2) return [];
+  const titel = kopf.querySelector('h2').getBoundingClientRect();
+  const knopf = kopf.querySelector('.kopf-menue-knopf');
+  if (!knopf || !knopf.offsetParent) return [`Kopf mit ${aktionen.length} Aktionen ohne Menüknopf`];
+  const befunde = [];
+  const k = knopf.getBoundingClientRect();
+  if (k.top >= titel.bottom || k.bottom <= titel.top) befunde.push('Menüknopf steht nicht neben dem Titel');
+  if (aktionen.some(a => a.offsetParent)) befunde.push('Aktionen stehen vor dem Öffnen im Kopf');
+  knopf.click();
+  const fehlen = aktionen.filter(a => { const r = a.getBoundingClientRect();
+    return !a.offsetParent || r.left < 0 || r.right > window.innerWidth; });
+  if (fehlen.length) befunde.push(`offenes Menü zeigt ${aktionen.length - fehlen.length} von ${aktionen.length} Aktionen`);
+  knopf.click();
+  if (aktionen.some(a => a.offsetParent)) befunde.push('Menü schließt beim zweiten Tippen nicht');
+  return befunde;
+}"""
+
 
 def _freier_port() -> int:
     with socket.socket() as s:
@@ -198,6 +220,12 @@ class Rundgang:
         # NK-252: die Tabelle rollte in ihrer Karte, die Aktionen lagen rechts außerhalb.
         for befund in self.seite.evaluate(ZAEHLER_AKTIONEN_JS):
             self.befunde.append(f'{self.breite}px handy/zaehler: {befund}')
+        for bereich in BEREICHE:
+            self.schritt = f'handy-kopf-{bereich}'
+            self.seite.evaluate("(b) => wechsleZuTab(b)", bereich)
+            self.seite.wait_for_timeout(300)
+            for befund in self.seite.evaluate(KOPF_MENUE_JS, bereich):
+                self.befunde.append(f'{self.breite}px handy/{bereich}: {befund}')
 
     def bereich(self, name: str, zustand: str):
         self.schritt = f'{zustand}-{name}'
