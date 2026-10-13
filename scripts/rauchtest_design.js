@@ -641,6 +641,17 @@ async function ausschalterPruefen() {
         /tdActions\.style\.whiteSpace = 'nowrap'/.test(r));
 }
 
+// --- NK-257: Zähler ohne Ablesung bekommt „Ersten Stand erfassen“ ------
+// Vorher fehlte der Stift ersatzlos; der erste Stand ging nur über den Kopf.
+{
+    const m = appQuelle.match(/function renderMeters\([\s\S]*?\n\}/);
+    const r = m ? m[0] : '';
+    pruefe('NK-257: ohne Ablesung der Knopf „Ersten Stand erfassen“ für diesen Zähler',
+        /\} else \{[\s\S]*?ersterBtn\.innerHTML = '[^']*> Ersten Stand erfassen'[\s\S]*?ersterBtn\.onclick = \(\) => openAddReadingModal\(m\.id\)/.test(r));
+    pruefe('NK-257: mit Ablesung bleibt der Stift',
+        /if \(meterReadings\.length > 0\) \{[\s\S]*?editReadBtn[\s\S]*?\} else \{/.test(r));
+}
+
 // --- NK-220 (V3): die Einheit kommt vom Server, auch für die Heizung ------
 // Vorher riet getReadingHtml aus dem Namen; ein Wärmezähler bekam keine.
 {

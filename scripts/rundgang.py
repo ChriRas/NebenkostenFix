@@ -155,6 +155,18 @@ ZAHLUNG_NULLZEILEN_JS = """() => [...document.querySelectorAll('#payments-grid .
     .map(z => `Zahlungskarte „${karte.querySelector('.prop-title').textContent}“: `
       + `${z.textContent.replace(/\\s+/g, ' ').trim()}`))"""
 
+# NK-257: ein Zähler ohne Ablesung hatte keinen Weg zum ersten Stand außer
+# über den Kopf; mit Ablesung bleibt der Stift.
+ERSTER_STAND_JS = """() => [...document.querySelectorAll('#meters-container tr:not(.zaehler-kopf)')].flatMap(z => {
+  const art = z.querySelector('[data-label="Kategorie"]').textContent.trim();
+  const ohne = z.querySelector('[data-label="Letzter Stand"]').textContent.trim() === '-';
+  const erster = [...z.querySelectorAll('button')].some(k => k.textContent.includes('Ersten Stand erfassen'));
+  const stift = !!z.querySelector('button[title="Letzten Stand bearbeiten"]');
+  if (ohne && (!erster || stift)) return [`Zähler ${art} ohne Ablesung ohne „Ersten Stand erfassen“`];
+  if (!ohne && (erster || !stift)) return [`Zähler ${art} mit Ablesung ohne Stift`];
+  return [];
+})"""
+
 
 def _freier_port() -> int:
     with socket.socket() as s:
@@ -234,6 +246,8 @@ class Rundgang:
         self.seite.wait_for_timeout(700)
         # NK-252: die Tabelle rollte in ihrer Karte, die Aktionen lagen rechts außerhalb.
         for befund in self.seite.evaluate(ZAEHLER_AKTIONEN_JS):
+            self.befunde.append(f'{self.breite}px handy/zaehler: {befund}')
+        for befund in self.seite.evaluate(ERSTER_STAND_JS):
             self.befunde.append(f'{self.breite}px handy/zaehler: {befund}')
         for bereich in BEREICHE:
             self.schritt = f'handy-kopf-{bereich}'

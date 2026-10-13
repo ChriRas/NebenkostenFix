@@ -2621,6 +2621,14 @@ function renderMeters() {
                 editReadBtn.style.marginRight = "8px";
                 editReadBtn.onclick = () => openAddReadingModal(null, latest.id);
                 tdActions.appendChild(editReadBtn);
+            } else {
+                // NK-257: ohne Ablesung fehlte in der Zeile jeder Weg zum ersten Stand.
+                const ersterBtn = document.createElement('button');
+                ersterBtn.className = 'btn-secondary';
+                ersterBtn.style.cssText = 'font-size: 0.85rem; padding: 4px 10px; margin-right: 8px;';
+                ersterBtn.innerHTML = '<i class="ph ph-plus" aria-hidden="true"></i> Ersten Stand erfassen';
+                ersterBtn.onclick = () => openAddReadingModal(m.id);
+                tdActions.appendChild(ersterBtn);
             }
             
             const delBtn = document.createElement('button');

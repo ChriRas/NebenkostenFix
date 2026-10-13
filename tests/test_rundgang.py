@@ -88,6 +88,16 @@ def test_rundgang_prueft_die_zahlungskarten_auf_nullzeilen():
     assert 'self.seite.evaluate(ZAHLUNG_NULLZEILEN_JS)' in handy[:handy.index('\n    def ')]
 
 
+def test_rundgang_prueft_den_ersten_stand():
+    """NK-257: ein Zähler ohne Ablesung hatte weder Stift noch einen Knopf
+    für den ersten Stand."""
+    assert 'Ersten Stand erfassen' in rundgang.ERSTER_STAND_JS
+    assert 'Letzten Stand bearbeiten' in rundgang.ERSTER_STAND_JS
+    quelle = (WURZEL / 'scripts' / 'rundgang.py').read_text(encoding='utf-8')
+    handy = quelle[quelle.index('    def handy(self):'):]
+    assert 'self.seite.evaluate(ERSTER_STAND_JS)' in handy[:handy.index('\n    def ')]
+
+
 def test_leere_zeichenflaeche_bleibt_erhalten():
     """Ein Leerhinweis ersetzt die Zeichenfläche nicht per innerHTML: kommen
     später Daten, fände Chart.js sonst kein <canvas> mehr (Fund des Rundgangs).
