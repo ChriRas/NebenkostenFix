@@ -530,8 +530,10 @@ class PDFGenerator:
             stripe_counter = 0
             
             for item in section_data["items"]:
-                provider = item.get('provider_name', '-') or '-'
-                period_str = f"{item['period']}<br/>Anbieter: {provider}"
+                period_str = item['period']
+                # NK-246: ohne Anbieter keine Anbieterzeile.
+                if item.get('provider_name'):
+                    period_str += f"<br/>Anbieter: {item['provider_name']}"
                 # R-DOC-01 Punkt 8: der Belegverweis direkt an der Position
                 # -- fuer jede Zeile, die aus genau einer Rechnung stammt.
                 # Mehrere Rechnungen (Heizung, D-47) zaehlen ueber die

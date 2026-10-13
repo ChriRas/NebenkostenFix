@@ -391,3 +391,26 @@ def test_die_belegliste_steht_genau_einmal_da(unkomprimiert, detailliert):
     pdf = _pdf(detailliert, [_posten()])
     assert _text(pdf).count('Belegliste') == 1
     assert ('Zeitanteilig' in _geklebt(pdf)) is detailliert
+
+
+def test_ohne_anbieter_liefert_der_kern_keinen():
+    """NK-246: der Kern setzte „Unbekannt“ ein; jetzt bleibt es None."""
+    from nebenkostenfix.rechenkern import Kategorie, Mieter, Rechnung, Vorgang, Wohnung, rechne
+    meine = Wohnung(id=1, name='EG links', qm=50.0)
+    ich = Mieter(id=1, name='Anna Mieterin', einzug=date(2020, 1, 1), auszug=None, wohnung_id=1)
+    r = Rechnung(id=1, kategorie=Kategorie(id=1, name='Wasserversorgung', braucht_zaehler=False),
+                 betrag=Decimal('1200.00'), beginn=date(2024, 1, 1), ende=date(2024, 12, 31))
+    v = Vorgang(mieter=ich, wohnung=meine, immobilie_id=1, immobilie_name='Hauptstrasse 1',
+                beginn=date(2024, 1, 1), ende=date(2024, 12, 31), wohnungen=(meine,),
+                mieter_der_immobilie=(ich,), profile={}, rechnungen=(r,))
+    assert rechne(v)['line_items'][0]['provider_name'] is None
+
+
+@pytest.mark.parametrize('detailliert', [False, True], ids=['einfach', 'detailliert'])
+def test_ohne_anbieter_keine_anbieterzeile(unkomprimiert, detailliert):
+    """NK-246: ohne Anbieter steht weder „Unbekannt“ noch „Anbieter:“ da."""
+    ohne = _posten()
+    ohne['provider_name'] = None
+    geklebt = _geklebt(_pdf(detailliert, [ohne]))
+    assert 'Unbekannt' not in geklebt and 'Anbieter:' not in geklebt
+    assert 'Anbieter:StadtwerkeMusterstadt' in _geklebt(_pdf(detailliert, [_posten()]))

@@ -2141,7 +2141,7 @@ def _verteilzeile(vorgang: Vorgang, anlage, rechnungen: Sequence[Rechnung],
             'kostenart': inv.heizkostenart,
             'kostenart_text': heizung.bezeichnung(inv.heizkostenart)
                               if inv.heizkostenart else None,
-            'provider_name': inv.versorger_name or 'Unbekannt',
+            'provider_name': inv.versorger_name or None,  # NK-246: nichts erfinden
             'period': f"{inv.beginn.strftime('%d.%m.%Y')} - {inv.ende.strftime('%d.%m.%Y')}",
             # R-DOC-01 Punkt 8: der Verweis auf den Beleg -- Name und Seiten
             # wie bei den uebrigen Zeilen (beleg_angabe haengt ", Seiten N"
@@ -2301,7 +2301,7 @@ def _verteilzeile(vorgang: Vorgang, anlage, rechnungen: Sequence[Rechnung],
             if einzeln else None),
         'provider_id': einzeln.versorger_id if einzeln else None,
         'provider_name': (
-            einzeln.versorger_name or 'Unbekannt' if einzeln
+            einzeln.versorger_name or None if einzeln
             else f"{len(belege)} Rechnungen"
         ),
         'period': f"{beginn.strftime('%d.%m.%Y')} - {ende.strftime('%d.%m.%Y')}",
@@ -3308,7 +3308,7 @@ def rechne(vorgang: Vorgang) -> dict:
                 'invoice_number': inv.nummer,
                 'rechnungsdatum': rechnungsdatum_angabe(inv.rechnungsdatum),
                 'provider_id': inv.versorger_id,
-                'provider_name': inv.versorger_name if inv.versorger_name else 'Unbekannt',
+                'provider_name': inv.versorger_name or None,
                 'period': f"{inv.beginn.strftime('%d.%m.%Y')} - {inv.ende.strftime('%d.%m.%Y')}",
                 'total_amount': inv.betrag,
                 'prorated_amount': runde(prorated_invoice_amount),

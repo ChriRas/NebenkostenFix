@@ -422,3 +422,11 @@ def test_fehlende_flaeche_bricht_ab():
             wohnungen=leer,
             wohnung=leer[0],
         ))
+
+
+def test_ohne_anbieter_wird_keiner_erfunden():
+    """NK-246: kein „Unbekannt“ -- ohne Anbieter bleibt das Feld leer."""
+    zeile = heizzeile(rechne(haus(rechnungen=(heizrechnung(),),
+                                  zaehler=(waermezaehler(1, 1, 1200.0),))))
+    assert zeile['provider_name'] is None
+    assert zeile['heizung_details']['rechnungen'][0]['provider_name'] is None
