@@ -2053,6 +2053,11 @@ a.btn-secondary {
         font-size: 13px;
         color: var(--text-muted);
     }
+
+    /* Mit dem Wechsel-Knopf (NK-258) passen die Aktionen nicht mehr in eine Zeile. */
+    .zaehler-tabelle td.zaehler-aktionen {
+        white-space: normal !important;
+    }
 }
 
 @media (max-width: 560px) {

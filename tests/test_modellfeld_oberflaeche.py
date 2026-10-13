@@ -122,10 +122,14 @@ OBERFLAECHE = {
         'category_id': 'id="meter-category"',
         'property_id': 'id="meter-property"',
         'apartment_id': 'id="meter-apartment"',
-        'is_main_meter': 'is_main_meter: aptId',
+        'is_main_meter': 'daten.is_main_meter = aptId',
         'meter_number': 'id="meter-number"',
         'has_dual_tariff': 'id="meter-dual-tariff"',
         'is_official': 'id="meter-is-official"',
+        # NK-258: der Verweis entsteht im Wechseldialog, nicht als eigenes Feld.
+        'ersetzt_id': 'id="wechsel-modal"',
+        'geeicht_bis': 'id="meter-geeicht-bis"',
+        'ort': 'id="meter-ort"',
     },
     'MeterReading': {
         'meter_id': 'id="reading-meter"',

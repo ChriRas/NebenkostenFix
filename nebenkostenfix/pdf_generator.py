@@ -815,14 +815,27 @@ class PDFGenerator:
                         drei = Decimal('0.001')
                         anfang = Decimal(str(tm['stand_beginn'])).quantize(drei)
                         verbrauch = Decimal(str(tm['consumption'])).quantize(drei)
-                        ende = anfang + verbrauch
+                        # NK-258: bei einem Zaehlerwechsel ist der Verbrauch
+                        # (Endstand alt - Beginn) + (Ende - Anfangsstand neu).
+                        wechsel = tm.get('zaehlerwechsel') or []
+                        ende = anfang + verbrauch - sum(
+                            (Decimal(str(w['endstand'])).quantize(drei)
+                             - Decimal(str(w['anfangsstand'])).quantize(drei) for w in wechsel),
+                            Decimal(0))
 
                         def wie(abgelesen):
                             return "abgelesen" if abgelesen else "berechnet"
 
                         box_data.append([Paragraph(f"Zählerstand Beginn {format_date(tm.get('target_start_date'))} ({wie(tm.get('beginn_abgelesen'))}):", self.styles['MeterText']), Paragraph(f"{self._deutsch(anfang, 3)} {unit}", rechts)])
+                        for w in wechsel:
+                            box_data.append([Paragraph(
+                                f"Zählerwechsel {format_date(w['datum'])}: Endstand {escape(w['alt'])} "
+                                f"{self._deutsch(w['endstand'], 3)}, Anfangsstand {escape(w['neu'])} "
+                                f"{self._deutsch(w['anfangsstand'], 3)} {unit}", self.styles['MeterText']), ''])
+                            box_style.append(('SPAN', (0, len(box_data) - 1), (-1, len(box_data) - 1)))
+                            row_idx += 1
                         box_data.append([Paragraph(f"Zählerstand Ende {format_date(tm.get('target_end_date'))} ({wie(tm.get('ende_abgelesen'))}):", self.styles['MeterText']), Paragraph(f"{self._deutsch(ende, 3)} {unit}", rechts)])
-                        box_data.append([Paragraph("Eigenverbrauch (Ende − Beginn):", self.styles['MeterTextBold']), Paragraph(f"{self._deutsch(verbrauch, 3)} {unit}", self.styles['MeterTextBold'])])
+                        box_data.append([Paragraph("Eigenverbrauch (beide Zähler):" if wechsel else "Eigenverbrauch (Ende − Beginn):", self.styles['MeterTextBold']), Paragraph(f"{self._deutsch(verbrauch, 3)} {unit}", self.styles['MeterTextBold'])])
                         ablesungen = [
                             f"{format_date(b['date'])}: {self._deutsch(b['total'], 3)}"
                             + (" (Zwischenablesung)" if b.get('zwischenablesung') else "")

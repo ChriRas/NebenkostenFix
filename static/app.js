@@ -2582,6 +2582,17 @@ function renderMeters() {
                 : ' <span style="font-size: 13px; padding: 2px 6px; background: var(--border-color); color: var(--text-color); border-radius: 4px; margin-left: 8px;" title="Privater Zwischenzähler">Privat</span>'
             );
             
+            // NK-258: ausgebaut (Zaehlerwechsel), Einbauort und Eichfrist.
+            if (m.ersetzt_durch) {
+                tdNum.insertAdjacentHTML('beforeend', ' <span class="dq-status-badge none" title="Bei einem Zählerwechsel ersetzt; die Abrechnung zählt ihn mit seinem Nachfolger zusammen.">ausgebaut</span>');
+            }
+            if (m.eichhinweis) {
+                tdNum.insertAdjacentHTML('beforeend', ` <span class="dq-status-badge yellow"><i class="ph ph-warning" aria-hidden="true"></i> ${escapeHtml(m.eichhinweis)}</span>`);
+            }
+            if (m.ort) {
+                tdNum.insertAdjacentHTML('beforeend', `<div class="text-muted">${escapeHtml(m.ort)}</div>`);
+            }
+
             const tdApt = document.createElement('td');
             tdApt.style.padding = "12px 8px";
             tdApt.textContent = m.is_main_meter ? "Allgemein" : (m.apartment_name || "-");
@@ -2601,8 +2612,9 @@ function renderMeters() {
             }
             
             const tdActions = document.createElement('td');
+            tdActions.className = 'zaehler-aktionen';
             tdActions.style.padding = "12px 8px";
-            // Verlauf, Stift und Papierkorb bleiben in einer Zeile
+            // Die Aktionen bleiben in einer Zeile; am Handy brechen sie um (style.css).
             tdActions.style.whiteSpace = 'nowrap';
             tdActions.onclick = (e) => e.stopPropagation();
             
@@ -2635,6 +2647,26 @@ function renderMeters() {
                 tdActions.appendChild(ersterBtn);
             }
             
+            const bearbeitenBtn = document.createElement('button');
+            bearbeitenBtn.className = 'btn-icon';
+            bearbeitenBtn.innerHTML = '<i class="ph ph-gear-six" aria-hidden="true"></i>';
+            bearbeitenBtn.title = 'Zähler bearbeiten';
+            bearbeitenBtn.setAttribute('aria-label', 'Zähler bearbeiten');
+            bearbeitenBtn.style.marginRight = "8px";
+            bearbeitenBtn.onclick = () => openEditMeterModal(m.id);
+            tdActions.appendChild(bearbeitenBtn);
+
+            if (!m.ersetzt_durch) {
+                const wechselBtn = document.createElement('button');
+                wechselBtn.className = 'btn-icon';
+                wechselBtn.innerHTML = '<i class="ph ph-swap" aria-hidden="true"></i>';
+                wechselBtn.title = 'Zählerwechsel erfassen';
+                wechselBtn.setAttribute('aria-label', 'Zählerwechsel erfassen');
+                wechselBtn.style.marginRight = "8px";
+                wechselBtn.onclick = () => openWechselModal(m.id);
+                tdActions.appendChild(wechselBtn);
+            }
+
             const delBtn = document.createElement('button');
             delBtn.className = 'btn-icon';
             delBtn.innerHTML = '<i class="ph ph-trash"></i>';
@@ -3100,6 +3132,14 @@ function openAddMeterModal() {
     document.getElementById('meter-number').value = '';
     document.getElementById('meter-dual-tariff').checked = false;
     document.getElementById('meter-is-official').checked = false;
+    // NK-258: derselbe Dialog bearbeitet auch; beim Anlegen ist alles frei.
+    document.getElementById('meter-id').value = '';
+    document.getElementById('meter-modal-title').textContent = 'Neuer Zähler';
+    for (const id of ['meter-ort', 'meter-eichjahr', 'meter-eichart', 'meter-geeicht-bis']) {
+        document.getElementById(id).value = '';
+    }
+    document.getElementById('meter-property').disabled = false;
+    document.getElementById('meter-apartment').disabled = false;
     // NK-125: noch keine Immobilie gewaehlt, also keine Anlage im Auswahlfeld.
     const anlageSelect = document.getElementById('meter-heizungsanlage');
     anlageSelect.replaceChildren();
@@ -3124,13 +3164,47 @@ function updateMeterApartments() {
     const anlageSelect = document.getElementById('meter-heizungsanlage');
     anlageSelect.replaceChildren();
     anlageSelect.insertAdjacentHTML('beforeend', `<option value="">— keine (misst keine Wärme) —</option>`);
-    if (propId) {
-        fetchHeizungsanlagen(propId).then(anlagen => {
-            anlagen.forEach(a => {
-                anlageSelect.insertAdjacentHTML('beforeend', `<option value="${a.id}">${escapeHtml(a.name)}</option>`);
-            });
-        }).catch(e => console.error('Heizungsanlagen konnten nicht geladen werden', e));
-    }
+    if (!propId) return Promise.resolve();
+    // NK-258: das Bearbeiten wartet darauf, um die Anlage vorzuwaehlen.
+    return fetchHeizungsanlagen(propId).then(anlagen => {
+        anlagen.forEach(a => {
+            anlageSelect.insertAdjacentHTML('beforeend', `<option value="${a.id}">${escapeHtml(a.name)}</option>`);
+        });
+    }).catch(e => console.error('Heizungsanlagen konnten nicht geladen werden', e));
+}
+
+// NK-258: Stammdaten eines Zaehlers berichtigen. Immobilie und Wohnung
+// bleiben gesperrt -- sie bestimmen, wessen Verbrauch er misst.
+async function openEditMeterModal(id) {
+    const m = meters.find(z => z.id === id);
+    if (!m) return;
+    openAddMeterModal();
+    document.getElementById('meter-id').value = m.id;
+    document.getElementById('meter-modal-title').textContent = 'Zähler bearbeiten';
+    document.getElementById('meter-category').value = m.category_id;
+    document.getElementById('meter-property').value = m.property_id;
+    await updateMeterApartments();
+    document.getElementById('meter-apartment').value = m.apartment_id ?? '';
+    document.getElementById('meter-heizungsanlage').value = m.heizungsanlage_id ?? '';
+    document.getElementById('meter-property').disabled = true;
+    document.getElementById('meter-apartment').disabled = true;
+    document.getElementById('meter-number').value = m.meter_number;
+    document.getElementById('meter-ort').value = m.ort || '';
+    document.getElementById('meter-geeicht-bis').value = m.geeicht_bis || '';
+    document.getElementById('meter-dual-tariff').checked = !!m.has_dual_tariff;
+    document.getElementById('meter-is-official').checked = !!m.is_official;
+}
+
+// R-EICH-01: Vorschlag fuer „geeicht bis“, sobald Eichjahr und Art da sind.
+async function eichfristVorschlag() {
+    const jahr = document.getElementById('meter-eichjahr').value;
+    const art = document.getElementById('meter-eichart').value;
+    if (!jahr || !art) return;
+    try {
+        const res = await fetch(`/api/eichfrist?eichjahr=${encodeURIComponent(jahr)}&art=${encodeURIComponent(art)}`);
+        if (!res.ok) throw await serverFehler(res);
+        document.getElementById('meter-geeicht-bis').value = (await res.json()).geeicht_bis;
+    } catch (e) { showError(meldungZu(e, 'Kein Vorschlag für die Eichfrist.')); }
 }
 
 function closeAddMeterModal() { document.getElementById('meter-modal').classList.remove('active'); }
@@ -3148,25 +3222,70 @@ async function saveMeter() {
     
     try {
         const anlageId = document.getElementById('meter-heizungsanlage').value;
-        const res = await fetch('/api/meters', {
-            method: 'POST',
+        const editId = document.getElementById('meter-id').value;
+        const daten = {
+            category_id: parseInt(catId),
+            meter_number: num,
+            has_dual_tariff: document.getElementById('meter-dual-tariff').checked,
+            is_official: document.getElementById('meter-is-official').checked,
+            // NK-125: welche Anlage dieser Immobilie der Zaehler misst.
+            heizungsanlage_id: anlageId ? parseInt(anlageId) : null,
+            // NK-258: Einbauort und Ende der Eichfrist, beides optional.
+            ort: document.getElementById('meter-ort').value.trim() || null,
+            geeicht_bis: document.getElementById('meter-geeicht-bis').value || null,
+        };
+        if (!editId) {
+            daten.property_id = parseInt(propId);
+            daten.apartment_id = aptId ? parseInt(aptId) : null;
+            daten.is_main_meter = aptId === "";
+        }
+        const res = await fetch(editId ? `/api/meters/${editId}` : '/api/meters', {
+            method: editId ? 'PUT' : 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-                category_id: parseInt(catId),
-                property_id: parseInt(propId),
-                apartment_id: aptId ? parseInt(aptId) : null,
-                is_main_meter: aptId === "",
-                meter_number: num,
-                has_dual_tariff: document.getElementById('meter-dual-tariff').checked,
-                is_official: document.getElementById('meter-is-official').checked,
-                // NK-125: welche Anlage dieser Immobilie der Zaehler misst.
-                heizungsanlage_id: anlageId ? parseInt(anlageId) : null
-            })
+            body: JSON.stringify(daten)
         });
         if (!res.ok) throw await serverFehler(res);
         closeAddMeterModal();
         fetchMeters();
     } catch(e) { showError(meldungZu(e, 'Fehler beim Speichern.')); }
+}
+
+// --- Zaehlerwechsel (NK-258) ---
+function openWechselModal(id) {
+    const m = meters.find(z => z.id === id);
+    if (!m) return;
+    document.getElementById('wechsel-meter-id').value = m.id;
+    document.getElementById('wechsel-modal-title').textContent = `Zählerwechsel: ${m.meter_number}`;
+    for (const feld of ['datum', 'endstand', 'endstand-nt', 'nummer', 'anfangsstand',
+                        'anfangsstand-nt', 'geeicht-bis']) {
+        document.getElementById('wechsel-' + feld).value = '';
+    }
+    document.getElementById('wechsel-ort').value = m.ort || '';
+    document.querySelectorAll('#wechsel-modal .wechsel-nt').forEach(
+        el => { el.hidden = !m.has_dual_tariff; });
+    document.getElementById('wechsel-modal').classList.add('active');
+}
+
+function closeWechselModal() { document.getElementById('wechsel-modal').classList.remove('active'); }
+
+async function saveWechsel() {
+    const id = document.getElementById('wechsel-meter-id').value;
+    const formData = new FormData();
+    for (const [feld, name] of [['datum', 'datum'], ['endstand', 'endstand'],
+                                ['endstand-nt', 'endstand_nt'], ['nummer', 'meter_number'],
+                                ['anfangsstand', 'anfangsstand'], ['anfangsstand-nt', 'anfangsstand_nt'],
+                                ['ort', 'ort'], ['geeicht-bis', 'geeicht_bis']]) {
+        formData.append(name, document.getElementById('wechsel-' + feld).value.trim());
+    }
+    try {
+        // Der Endstand wird geprueft wie jeder Stand (NK-216): 409 heisst Rueckfrage.
+        const res = await sendeMitNachfrage(`/api/meters/${id}/wechsel`, 'POST', formData);
+        if (!res) return;
+        if (!res.ok) throw await serverFehler(res);
+        closeWechselModal();
+        fetchMeters();
+        fetchReadings();
+    } catch (e) { showError(meldungZu(e, 'Der Zählerwechsel wurde nicht gespeichert.')); }
 }
 
 async function deleteMeter(id) {

@@ -141,7 +141,7 @@ from __future__ import annotations
 
 import os
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, timedelta
 from decimal import Decimal
 from typing import Mapping, Optional, Sequence
@@ -212,6 +212,24 @@ class Stand:
 
 
 @dataclass(frozen=True)
+class Wechsel:
+    """Ein Zaehlerwechsel in einer Kette (NK-258): am ``datum`` endet der
+    alte Zaehler mit ``endstand``, der neue beginnt mit ``anfangsstand``.
+
+    Beide Staende sind die echten, abgelesenen. ``versatz`` ist, was die
+    Kette auf jeden spaeteren Stand addiert, damit sie stetig weiterlaeuft
+    -- ueber mehrere Wechsel aufsummiert.
+    """
+
+    datum: date
+    alt: str
+    endstand: Decimal
+    neu: str
+    anfangsstand: Decimal
+    versatz: Decimal
+
+
+@dataclass(frozen=True)
 class Zaehler:
     id: int
     nummer: str
@@ -233,6 +251,11 @@ class Zaehler:
     # (Nr. 6) heisst "Warmwasser" und misst trotzdem Kilowattstunden.
     # None heisst: eine Probe ohne Katalog, dann raet der Name.
     kategorie_betrkv_nr: Optional[int] = None
+    # Der Zaehler, den dieser ersetzt hat (NK-258), oder None. Der Kern
+    # verbindet beide in verkette() zu einer Kette.
+    ersetzt_id: Optional[int] = None
+    # Die Wechsel, aus denen verkette() diese Kette gebaut hat, nach Datum.
+    wechsel: tuple = ()
 
 
 @dataclass(frozen=True)
@@ -481,8 +504,62 @@ class Vorgang:
 # festgelegt statt zufaellig gleich.
 
 
+def _anschliessen(alt: Zaehler, neu: Zaehler) -> Zaehler:
+    """Den neuen Zaehler an den alten haengen: eine Kette mit stetigen Staenden.
+
+    Der erste Stand des neuen ist der Wechseltag. Bis dahin gelten die Staende
+    des alten, danach die des neuen, um den Unterschied von Endstand und
+    Anfangsstand verschoben -- je Zaehlwerk, damit Hoch- und Niedertarif
+    getrennt bleiben (NK-055). Der Verbrauch ueber den Wechsel ist dann die
+    Summe beider Teile, und verbrauch_in() rechnet ohne Sonderfall.
+    """
+    neu_staende = sorted(neu.staende, key=lambda s: s.datum)
+    if not neu_staende:
+        return alt  # ohne Anfangsstand ist der Wechseltag unbekannt
+    wechseltag = neu_staende[0].datum
+    # shortcut: fehlt der Endstand genau am Wechseltag, gilt der letzte davor und
+    # der Verbrauch dazwischen fehlt; der Wechseldialog legt beide Staende zugleich an.
+    vorher = [s for s in sorted(alt.staende, key=lambda s: s.datum) if s.datum <= wechseltag]
+    if not vorher:
+        return neu
+    ende, anfang = vorher[-1], neu_staende[0]
+    d_ht = dec(ende.wert) - dec(anfang.wert)
+    d_nt = dec(ende.wert_nt or 0) - dec(anfang.wert_nt or 0)
+
+    def verschoben(s: Stand) -> Stand:
+        nt = (None if s.wert_nt is None and ende.wert_nt is None
+              else float(dec(s.wert_nt or 0) + d_nt))
+        return replace(s, wert=float(dec(s.wert) + d_ht), wert_nt=nt)
+
+    bisher = alt.wechsel[-1].versatz if alt.wechsel else Decimal(0)
+    wechsel = Wechsel(datum=wechseltag, alt=alt.wechsel[-1].neu if alt.wechsel else alt.nummer,
+                      endstand=ende.gesamt - bisher, neu=neu.nummer,
+                      anfangsstand=anfang.gesamt, versatz=ende.gesamt - anfang.gesamt)
+    return replace(neu, nummer=f'{alt.nummer} / {neu.nummer}',
+                   staende=tuple(vorher) + tuple(verschoben(s) for s in neu_staende[1:]),
+                   wechsel=alt.wechsel + (wechsel,))
+
+
+def verkette(zaehler: Sequence[Zaehler]) -> list:
+    """Jeder ersetzte Zaehler geht in der Kette seines Nachfolgers auf (NK-258).
+
+    Ohne ``ersetzt_id`` bleibt die Liste, wie sie ist. Ein Verweis auf einen
+    Zaehler ausserhalb der Liste zaehlt nicht.
+    """
+    nach_id = {z.id: z for z in zaehler}
+    ersetzt = {z.ersetzt_id for z in zaehler if z.ersetzt_id in nach_id}
+
+    def kette(z: Zaehler, gesehen: frozenset) -> Zaehler:
+        alt = nach_id.get(z.ersetzt_id)
+        if alt is None or alt.id in gesehen:  # ein Kreis endet hier
+            return z
+        return _anschliessen(kette(alt, gesehen | {z.id}), z)
+
+    return [kette(z, frozenset()) for z in zaehler if z.id not in ersetzt]
+
+
 def _nach_id(zaehler: Sequence[Zaehler]) -> list:
-    return sorted(zaehler, key=lambda z: z.id)
+    return sorted(verkette(zaehler), key=lambda z: z.id)
 
 
 def hauptzaehler(vorgang: Vorgang, kategorie_id: int) -> Optional[Zaehler]:
@@ -1099,8 +1176,19 @@ def verbrauch_in(zaehler: Zaehler, von: date, bis: date) -> dict:
     else:
         status = 'warning'
 
+    # NK-258: in einer Kette tragen die Staende nach einem Wechsel dessen
+    # Versatz. Angezeigt wird der echte Stand; am Wechseltag selbst ist das
+    # der Endstand des alten, mit ``ab_dem_tag`` der Anfangsstand des neuen.
+    def versatz(d: date, ab_dem_tag: bool = False) -> Decimal:
+        v = Decimal(0)
+        for w in zaehler.wechsel:
+            if w.datum < d or (ab_dem_tag and w.datum == d):
+                v = w.versatz
+        return v
+
     basis_readings = [
-        {'date': staende[i].datum.isoformat(), 'total': float(staende[i].gesamt),
+        {'date': staende[i].datum.isoformat(),
+         'total': float(staende[i].gesamt - versatz(staende[i].datum)),
          'zwischenablesung': staende[i].art == heizung.ZWISCHENABLESUNG}
         for i in sorted(benutzt)
     ]
@@ -1148,8 +1236,13 @@ def verbrauch_in(zaehler: Zaehler, von: date, bis: date) -> dict:
         'r_start': _stand_angabe(r_start_global),
         'r_end': _stand_angabe(r_end_global),
         'basis_readings': basis_readings,
-        'stand_beginn': float(stand_beginn),
-        'stand_ende': float(stand_beginn + total_consumption),
+        'stand_beginn': float(stand_beginn - versatz(von, ab_dem_tag=True)),
+        'stand_ende': float(stand_beginn + total_consumption - versatz(bis)),
+        'zaehlerwechsel': [
+            {'datum': w.datum.isoformat(), 'alt': w.alt, 'endstand': float(w.endstand),
+             'neu': w.neu, 'anfangsstand': float(w.anfangsstand)}
+            for w in zaehler.wechsel if von < w.datum < bis
+        ],
         'beginn_abgelesen': any(s.datum == von for s in staende),
         'ende_abgelesen': any(s.datum == bis for s in staende),
         'reading_span_days': (r_end_global.datum - r_start_global.datum).days,
@@ -1243,7 +1336,7 @@ def _allgemeinquoten(vorgang: Vorgang, haupt: Zaehler, unter, von: date, bis: da
     """``(Mieter, Vermieter, Abschnitte, negativ)``: die Anteile am Allgemeinverbrauch
     der Rechnung ``[von, bis)``.
 
-    NK-213 (B6): gemessen wird nur, wo abgelesen wurde. Die Rechnung zerfaellt
+    NK-213: gemessen wird nur, wo abgelesen wurde. Die Rechnung zerfaellt
     an jedem Tag, an dem der Haupt- und alle Wohnungszaehler einen Stand
     haben, in Abschnitte. Bis dahin (F-122) schnitt sie an jedem Einzug,
     Auszug und jeder Aenderung der Haushaltsgroesse und schaetzte dort den
@@ -3269,7 +3362,7 @@ def rechne(vorgang: Vorgang) -> dict:
                     'main_consumption': round(main_consumption, 1) if main_meter and main_detail else None,
                     'sum_sub_consumption': round(sum_sub_consumption, 1) if main_meter and main_detail else None,
                     'allgemein_consumption': round(allgemein_consumption, 1) if main_meter and main_detail else None,
-                    # NK-213 (B2): der Anteil des Mieters am Allgemeinverbrauch,
+                    # NK-213: der Anteil des Mieters am Allgemeinverbrauch,
                     # wie er gerechnet wurde -- das Blatt zeigt ihn statt 1/n.
                     'allgemein_quote': (float(round(quote_mieter, 6))
                                         if main_meter and main_detail else None),

@@ -1608,10 +1608,11 @@
     <div class="modal-overlay" id="meter-modal">
         <div class="modal glass-panel">
             <div class="modal-header">
-                <h2>Neuer Zähler</h2>
+                <h2 id="meter-modal-title">Neuer Zähler</h2>
                 <button class="btn-icon" aria-label="Schließen" onclick="closeAddMeterModal()"><i class="ph ph-x"></i></button>
             </div>
             <div class="modal-body">
+                <input type="hidden" id="meter-id">
                 <div class="form-group">
                     <label>Kategorie</label>
                     <select id="meter-category" required></select>
@@ -1629,6 +1630,34 @@
                 <div class="form-group">
                     <label>Zählernummer</label>
                     <input type="text" id="meter-number" required>
+                </div>
+                <div class="form-group">
+                    <label for="meter-ort">Einbauort (optional)</label>
+                    <input type="text" id="meter-ort" maxlength="100" placeholder="z. B. Keller, Bad">
+                </div>
+                <div class="felder-nebeneinander">
+                    <div class="form-group">
+                        <label for="meter-eichjahr">Eichjahr</label>
+                        <input type="number" id="meter-eichjahr" min="1900" step="1" onchange="eichfristVorschlag()">
+                    </div>
+                    <div class="form-group feld-breit">
+                        <label for="meter-eichart">Zählerart <i class="ph ph-question feld-hilfe" title="Eichfrist nach § 34 MessEV, Anlage 7. Sie endet am 31.12. des Jahres, in dem sie rechnerisch abläuft (R-EICH-01)."></i></label>
+                        <select id="meter-eichart" onchange="eichfristVorschlag()">
+                            <option value="">— für einen Vorschlag wählen —</option>
+                            <option value="kaltwasser">Kaltwasserzähler – 6 Jahre</option>
+                            <option value="warmwasser">Warmwasserzähler – 6 Jahre</option>
+                            <option value="waerme">Wärmezähler – 6 Jahre</option>
+                            <option value="gas_balgen">Gaszähler (Balgen bis 10 m³/h) – 8 Jahre</option>
+                            <option value="gas">Gaszähler, sonstige – 5 Jahre</option>
+                            <option value="strom_elektronisch">Stromzähler, elektronisch – 8 Jahre</option>
+                            <option value="strom_ferraris">Stromzähler, Ferraris – 16 Jahre</option>
+                            <option value="sonstige">Sonstiges Messgerät – 2 Jahre</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="meter-geeicht-bis">Geeicht bis <i class="ph ph-question feld-hilfe" title="Ein Vorschlag aus Eichjahr und Zählerart, den Sie überschreiben können. Ist die Frist abgelaufen, zeigt die Zählerliste einen Hinweis; gerechnet wird trotzdem."></i></label>
+                    <input type="date" id="meter-geeicht-bis">
                 </div>
                 <div class="form-group">
                     <label>Heizungsanlage <i class="ph ph-question feld-hilfe" title="Welche Anlage dieser Immobilie der Zähler misst (D-45). Leer lassen bei Strom, Wasser und allem, was keine Wärme erfasst."></i></label>
@@ -1652,6 +1681,62 @@
             <div class="modal-footer">
                 <button class="btn-secondary" onclick="closeAddMeterModal()">Abbrechen</button>
                 <button class="btn-primary" onclick="saveMeter()">Zähler speichern</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Zählerwechsel (NK-258) -->
+    <div class="modal-overlay" id="wechsel-modal">
+        <div class="modal glass-panel">
+            <div class="modal-header">
+                <h2 id="wechsel-modal-title">Zählerwechsel</h2>
+                <button class="btn-icon" aria-label="Schließen" onclick="closeWechselModal()"><i class="ph ph-x"></i></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="wechsel-meter-id">
+                <p class="karten-text">Endstand des alten und Anfangsstand des neuen Zählers stehen am selben Tag. Die Abrechnung zählt beide Teile zusammen.</p>
+                <div class="form-group">
+                    <label for="wechsel-datum">Wechseltag</label>
+                    <input type="date" id="wechsel-datum" required>
+                </div>
+                <div class="felder-nebeneinander">
+                    <div class="form-group feld-breit">
+                        <label for="wechsel-endstand">Endstand alter Zähler</label>
+                        <input type="text" inputmode="decimal" id="wechsel-endstand" required>
+                    </div>
+                    <div class="form-group feld-breit wechsel-nt">
+                        <label for="wechsel-endstand-nt">Endstand NT</label>
+                        <input type="text" inputmode="decimal" id="wechsel-endstand-nt">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="wechsel-nummer">Nummer des neuen Zählers</label>
+                    <input type="text" id="wechsel-nummer" maxlength="100" required>
+                </div>
+                <div class="felder-nebeneinander">
+                    <div class="form-group feld-breit">
+                        <label for="wechsel-anfangsstand">Anfangsstand neuer Zähler</label>
+                        <input type="text" inputmode="decimal" id="wechsel-anfangsstand" required>
+                    </div>
+                    <div class="form-group feld-breit wechsel-nt">
+                        <label for="wechsel-anfangsstand-nt">Anfangsstand NT</label>
+                        <input type="text" inputmode="decimal" id="wechsel-anfangsstand-nt">
+                    </div>
+                </div>
+                <div class="felder-nebeneinander">
+                    <div class="form-group feld-breit">
+                        <label for="wechsel-ort">Einbauort (optional)</label>
+                        <input type="text" id="wechsel-ort" maxlength="100">
+                    </div>
+                    <div class="form-group feld-breit">
+                        <label for="wechsel-geeicht-bis">Geeicht bis (optional)</label>
+                        <input type="date" id="wechsel-geeicht-bis">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" onclick="closeWechselModal()">Abbrechen</button>
+                <button class="btn-primary" onclick="saveWechsel()">Wechsel speichern</button>
             </div>
         </div>
     </div>

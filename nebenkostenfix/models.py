@@ -462,6 +462,14 @@ class Meter(db.Model):
     # NK-125: fuer die Zaehlerliste (Name der Anlage, die der Zaehler misst).
     heizungsanlage = db.relationship('Heizungsanlage', foreign_keys=[heizungsanlage_id])
 
+    # NK-258: der Zaehler, den dieser beim Wechsel abgeloest hat. Der Kern
+    # haengt beide zu einer Kette zusammen; Verbrauch ist die Summe der Teile.
+    ersetzt_id = db.Column(db.Integer, db.ForeignKey('meters.id'), nullable=True)
+    # NK-258 (R-EICH-01): Ende der Eichfrist und Einbauort. Beides nur
+    # Auskunft; die Berechnung haengt nicht daran.
+    geeicht_bis = db.Column(db.Date, nullable=True)
+    ort = db.Column(db.String(100), nullable=True)
+
     readings = db.relationship('MeterReading', backref='meter', lazy=True, cascade="all, delete-orphan")
 
 class MeterReading(db.Model):

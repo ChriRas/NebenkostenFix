@@ -162,6 +162,9 @@ Zaehler und Staende
 -------------------
   GET         /api/meters                                  -> get_meters
   POST        /api/meters                                  -> create_meter
+  PUT         /api/meters/<int:id>                         -> update_meter
+  POST        /api/meters/<int:id>/wechsel                 -> zaehlerwechsel
+  GET         /api/eichfrist                               -> eichfrist_vorschlag
   DELETE      /api/meters/<int:id>                         -> delete_meter
   GET         /api/readings                                -> get_readings
   POST        /api/readings                                -> create_reading
@@ -253,6 +256,7 @@ import io
 from decimal import Decimal
 from pathlib import Path
 from nebenkostenfix import zeit
+from nebenkostenfix import eichfrist
 from flask import Flask, jsonify, make_response, request, send_file
 import click
 import json
@@ -1339,6 +1343,9 @@ def get_categories():
 @app.route('/api/meters', methods=['GET'])
 def get_meters():
     meters = Meter.query.all()
+    # NK-258: wer wen beim Wechsel abgeloest hat, in beide Richtungen.
+    nachfolger = {m.ersetzt_id: m.id for m in meters if m.ersetzt_id}
+    heute = zeit.als_ortsdatum(zeit.jetzt_utc())
     result = []
     for m in meters:
         result.append({
@@ -1358,8 +1365,23 @@ def get_meters():
             'heizungsanlage_id': m.heizungsanlage_id,
             'heizungsanlage_name': (m.heizungsanlage.name
                                     if m.heizungsanlage else None),
+            'ort': m.ort,
+            'geeicht_bis': m.geeicht_bis.isoformat() if m.geeicht_bis else None,
+            'eichhinweis': eichfrist.hinweis(m.geeicht_bis, heute),
+            'ersetzt_id': m.ersetzt_id,
+            'ersetzt_durch': nachfolger.get(m.id),
         })
     return jsonify(result), 200
+
+
+def _anlage_pruefen(heizungsanlage_id, property_id):
+    if heizungsanlage_id is None:
+        return
+    anlage = Heizungsanlage.query.get_or_404(heizungsanlage_id)
+    if anlage.property_id != property_id:
+        raise EingabeFehler(
+            'Der Zähler kann nur eine Anlage derselben Immobilie messen.',
+            'heizungsanlage_id')
 
 @app.route('/api/meters', methods=['POST'])
 def create_meter():
@@ -1375,20 +1397,121 @@ def create_meter():
         # Welche Anlage dieser Zaehler misst (NK-125, D-45): nicht aus der
         # Kostenart geraten, sondern vom Vermieter gewaehlt.
         heizungsanlage_id=eingabe.ganzzahl('heizungsanlage_id'),
+        ort=eingabe.text('ort', maxlaenge=100),
+        geeicht_bis=eingabe.datum('geeicht_bis'),
     )
-    if new_meter.heizungsanlage_id is not None:
-        anlage = Heizungsanlage.query.get_or_404(new_meter.heizungsanlage_id)
-        if anlage.property_id != new_meter.property_id:
-            raise EingabeFehler(
-                'Der Zähler kann nur eine Anlage derselben Immobilie messen.',
-                'heizungsanlage_id')
+    _anlage_pruefen(new_meter.heizungsanlage_id, new_meter.property_id)
     db.session.add(new_meter)
     db.session.commit()
     return jsonify({'id': new_meter.id}), 201
 
+
+@app.route('/api/meters/<int:id>', methods=['PUT'])
+def update_meter(id):
+    """Stammdaten eines Zaehlers berichtigen (NK-258); nur was mitkommt.
+
+    Immobilie, Wohnung und Hauptzaehler bleiben: sie bestimmen, wessen
+    Verbrauch der Zaehler misst. Wer das aendern will, legt einen neuen an.
+    """
+    m = Meter.query.get_or_404(id)
+    eingabe = Eingabe.aus_request()
+    if eingabe.vorhanden('meter_number'):
+        m.meter_number = eingabe.text('meter_number', pflicht=True, maxlaenge=100)
+    if eingabe.vorhanden('ort'):
+        m.ort = eingabe.text('ort', maxlaenge=100)
+    if eingabe.vorhanden('geeicht_bis'):
+        m.geeicht_bis = eingabe.datum('geeicht_bis')
+    if eingabe.vorhanden('has_dual_tariff'):
+        m.has_dual_tariff = eingabe.wahrheit('has_dual_tariff')
+    if eingabe.vorhanden('is_official'):
+        m.is_official = eingabe.wahrheit('is_official')
+    if eingabe.vorhanden('category_id'):
+        kategorie = eingabe.ganzzahl('category_id', pflicht=True)
+        in_kette = m.ersetzt_id or Meter.query.filter_by(ersetzt_id=m.id).first()
+        if kategorie != m.category_id and in_kette:
+            raise EingabeFehler(
+                'Ein Zähler aus einem Zählerwechsel behält seine Kostenart.', 'category_id')
+        CostCategory.query.get_or_404(kategorie)
+        m.category_id = kategorie
+    if eingabe.vorhanden('heizungsanlage_id'):
+        m.heizungsanlage_id = eingabe.ganzzahl('heizungsanlage_id')
+        _anlage_pruefen(m.heizungsanlage_id, m.property_id)
+    db.session.commit()
+    return jsonify({'id': m.id}), 200
+
+
+# Was _ablesung_pruefen am Stand bemaengelt, heisst beim Wechsel Endstand.
+_WECHSELFELD = {'value': 'endstand', 'value_nt': 'endstand_nt', 'reading_date': 'datum'}
+
+
+@app.route('/api/meters/<int:id>/wechsel', methods=['POST'])
+def zaehlerwechsel(id):
+    """Zaehlerwechsel (NK-258): Endstand des alten, Anfangsstand des neuen.
+
+    Der neue Zaehler uebernimmt Kostenart, Immobilie, Wohnung und Tarif des
+    alten und verweist auf ihn; der Rechenkern summiert beide Teile. Beide
+    Staende stehen am selben Tag.
+    """
+    alt = Meter.query.get_or_404(id)
+    if Meter.query.filter_by(ersetzt_id=alt.id).first():
+        raise EingabeFehler('Dieser Zähler wurde schon ausgetauscht.', 'meter_id')
+    eingabe = Eingabe.aus_request()
+    datum = eingabe.datum('datum', pflicht=True)
+    zweitarif = bool(alt.has_dual_tariff)
+    endstand = eingabe.kommazahl('endstand', pflicht=True)
+    endstand_nt = eingabe.kommazahl('endstand_nt', pflicht=True) if zweitarif else None
+    anfangsstand = eingabe.kommazahl('anfangsstand', pflicht=True, min_wert=0)
+    anfangsstand_nt = (eingabe.kommazahl('anfangsstand_nt', pflicht=True, min_wert=0)
+                       if zweitarif else None)
+    nummer = eingabe.text('meter_number', pflicht=True, maxlaenge=100)
+    if any(r.reading_date > datum for r in alt.readings):
+        raise EingabeFehler(
+            'Der alte Zähler hat Stände nach dem Wechseltag. '
+            'Bitte erst diese Stände berichtigen.', 'datum')
+    try:
+        frage = _ablesung_pruefen(alt.id, datum, endstand, endstand_nt)
+    except EingabeFehler as fehler:
+        raise EingabeFehler(fehler.meldung, _WECHSELFELD.get(fehler.feld, fehler.feld)) from None
+    if frage and not eingabe.wahrheit('trotzdem'):
+        return jsonify({'error': frage, 'nachfrage': True}), 409
+
+    neu = Meter(
+        category_id=alt.category_id, property_id=alt.property_id,
+        apartment_id=alt.apartment_id, is_main_meter=alt.is_main_meter,
+        meter_number=nummer, has_dual_tariff=alt.has_dual_tariff,
+        is_official=alt.is_official, heizungsanlage_id=alt.heizungsanlage_id,
+        ort=eingabe.text('ort', maxlaenge=100) if eingabe.vorhanden('ort') else alt.ort,
+        geeicht_bis=eingabe.datum('geeicht_bis'), ersetzt_id=alt.id,
+    )
+    db.session.add(neu)
+    db.session.flush()
+    db.session.add(MeterReading(meter_id=alt.id, reading_date=datum,
+                                value=endstand, value_nt=endstand_nt))
+    db.session.add(MeterReading(meter_id=neu.id, reading_date=datum,
+                                value=anfangsstand, value_nt=anfangsstand_nt))
+    db.session.commit()
+    return jsonify({'id': neu.id}), 201
+
+
+@app.route('/api/eichfrist', methods=['GET'])
+def eichfrist_vorschlag():
+    """Vorschlag fuer „geeicht bis“ aus Eichjahr und Zaehlerart (R-EICH-01)."""
+    eingabe = Eingabe.aus_query()
+    jahr = eingabe.ganzzahl('eichjahr', pflicht=True, min_wert=1900)
+    if jahr > 2200:
+        raise EingabeFehler('Das Eichjahr liegt zu weit in der Zukunft.', 'eichjahr')
+    art = eingabe.text('art', pflicht=True)
+    if art not in eichfrist.EICHFRISTEN:
+        raise EingabeFehler(
+            f'Unbekannte Zählerart. Erlaubt sind: {", ".join(eichfrist.EICHFRISTEN)}.', 'art')
+    return jsonify({'geeicht_bis': eichfrist.geeicht_bis(jahr, art).isoformat()}), 200
+
+
 @app.route('/api/meters/<int:id>', methods=['DELETE'])
 def delete_meter(id):
     m = Meter.query.get_or_404(id)
+    # Ein Nachfolger aus einem Zaehlerwechsel steht danach wieder fuer sich.
+    Meter.query.filter_by(ersetzt_id=m.id).update({'ersetzt_id': None})
     db.session.delete(m)
     db.session.commit()
     return jsonify({'message': 'deleted'})

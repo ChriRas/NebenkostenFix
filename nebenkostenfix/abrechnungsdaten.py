@@ -192,6 +192,7 @@ def _zaehler(meter: Meter, readings, auszugstage=frozenset()) -> Zaehler:
         wohnung_id=meter.apartment_id,
         staende=_staende(readings, auszugstage),
         heizungsanlage_id=meter.heizungsanlage_id,
+        ersetzt_id=meter.ersetzt_id,
     )
 
 

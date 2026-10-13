@@ -39,7 +39,7 @@ BASISREVISION = "63738d5329b4"
 # F-137: ``e3c5a7f9b1d2`` fuegt ``cost_invoices.grundpreis`` hinzu.
 # NK-217: ``670627ef0699`` fuegt ``tenant_billing_reports.regelstand_geprueft`` hinzu.
 # NK-264: ``b4d8e2a61f37`` fuegt ``tenants.anrede`` und ``vermieterdaten.art`` hinzu.
-KOPFREVISION = "b4d8e2a61f37"
+KOPFREVISION = "c7e1f94a2b05"
 
 
 def _umgebung(dbdatei: Path, tmp_path: Path) -> dict:
@@ -2535,3 +2535,58 @@ def test_die_anredewanderung_legt_die_spalten_leer_an(tmp_path):
     assert stand["stand"] == KOPFREVISION
     assert "anrede" not in stand["zurueck"] and "art" not in stand["zurueck"]
     assert stand["namen"] == ["Altmieter", "Erika"]
+
+
+CODE_WECHSEL_WANDERUNG = """
+import json
+from sqlalchemy import text
+from flask_migrate import downgrade, upgrade
+import app as anwendung
+from nebenkostenfix.models import db
+
+
+def spalten():
+    return [z[1] for z in db.session.execute(
+        text("PRAGMA table_info('meters')")).all()]
+
+
+with anwendung.app.app_context():
+    downgrade(revision="b4d8e2a61f37")
+    db.session.execute(text(
+        "INSERT INTO properties (id, name, is_standalone) VALUES (1, 'Altbau', 0)"))
+    kategorie = db.session.execute(text("SELECT MIN(id) FROM cost_categories")).scalar()
+    db.session.execute(text(
+        "INSERT INTO meters (id, property_id, category_id, meter_number,"
+        " is_main_meter, has_dual_tariff, is_official)"
+        " VALUES (1, 1, :k, 'W-1', 0, 0, 0)"), {"k": kategorie})
+    db.session.commit()
+    vorher = spalten()
+
+    upgrade()
+    nachher = spalten()
+    werte = list(db.session.execute(text(
+        "SELECT meter_number, ersetzt_id, geeicht_bis, ort FROM meters")).one())
+    stand = db.session.execute(text("SELECT version_num FROM alembic_version")).scalar()
+
+    downgrade(revision="b4d8e2a61f37")
+    zurueck = spalten()
+    nummer = db.session.execute(text("SELECT meter_number FROM meters")).scalar()
+
+print(json.dumps({"vorher": vorher, "nachher": nachher, "werte": werte,
+                  "stand": stand, "zurueck": zurueck, "nummer": nummer}))
+"""
+
+
+def test_die_wechselwanderung_legt_die_spalten_leer_an(tmp_path):
+    """NK-258: Wechselverweis, Eichfrist und Ort kommen leer dazu -- leer
+    heisst: jeder Zaehler steht fuer sich, wie bisher. Der Rueckweg nimmt
+    sie wieder weg und laesst den Zaehler stehen."""
+    stand = _lauf(CODE_WECHSEL_WANDERUNG, tmp_path / "wechsel.db", tmp_path)
+
+    neu = {"ersetzt_id", "geeicht_bis", "ort"}
+    assert not neu & set(stand["vorher"])
+    assert neu <= set(stand["nachher"])
+    assert stand["werte"] == ["W-1", None, None, None]
+    assert stand["stand"] == KOPFREVISION
+    assert not neu & set(stand["zurueck"])
+    assert stand["nummer"] == "W-1"

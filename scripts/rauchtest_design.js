@@ -1195,6 +1195,88 @@ async function vorjahrPruefen() {
         && status(2).includes('nicht gespeichert') && !status(1).includes('nicht gespeichert'));
 }
 
+async function zaehlerPflegePruefen() {
+    const funktion = name => (appQuelle.match(new RegExp('(?:async )?function ' + name + '\\([\\s\\S]*?\\n\\}')) || [''])[0];
+    const namen = ['eichfristVorschlag', 'saveMeter', 'openWechselModal', 'saveWechsel'];
+    if (namen.some(n => !funktion(n))) {
+        pruefe('NK-258: ' + namen.join(', ') + ' gibt es', false);
+        return;
+    }
+    pruefe('NK-258: Zählerliste hat Bearbeiten und Wechsel, der Wechsel nur am eingebauten Zähler',
+        /onclick = \(\) => openEditMeterModal\(m\.id\)/.test(appQuelle)
+        && /if \(!m\.ersetzt_durch\) \{[\s\S]{0,800}openWechselModal\(m\.id\)/.test(appQuelle));
+    // Felder entstehen beim ersten Zugriff; .value, .checked und .hidden sind frei setzbar.
+    const el = {};
+    const feld = id => (el[id] = el[id] || { value: '', checked: false, hidden: false, textContent: '',
+        classList: { add() { this.aktiv = true; }, remove() { this.aktiv = false; } } });
+    const nt = [feld('nt-1'), feld('nt-2')];
+    const doc = { getElementById: feld, querySelectorAll: sel => sel === '#wechsel-modal .wechsel-nt' ? nt : [] };
+    const aufrufe = [], antworten = [], meldungen = [];
+    const holen = async (url, opt = {}) => { aufrufe.push({ url, opt }); return antworten.shift(); };
+    const nachfrage = async (url, method, fd) => { aufrufe.push({ url, opt: { method, body: fd } }); return antworten.shift(); };
+    const geladen = [];
+    const zaehlerListe = [{ id: 7, meter_number: 'W-7', ort: 'Keller', has_dual_tariff: true }];
+    class Formular { constructor() { this.felder = {}; } append(k, v) { this.felder[k] = v; } }
+    const t = new Function('document', 'fetch', 'sendeMitNachfrage', 'serverFehler', 'meldungZu', 'showError',
+        'closeAddMeterModal', 'closeWechselModal', 'fetchMeters', 'fetchReadings', 'meters', 'FormData',
+        namen.map(funktion).join('\n') + '; return { ' + namen.join(', ') + ' };')(
+        doc, holen, nachfrage, async () => new Error('kaputt'), (e, x) => x, x => meldungen.push(x),
+        () => {}, () => feld('wechsel-modal').classList.remove(), () => geladen.push('zaehler'),
+        () => geladen.push('staende'), zaehlerListe, Formular);
+
+    feld('meter-eichjahr').value = '2020';
+    await t.eichfristVorschlag();
+    pruefe('R-EICH-01: ohne Zählerart kein Vorschlag', aufrufe.length === 0);
+    feld('meter-eichart').value = 'kaltwasser';
+    antworten.push({ ok: true, json: async () => ({ geeicht_bis: '2026-12-31' }) });
+    await t.eichfristVorschlag();
+    pruefe('R-EICH-01: der Vorschlag kommt vom Server und landet in „geeicht bis“',
+        aufrufe[0].url === '/api/eichfrist?eichjahr=2020&art=kaltwasser'
+        && el['meter-geeicht-bis'].value === '2026-12-31');
+
+    Object.assign(feld('meter-category'), { value: '3' });
+    Object.assign(feld('meter-property'), { value: '1' });
+    Object.assign(feld('meter-number'), { value: ' W-7a ' });
+    Object.assign(feld('meter-ort'), { value: 'Bad' });
+    Object.assign(feld('meter-id'), { value: '7' });
+    antworten.push({ ok: true });
+    await t.saveMeter();
+    const put = JSON.parse(aufrufe[1].opt.body);
+    pruefe('NK-258: Bearbeiten speichert per PUT ohne Immobilie und Wohnung',
+        aufrufe[1].url === '/api/meters/7' && aufrufe[1].opt.method === 'PUT'
+        && put.meter_number === 'W-7a' && put.ort === 'Bad' && put.geeicht_bis === '2026-12-31'
+        && !('property_id' in put) && !('apartment_id' in put));
+    feld('meter-id').value = '';
+    antworten.push({ ok: true });
+    await t.saveMeter();
+    const post = JSON.parse(aufrufe[2].opt.body);
+    pruefe('NK-258: Anlegen bleibt ein POST mit Immobilie',
+        aufrufe[2].url === '/api/meters' && aufrufe[2].opt.method === 'POST' && post.property_id === 1);
+
+    pruefe('NK-258: nach dem Speichern lädt die Zählerliste neu', geladen.join() === 'zaehler,zaehler');
+    geladen.length = 0;
+    t.openWechselModal(7);
+    pruefe('NK-258: der Wechseldialog zeigt beim Zweitarif die NT-Felder und übernimmt den Ort',
+        el['wechsel-meter-id'].value === 7 && el['wechsel-ort'].value === 'Keller'
+        && nt.every(n => !n.hidden) && el['wechsel-modal'].classList.aktiv);
+    Object.assign(feld('wechsel-datum'), { value: '2024-07-01' });
+    Object.assign(feld('wechsel-endstand'), { value: '400' });
+    Object.assign(feld('wechsel-nummer'), { value: 'W-8' });
+    antworten.push(null);
+    await t.saveWechsel();
+    pruefe('NK-258: bei Nein auf die Rückfrage bleibt der Dialog offen',
+        el['wechsel-modal'].classList.aktiv && geladen.length === 0);
+    antworten.push({ ok: true, status: 201 });
+    await t.saveWechsel();
+    const wechsel = aufrufe[4];
+    pruefe('NK-258: der Wechsel geht über sendeMitNachfrage und lädt Zähler und Stände neu',
+        wechsel.url === '/api/meters/7/wechsel' && wechsel.opt.method === 'POST'
+        && wechsel.opt.body.felder.meter_number === 'W-8' && wechsel.opt.body.felder.endstand === '400'
+        && wechsel.opt.body.felder.ort === 'Keller'
+        && !el['wechsel-modal'].classList.aktiv && geladen.join() === 'zaehler,staende');
+    pruefe('NK-258: keine Fehlermeldung im glatten Lauf', meldungen.length === 0);
+}
+
 warnLeistePruefen()
     .catch(e => pruefe('NK-201: Warnleisten-Prüfung lief durch — ' + e.message, false))
     .then(() => ausschalterPruefen()
@@ -1211,4 +1293,6 @@ warnLeistePruefen()
                             .catch(e => pruefe('NK-227: Ablesen-Prüfung lief durch — ' + e.message, false))
                             .then(() => vorjahrPruefen()
                                 .catch(e => pruefe('NK-230: Vorjahr-Prüfung lief durch — ' + e.message, false))
-                                .then(() => process.exit(fehler ? 1 : 0)))))))));
+                                .then(() => zaehlerPflegePruefen()
+                                    .catch(e => pruefe('NK-258: Zählerpflege-Prüfung lief durch — ' + e.message, false))
+                                    .then(() => process.exit(fehler ? 1 : 0))))))))));
