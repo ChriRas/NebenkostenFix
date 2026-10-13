@@ -640,6 +640,37 @@ async function fristenPruefen() {
         && /viewDQ\.style\.display = 'flex';\s*ladeFristen\(\);/.test(appQuelle));
 }
 
+// --- NK-263: Mehrjahresblick je Wohnung --------------------------------------
+async function mehrjahresblickPruefen() {
+    const m = appQuelle.match(/function renderMehrjahresblick\(jahre\) \{[\s\S]*?\n\}/);
+    if (!m) throw new Error('renderMehrjahresblick nicht gefunden');
+    const lauf = (jahre) => {
+        const el = { 'mjb-kopf': { innerHTML: 'alt' }, 'mjb-zeilen': { innerHTML: '' } };
+        new Function('document', 'escapeHtml', 'euroText', m[0] + '; renderMehrjahresblick(arguments[3]);')(
+            { getElementById: id => el[id] }, t => String(t).replace(/</g, '&lt;'), b => 'E' + b, jahre);
+        return { kopf: el['mjb-kopf'].innerHTML, zeilen: el['mjb-zeilen'].innerHTML };
+    };
+    const voll = lauf([
+        { jahr: '2023/24', belegte_tage: 366, jahrestage: 366, je_qm: { '<b>Wasser': '10.00' },
+          je_qm_gesamt: '10.00', vorauszahlung: '700.00' },
+        { jahr: '2024/25', belegte_tage: 0, jahrestage: 365, je_qm: {}, je_qm_gesamt: null,
+          vorauszahlung: '0.00' },
+    ]);
+    pruefe('NK-263: Jahre als Spalten in Reihenfolge, Kostenart maskiert',
+        voll.kopf.indexOf('2023/24') < voll.kopf.indexOf('2024/25')
+        && voll.zeilen.includes('&lt;b>Wasser') && !voll.zeilen.includes('<b>'));
+    pruefe('NK-263: Werte, Gesamt und Vorauszahlung, das leere Jahr als Lücke',
+        voll.zeilen.includes('E10.00') && voll.zeilen.includes('E700.00')
+        && voll.zeilen.includes('366 von 366 Tagen') && voll.zeilen.includes('>leer<')
+        && /Gesamt<\/th><td[^>]*>E10\.00<\/td><td[^>]*>–</.test(voll.zeilen));
+    const leer = lauf([]);
+    pruefe('NK-263: ohne Abrechnung ein Hinweis, der alte Kopf verschwindet',
+        leer.kopf === '' && /Noch keine Abrechnung/.test(leer.zeilen));
+    pruefe('NK-263: Karte in der Wohnungsansicht, die Auswertung füllt sie',
+        html.includes('id="mehrjahresblick-karte"')
+        && /renderAptCostsChart\(dataA\.cost_distribution\);\s*renderMehrjahresblick\(dataA\.mehrjahresblick\);/.test(appQuelle));
+}
+
 // --- NK-201: Warnleiste im offenen Modus -------------------------------------
 // Der Rauchtest gibt die Antwort von /api/auth/me vor: offen in Docker zeigt
 // die Warnleiste, offen in der Windows-App bleibt sie verborgen.
@@ -1419,4 +1450,6 @@ warnLeistePruefen()
                                         .catch(e => pruefe('NK-261: Vorauszahlung-Prüfung lief durch — ' + e.message, false))
                                         .then(() => fristenPruefen()
                                             .catch(e => pruefe('NK-262: Fristen-Prüfung lief durch — ' + e.message, false))
-                                            .then(() => process.exit(fehler ? 1 : 0))))))))))));
+                                            .then(() => mehrjahresblickPruefen()
+                                                .catch(e => pruefe('NK-263: Mehrjahresblick-Prüfung lief durch — ' + e.message, false))
+                                                .then(() => process.exit(fehler ? 1 : 0)))))))))))));

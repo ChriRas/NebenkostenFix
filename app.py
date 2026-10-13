@@ -4386,10 +4386,39 @@ def analytics_apartment(apartment_id):
             group = _map_category(item['category'])
             cost_distribution[group] += item['tenant_cost']
             
+    wohnung = db.session.get(Apartment, apartment_id)
     return jsonify({
         'own_consumption': own_consumption,
-        'cost_distribution': cost_distribution
+        'cost_distribution': cost_distribution,
+        'mehrjahresblick': _mehrjahresblick(wohnung) if wohnung else [],
     })
+
+
+def _mehrjahresblick(wohnung):
+    """NK-263: Euro je m² je Kostenart und Vorauszahlungen über die Jahre.
+
+    Aus dem Ergebnis, auf dem jede Abrechnung steht (``_bericht_ergebnis``),
+    mit der Fläche ihres Schnappschusses -- eine spätere Änderung der
+    Wohnfläche schreibt die alten Jahre nicht um.
+    """
+    from nebenkostenfix import mehrjahresblick
+    from nebenkostenfix.zeitraumvorschlag import jahresbeginn
+
+    berichte = (TenantBillingReport.query.join(Tenant)
+                .filter(Tenant.apartment_id == wohnung.id).all())
+    abrechnungen = []
+    for report in berichte:
+        try:
+            ergebnis, version = _bericht_ergebnis(report)
+        except BillingDataError:
+            continue  # Altbestand, der sich heute nicht mehr rechnen lässt
+        qm = ((version.eingangsdaten or {}).get('wohnung', {}).get('qm')
+              if version is not None else wohnung.sqm)
+        kosten = [(z['category'], z['tenant_cost']) for z in ergebnis.get('line_items', [])]
+        abrechnungen.append((report.start_date, report.end_date, qm, kosten,
+                             ergebnis.get('prepaid_amount')))
+    monat, tag, _ = jahresbeginn(wohnung.property)
+    return mehrjahresblick.verlauf(abrechnungen, monat, tag)
 
 @app.route('/api/analytics/data-quality/<int:property_id>', methods=['GET'])
 def analytics_data_quality(property_id):

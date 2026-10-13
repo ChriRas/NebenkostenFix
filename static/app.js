@@ -6675,7 +6675,32 @@ async function fetchAnalytics() {
         const dataA = await resA.json();
         renderAptConsumptionChart(dataA.own_consumption);
         renderAptCostsChart(dataA.cost_distribution);
+        renderMehrjahresblick(dataA.mehrjahresblick);
     }
+}
+
+/* NK-263: Euro je m² und Jahr je Kostenart und die Vorauszahlungen über die
+   Abrechnungsjahre. Spalten sind die Jahre, ein leeres Jahr bleibt als Lücke. */
+function renderMehrjahresblick(jahre) {
+    const kopf = document.getElementById('mjb-kopf');
+    const zeilen = document.getElementById('mjb-zeilen');
+    if (!jahre || jahre.length === 0) {
+        kopf.innerHTML = '';
+        zeilen.innerHTML = '<tr><td class="text-muted" style="padding: 8px;">Noch keine Abrechnung — der Verlauf beginnt mit der ersten.</td></tr>';
+        return;
+    }
+    const wert = w => (w === null || w === undefined ? '–' : euroText(w));
+    const zeile = (titel, werte, starkAttr = '') => {
+        const werteHtml = werte.map(w => `<td style="padding: 6px 8px; text-align: right;">${escapeHtml(w)}</td>`).join('');
+        return `<tr${starkAttr}><th scope="row" style="text-align: left; padding: 6px 8px; font-weight: inherit;">${escapeHtml(titel)}</th>${werteHtml}</tr>`;
+    };
+    const arten = [...new Set(jahre.flatMap(j => Object.keys(j.je_qm)))].sort();
+    const jahreHtml = jahre.map(j => `<th scope="col" style="text-align: right; padding: 6px 8px;">${escapeHtml(j.jahr)}</th>`).join('');
+    kopf.innerHTML = `<th scope="col" style="text-align: left; padding: 6px 8px;">€ je m² und Jahr</th>${jahreHtml}`;
+    zeilen.innerHTML = arten.map(a => zeile(a, jahre.map(j => wert(j.je_qm[a])))).join('')
+        + zeile('Gesamt', jahre.map(j => wert(j.je_qm_gesamt)), ' style="font-weight: 600;"')
+        + zeile('Vorauszahlungen im Jahr', jahre.map(j => (j.belegte_tage ? euroText(j.vorauszahlung) : '–')))
+        + zeile('Belegt', jahre.map(j => (j.belegte_tage ? `${j.belegte_tage} von ${j.jahrestage} Tagen` : 'leer')));
 }
 
 /* NK-262 (R-FRIST-05): die kommenden Termine aller Immobilien. Der Kalender
