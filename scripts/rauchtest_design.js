@@ -671,6 +671,126 @@ async function mehrjahresblickPruefen() {
         && /renderAptCostsChart\(dataA\.cost_distribution\);\s*renderMehrjahresblick\(dataA\.mehrjahresblick\);/.test(appQuelle));
 }
 
+// --- NK-267: Jahreswechsel als geführter Ablauf --------------------------------
+// Der Block läuft mit einer Attrappe aus Elementen, Speicher und den
+// vorhandenen Wegen (Ablesen, Details, Vorjahr); geprüft werden Ablauf,
+// Abbrechen und Wiederaufnehmen.
+async function jahreswechselPruefen() {
+    const m = appQuelle.match(/\n\/\/ --- NK-267[\s\S]*?(?=\n\/\/ --- )/);
+    if (!m) throw new Error('NK-267-Block nicht gefunden');
+    const element = () => ({ value: '', innerHTML: '', textContent: '', hidden: false, checked: false,
+        disabled: false, dataset: {}, attr: {}, klassen: new Set(),
+        get classList() {
+            const k = this.klassen;
+            return { add: n => k.add(n), remove: n => k.delete(n), contains: n => k.has(n),
+                     toggle: (n, an) => (an ? k.add(n) : k.delete(n)) };
+        },
+        setAttribute(n, w) { this.attr[n] = w; }, removeAttribute(n) { delete this.attr[n]; } });
+    const seite = (speicher, haeuser) => {
+        const el = {};
+        const abschnitte = [1, 2, 3, 4].map(n => Object.assign(element(), { dataset: { jwSchritt: String(n) } }));
+        const punkte = [1, 2, 3, 4].map(n => Object.assign(element(), { dataset: { schritt: String(n) } }));
+        const aufrufe = [];
+        const document = {
+            getElementById: id => (el[id] = el[id] || element()),
+            querySelectorAll: sel => sel === '[data-jw-schritt]' ? abschnitte : sel === '#jw-schritte li' ? punkte : [],
+        };
+        const berichte = [
+            { id: 1, tenant_id: 7, property_id: 5, tenant_name: 'A', apartment_name: 'EG', start_date: '2024-01-01', end_date: '2024-12-31' },
+            { id: 2, tenant_id: 7, property_id: 5, tenant_name: 'A', apartment_name: 'EG', start_date: '2025-01-01', end_date: '2025-12-31' },
+            { id: 3, tenant_id: 8, property_id: 5, tenant_name: '<b>B', apartment_name: 'OG', start_date: '2025-01-01', end_date: '2025-12-31' },
+            { id: 4, tenant_id: 9, property_id: 6, tenant_name: 'C', apartment_name: 'DG', start_date: '2025-01-01', end_date: '2025-12-31' },
+        ];
+        const umgebung = {
+            document, localStorage: speicher, window: {}, properties: haeuser,
+            fetchProperties: async () => {}, showError: t => aufrufe.push('fehler:' + t),
+            escapeHtml: t => String(t).replace(/</g, '&lt;'), datumText: iso => 'D' + iso,
+            fetch: async () => ({ ok: true, json: async () => berichte }),
+            serverFehler: async () => new Error('x'), meldungZu: (e, t) => t,
+            openAblesen: () => aufrufe.push('ablesen'), ablesenListe: () => aufrufe.push('liste'),
+            openReportDetails: id => aufrufe.push('details:' + id),
+            rechnungenWieVorjahr: async (haus, jahr) => aufrufe.push(`vorjahr:${haus}:${jahr}`),
+        };
+        const namen = Object.keys(umgebung);
+        const f = new Function(...namen, m[0] + `; return { oeffneJahreswechsel, jwAuswahl, jwSchritt, jwHaken,
+            jwAblesen, jwVorjahr, jwAbbrechen, jwAbschliessen };`)(...namen.map(n => umgebung[n]));
+        const sichtbar = () => abschnitte.filter(a => !a.hidden).map(a => a.dataset.jwSchritt).join();
+        return { f, el, aufrufe, sichtbar, punkte, offen: () => el['jahreswechsel-modal'].klassen.has('active') };
+    };
+    const speicher = () => { const d = {}; return { d, getItem: k => (k in d ? d[k] : null),
+        setItem: (k, w) => { d[k] = String(w); }, removeItem: k => { delete d[k]; } }; };
+    const warte = () => new Promise(r => setTimeout(r, 0));
+    const haeuser = [{ id: 5, name: 'Haus A', abrechnungsjahr_beginn: '01.07.' }, { id: 6, name: 'Haus B' }];
+    const jahr = new Date().getFullYear();
+
+    const sp = speicher();
+    const a = seite(sp, haeuser);
+    await a.f.oeffneJahreswechsel();
+    a.f.jwAblesen();
+    pruefe('NK-267: Start bei Schritt 1, Ablesen zum Tag vor dem Jahresbeginn',
+        a.offen() && a.sichtbar() === '1' && a.el['jw-wieder'].hidden
+        && a.aufrufe.join() === 'ablesen,liste' && a.el['ablesen-property'].value === '5'
+        && a.el['ablesen-datum'].value === `${jahr}-06-30` && a.el['jw-stichtag'].textContent === `D${jahr}-06-30`
+        && a.el['jw-zurueck'].disabled && a.punkte[0].attr['aria-current'] === 'step');
+    a.f.jwHaken('ablesen', true);
+    a.f.jwSchritt(1);
+    await warte();
+    const liste = a.el['jw-abrechnungen'].innerHTML;
+    pruefe('NK-267: Schritt 2 zeigt je Mieter der Immobilie die letzte Abrechnung',
+        a.sichtbar() === '2' && a.punkte[0].klassen.has('erledigt')
+        && liste.includes('openReportDetails(2)') && liste.includes('openReportDetails(3)')
+        && !liste.includes('openReportDetails(1)') && !liste.includes('openReportDetails(4)')
+        && liste.includes('&lt;b>B') && !liste.includes('<b>'));
+    a.f.jwSchritt(1);
+    await a.f.jwVorjahr();
+    pruefe('NK-267: Schritt 3 füllt die Rechnungen des neuen Jahres wie im Vorjahr',
+        a.sichtbar() === '3' && a.aufrufe.includes(`vorjahr:5:${jahr}`));
+    a.f.jwAbbrechen();
+    const gemerkt = JSON.parse(sp.d['nk-jahreswechsel'] || '{}');
+    pruefe('NK-267: Abbrechen schließt den Dialog und behält den Stand',
+        !a.offen() && gemerkt.schritt === 3 && gemerkt.erledigt.ablesen === true);
+
+    const b = seite(sp, haeuser);
+    await b.f.oeffneJahreswechsel();
+    pruefe('NK-267: Wiederaufnehmen nach dem Neuladen an derselben Stelle',
+        b.offen() && b.sichtbar() === '3' && !b.el['jw-wieder'].hidden
+        && b.el['jw-erledigt-ablesen'].checked && !b.el['jw-erledigt-vorjahr'].checked
+        && b.el['jw-immobilie'].value === '5');
+    b.f.jwSchritt(1);
+    const check = b.el['jw-checkliste'].innerHTML;
+    pruefe('NK-267: Checkliste mit Erledigtem und dem Weg zurück zu Offenem',
+        b.sichtbar() === '4' && b.el['jw-weiter'].hidden && !b.el['jw-fertig'].hidden
+        && /class="erledigt"[^<]*<i[^>]*><\/i> Zähler zum Stichtag abgelesen/.test(check)
+        && check.includes('jwGehe(2)') && check.includes('jwGehe(3)') && !check.includes('jwGehe(1)'));
+    b.f.jwAbschliessen();
+    const verworfen = !('nk-jahreswechsel' in sp.d);
+    const c = seite(sp, haeuser);
+    await c.f.oeffneJahreswechsel();
+    pruefe('NK-267: Schließen verwirft den Stand, der nächste Wechsel beginnt vorn',
+        verworfen && !b.offen() && c.sichtbar() === '1' && c.el['jw-wieder'].hidden);
+
+    c.f.jwHaken('ablesen', true);
+    c.el['jw-immobilie'].value = '6';
+    c.f.jwAuswahl();
+    const verloren = speicher();
+    verloren.d['nk-jahreswechsel'] = JSON.stringify({ property_id: '99', jahr, schritt: 3, erledigt: {} });
+    const d = seite(verloren, haeuser);
+    await d.f.oeffneJahreswechsel();
+    const gesperrt = { getItem() { throw new Error('gesperrt'); }, setItem() { throw new Error('gesperrt'); },
+        removeItem() { throw new Error('gesperrt'); } };
+    const e = seite(gesperrt, haeuser);
+    await e.f.oeffneJahreswechsel();
+    e.f.jwSchritt(1);
+    e.f.jwAbschliessen();
+    pruefe('NK-267: neue Auswahl beginnt neu, fremder oder gesperrter Speicher stört nicht',
+        c.sichtbar() === '1' && !c.el['jw-erledigt-ablesen'].checked && JSON.parse(sp.d['nk-jahreswechsel']).property_id === '6'
+        && d.sichtbar() === '1' && d.el['jw-immobilie'].value === '5'
+        && e.sichtbar() === '2' && !e.offen());
+    pruefe('NK-267: Dialog und Einstieg neben „Jahr abrechnen“',
+        html.includes('id="jahreswechsel-modal"')
+        && /onclick="oeffneJahreswechsel\(\)"[^>]*>[\s\S]{0,80}Jahreswechsel öffnen\s*<\/button>/.test(html));
+}
+
 // --- NK-201: Warnleiste im offenen Modus -------------------------------------
 // Der Rauchtest gibt die Antwort von /api/auth/me vor: offen in Docker zeigt
 // die Warnleiste, offen in der Windows-App bleibt sie verborgen.
@@ -1452,4 +1572,6 @@ warnLeistePruefen()
                                             .catch(e => pruefe('NK-262: Fristen-Prüfung lief durch — ' + e.message, false))
                                             .then(() => mehrjahresblickPruefen()
                                                 .catch(e => pruefe('NK-263: Mehrjahresblick-Prüfung lief durch — ' + e.message, false))
-                                                .then(() => process.exit(fehler ? 1 : 0)))))))))))));
+                                                .then(() => jahreswechselPruefen()
+                                                    .catch(e => pruefe('NK-267: Jahreswechsel-Prüfung lief durch — ' + e.message, false))
+                                                    .then(() => process.exit(fehler ? 1 : 0))))))))))))));

@@ -5157,17 +5157,180 @@ async function rtVorjahrFuellen() {
 }
 window.rtVorjahrFuellen = rtVorjahrFuellen;
 
-// Aus Schritt 2 des Assistenten: Immobilie und Jahr stehen schon fest.
-async function jahrVorjahrFuellen() {
-    if (!jahrStand) return;
+// Aus Schritt 2 des Assistenten und aus dem Jahreswechsel (NK-267):
+// Immobilie und Jahr stehen schon fest.
+async function rechnungenWieVorjahr(haus, jahr) {
     await oeffneRechnungstabelle();
-    document.getElementById('rt-immobilie').value = jahrStand.property_id;
+    document.getElementById('rt-immobilie').value = haus;
     rtImmobilieGewaehlt();
-    document.getElementById('rt-jahr').value = jahrStand.jahr;
+    document.getElementById('rt-jahr').value = jahr;
     rtJahrGewaehlt();
     await rtVorjahrFuellen();
 }
+
+async function jahrVorjahrFuellen() {
+    if (jahrStand) await rechnungenWieVorjahr(jahrStand.property_id, jahrStand.jahr);
+}
 window.jahrVorjahrFuellen = jahrVorjahrFuellen;
+
+// --- NK-267: Neues Jahr beginnen ----------------------------------------
+// Ein geführter Ablauf nur über vorhandene Wege: Zähler zum Stichtag ablesen
+// (NK-227), Vorauszahlungen nach der letzten Abrechnung anpassen (NK-226, in
+// deren Details), Rechnungen des neuen Jahres wie im Vorjahr vorbelegen
+// (NK-230), am Ende eine Checkliste. Den Stand hält der Browser: Abbrechen
+// behält ihn, beim nächsten Öffnen geht es an derselben Stelle weiter.
+const JW_SPEICHER = 'nk-jahreswechsel';
+const JW_PUNKTE = [
+    ['ablesen', 'Zähler zum Stichtag abgelesen'],
+    ['vorauszahlung', 'Vorauszahlungen geprüft und angepasst'],
+    ['vorjahr', 'Rechnungen des neuen Jahres wie im Vorjahr vorbelegt'],
+];
+let jwStand = null;
+
+function jwSichern() {
+    try { localStorage.setItem(JW_SPEICHER, JSON.stringify(jwStand)); } catch (e) { /* ohne Speicher keine Wiederaufnahme */ }
+}
+
+function jwGemerkt() {
+    try { return JSON.parse(localStorage.getItem(JW_SPEICHER)); } catch (e) { return null; }
+}
+
+// Der Tag vor dem Beginn des neuen Abrechnungsjahres (D-114), als ISO-Datum.
+function jwStichtag() {
+    const haus = properties.find(p => String(p.id) === String(jwStand.property_id)) || {};
+    const [tag, monat] = (haus.abrechnungsjahr_beginn || '01.01.').split('.').map(Number);
+    return new Date(Date.UTC(jwStand.jahr, monat - 1, tag - 1)).toISOString().slice(0, 10);
+}
+
+async function oeffneJahreswechsel() {
+    await fetchProperties();
+    if (!properties.length) {
+        showError('Legen Sie zuerst eine Immobilie an.');
+        return;
+    }
+    const gemerkt = jwGemerkt();
+    const weiter = !!(gemerkt && gemerkt.erledigt
+        && properties.some(p => String(p.id) === String(gemerkt.property_id)));
+    jwStand = weiter ? gemerkt
+        : { property_id: String(properties[0].id), jahr: new Date().getFullYear(), schritt: 1, erledigt: {} };
+    const auswahl = document.getElementById('jw-immobilie');
+    auswahl.innerHTML = properties.map(p =>
+        `<option value="${escapeHtml(String(p.id))}">${escapeHtml(p.name)}</option>`).join('');
+    auswahl.value = jwStand.property_id;
+    document.getElementById('jw-jahr').value = jwStand.jahr;
+    document.getElementById('jw-wieder').hidden = !weiter;
+    jwGehe(Math.min(4, Math.max(1, Number(jwStand.schritt) || 1)));
+    document.getElementById('jahreswechsel-modal').classList.add('active');
+}
+window.oeffneJahreswechsel = oeffneJahreswechsel;
+
+// Eine andere Immobilie oder ein anderes Jahr ist ein neuer Jahreswechsel.
+function jwAuswahl() {
+    jwStand = { property_id: document.getElementById('jw-immobilie').value,
+                jahr: Number(document.getElementById('jw-jahr').value) || new Date().getFullYear(),
+                schritt: 1, erledigt: {} };
+    document.getElementById('jw-wieder').hidden = true;
+    jwGehe(1);
+}
+window.jwAuswahl = jwAuswahl;
+
+function jwZeigen() {
+    document.querySelectorAll('[data-jw-schritt]').forEach(abschnitt => {
+        abschnitt.hidden = Number(abschnitt.dataset.jwSchritt) !== jwStand.schritt;
+    });
+    document.querySelectorAll('#jw-schritte li').forEach(punkt => {
+        const nummer = Number(punkt.dataset.schritt);
+        punkt.classList.toggle('aktuell', nummer === jwStand.schritt);
+        punkt.classList.toggle('erledigt', nummer < 4 && !!jwStand.erledigt[JW_PUNKTE[nummer - 1][0]]);
+        if (nummer === jwStand.schritt) punkt.setAttribute('aria-current', 'step');
+        else punkt.removeAttribute('aria-current');
+    });
+    JW_PUNKTE.forEach(([punkt]) => {
+        document.getElementById(`jw-erledigt-${punkt}`).checked = !!jwStand.erledigt[punkt];
+    });
+    document.getElementById('jw-stichtag').textContent = datumText(jwStichtag());
+    document.getElementById('jw-zurueck').disabled = jwStand.schritt === 1;
+    document.getElementById('jw-weiter').hidden = jwStand.schritt === 4;
+    document.getElementById('jw-fertig').hidden = jwStand.schritt !== 4;
+}
+
+function jwGehe(schritt) {
+    jwStand.schritt = schritt;
+    jwSichern();
+    jwZeigen();
+    if (schritt === 2) jwAbrechnungenZeigen();
+    if (schritt === 4) jwChecklisteZeigen();
+}
+window.jwGehe = jwGehe;
+
+function jwSchritt(richtung) {
+    jwGehe(Math.min(4, Math.max(1, jwStand.schritt + richtung)));
+}
+window.jwSchritt = jwSchritt;
+
+function jwHaken(punkt, an) {
+    jwStand.erledigt[punkt] = an;
+    jwSichern();
+    jwZeigen();
+}
+window.jwHaken = jwHaken;
+
+function jwAblesen() {
+    openAblesen();
+    document.getElementById('ablesen-property').value = jwStand.property_id;
+    document.getElementById('ablesen-datum').value = jwStichtag();
+    ablesenListe();
+}
+window.jwAblesen = jwAblesen;
+
+function jwVorjahr() {
+    return rechnungenWieVorjahr(jwStand.property_id, jwStand.jahr);
+}
+window.jwVorjahr = jwVorjahr;
+
+// Je Mieter der Immobilie die letzte Abrechnung; in ihren Details steht der
+// Vorschlag zur Vorauszahlung samt Serienbuchung (NK-226).
+async function jwAbrechnungenZeigen() {
+    const ziel = document.getElementById('jw-abrechnungen');
+    try {
+        const res = await fetch('/api/billing/reports');
+        if (!res.ok) throw await serverFehler(res);
+        const letzte = new Map();
+        (await res.json()).filter(r => String(r.property_id) === String(jwStand.property_id))
+            .sort((a, b) => a.end_date < b.end_date ? 1 : -1)
+            .forEach(r => { if (!letzte.has(r.tenant_id)) letzte.set(r.tenant_id, r); });
+        ziel.innerHTML = [...letzte.values()].map(r => {
+            const zeileHtml = escapeHtml(`${r.tenant_name} · ${r.apartment_name} · ${datumText(r.start_date)} bis ${datumText(r.end_date)}`);
+            return `<li>${zeileHtml} <button type="button" class="btn-tint" onclick="openReportDetails(${Number(r.id)})">Abrechnung ansehen</button></li>`;
+        }).join('') || '<li>Für diese Immobilie gibt es noch keine Abrechnung und damit keinen Vorschlag.</li>';
+    } catch (e) {
+        ziel.innerHTML = '';
+        showError(meldungZu(e, 'Die Abrechnungen ließen sich nicht laden.'));
+    }
+}
+
+function jwChecklisteZeigen() {
+    document.getElementById('jw-checkliste').innerHTML = JW_PUNKTE.map(([punkt, text], i) => {
+        const textHtml = escapeHtml(text);
+        return jwStand.erledigt[punkt]
+            ? `<li class="erledigt"><i class="ph ph-check-circle" aria-hidden="true"></i> ${textHtml}</li>`
+            : `<li><i class="ph ph-circle" aria-hidden="true"></i> ${textHtml}: offen.
+                <button type="button" class="btn-tint" onclick="jwGehe(${Number(i + 1)})">Zurück zu Schritt ${Number(i + 1)}</button></li>`;
+    }).join('');
+}
+
+// Abbrechen behält den Stand; erst „Jahreswechsel schließen“ verwirft ihn.
+function jwAbbrechen() {
+    document.getElementById('jahreswechsel-modal').classList.remove('active');
+}
+window.jwAbbrechen = jwAbbrechen;
+
+function jwAbschliessen() {
+    try { localStorage.removeItem(JW_SPEICHER); } catch (e) { /* nichts gemerkt */ }
+    jwStand = null;
+    jwAbbrechen();
+}
+window.jwAbschliessen = jwAbschliessen;
 
 // --- Jahresabrechnungs-Assistent (NK-160) ------------------------------------
 // Fünf Schritte: Jahr und Immobilie -> Rechnungen (mit Vorjahr) ->

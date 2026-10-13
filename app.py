@@ -3156,6 +3156,8 @@ def get_all_billing_reports():
             'id': r.id,
             'tenant_id': r.tenant_id,
             'tenant_name': r.tenant.name,
+            # NK-267: der Jahreswechsel sucht die Abrechnungen einer Immobilie.
+            'property_id': r.tenant.apartment.property_id,
             'property_name': r.tenant.apartment.property.name,
             'apartment_name': r.tenant.apartment.name,
             'start_date': r.start_date.isoformat(),

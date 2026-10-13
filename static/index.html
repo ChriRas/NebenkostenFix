@@ -286,6 +286,9 @@
                             onclick="openFreieAbrechnung()"><i class="ph ph-files"></i>
                             Abrechnung frei erstellen</button>
                         <!-- NK-160: der geführte Weg für ein ganzes Jahr. -->
+                        <!-- NK-267: Ablesen, Vorauszahlung, Vorjahr zum Beginn eines Jahres. -->
+                        <button class="btn-secondary" onclick="oeffneJahreswechsel()"><i class="ph ph-calendar-plus"></i>
+                            Jahreswechsel öffnen</button>
                         <button class="btn-primary" onclick="oeffneJahrAssistent()"><i class="ph ph-calendar-check"></i>
                             Jahr abrechnen</button>
                     </div>
@@ -1209,6 +1212,73 @@
             <div class="modal-footer">
                 <button type="button" class="btn-secondary" id="jahr-zurueck" onclick="jahrSchritt(-1)">Zurück</button>
                 <button type="button" class="btn-primary" id="jahr-weiter" onclick="jahrSchritt(1)">Weiter</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- NK-267: geführter Jahreswechsel über die vorhandenen Wege. -->
+    <div class="modal-overlay" id="jahreswechsel-modal">
+        <div class="modal glass-panel dialog-breit">
+            <div class="modal-header">
+                <h2>Neues Jahr beginnen</h2>
+                <button class="btn-icon" aria-label="Schließen" onclick="jwAbbrechen()"><i class="ph ph-x"></i></button>
+            </div>
+            <ol class="assistent-schritte" id="jw-schritte">
+                <li data-schritt="1">Ablesen</li>
+                <li data-schritt="2">Vorauszahlung</li>
+                <li data-schritt="3">Vorjahr</li>
+                <li data-schritt="4">Checkliste</li>
+            </ol>
+            <div class="modal-body">
+                <p class="karten-text" id="jw-wieder" hidden>Sie machen dort weiter, wo Sie aufgehört haben.</p>
+                <section data-jw-schritt="1">
+                    <div class="felder-nebeneinander">
+                        <div class="form-group feld-breit">
+                            <label for="jw-immobilie">Immobilie</label>
+                            <select id="jw-immobilie" onchange="jwAuswahl()"></select>
+                        </div>
+                        <div class="form-group">
+                            <label for="jw-jahr">Neues Jahr</label>
+                            <input type="number" id="jw-jahr" min="2000" max="2100" onchange="jwAuswahl()">
+                        </div>
+                    </div>
+                    <p class="karten-text">Lesen Sie alle Zähler zum Stichtag <strong id="jw-stichtag"></strong> ab,
+                        dem letzten Tag des alten Abrechnungsjahres.</p>
+                    <div class="knopf-zeile">
+                        <button type="button" class="btn-secondary" onclick="jwAblesen()">
+                            <i class="ph ph-camera" aria-hidden="true"></i> Ablesung erfassen</button>
+                    </div>
+                    <label class="abstand-oben"><input type="checkbox" id="jw-erledigt-ablesen"
+                        onchange="jwHaken('ablesen', this.checked)"> Erledigt</label>
+                </section>
+                <section data-jw-schritt="2" hidden>
+                    <p class="karten-text">Die letzte Abrechnung jedes Mieters schlägt die neue Vorauszahlung
+                        vor. Öffnen Sie sie und legen Sie dort die Serienbuchung an.</p>
+                    <ul id="jw-abrechnungen"></ul>
+                    <label class="abstand-oben"><input type="checkbox" id="jw-erledigt-vorauszahlung"
+                        onchange="jwHaken('vorauszahlung', this.checked)"> Erledigt</label>
+                </section>
+                <section data-jw-schritt="3" hidden>
+                    <p class="karten-text">Die Rechnungen des Vorjahres stehen als Zeilen für das neue Jahr
+                        bereit, ohne Beträge. Zeilen ohne Betrag werden nicht gespeichert.</p>
+                    <div class="knopf-zeile">
+                        <button type="button" class="btn-secondary" onclick="jwVorjahr()">
+                            <i class="ph ph-copy" aria-hidden="true"></i> Wie im Vorjahr füllen</button>
+                    </div>
+                    <label class="abstand-oben"><input type="checkbox" id="jw-erledigt-vorjahr"
+                        onchange="jwHaken('vorjahr', this.checked)"> Erledigt</label>
+                </section>
+                <section data-jw-schritt="4" hidden>
+                    <ul id="jw-checkliste"></ul>
+                    <p class="karten-text">Abbrechen behält den Stand. „Jahreswechsel schließen“ beendet den
+                        Ablauf; offene Punkte holen Sie dann auf den gewohnten Wegen nach.</p>
+                </section>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-secondary" onclick="jwAbbrechen()">Abbrechen</button>
+                <button type="button" class="btn-secondary" id="jw-zurueck" onclick="jwSchritt(-1)">Zurück</button>
+                <button type="button" class="btn-primary" id="jw-weiter" onclick="jwSchritt(1)">Weiter</button>
+                <button type="button" class="btn-primary" id="jw-fertig" onclick="jwAbschliessen()" hidden>Jahreswechsel schließen</button>
             </div>
         </div>
     </div>

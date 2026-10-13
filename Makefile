@@ -56,6 +56,7 @@ kern:
 	  tests/test_vorauszahlung.py tests/test_vorauszahlung_soll_ist.py tests/test_jahressprung.py \
 	  tests/test_fristenkalender.py \
 	  tests/test_mehrjahresblick.py \
+	  tests/test_jahreswechsel.py \
 	  tests/test_heizung_kostenarten.py tests/test_zaehlerwechsel.py \
 	  -q --no-header \
 	  --cov=nebenkostenfix.rechenkern --cov-branch --cov-report=term-missing --cov-fail-under=95
