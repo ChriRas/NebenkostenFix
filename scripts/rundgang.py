@@ -110,6 +110,15 @@ PRUEFUNG_JS = """
 """
 
 
+ZAEHLER_AKTIONEN_JS = """() => {
+  const knoepfe = [...document.querySelectorAll('#meters-container button')].filter(k => k.offsetParent);
+  if (knoepfe.length === 0) return ['keine Zähleraktion sichtbar'];
+  return knoepfe.filter(k => { const r = k.getBoundingClientRect();
+      return r.left < 0 || r.right > window.innerWidth; })
+    .map(k => `Aktion „${k.title || k.textContent.trim()}“ liegt außerhalb des Bilds`);
+}"""
+
+
 def _freier_port() -> int:
     with socket.socket() as s:
         s.bind(('127.0.0.1', 0))
@@ -180,6 +189,15 @@ class Rundgang:
     def pruefen(self, wo: str, bereich: str | None = None):
         for befund in self.seite.evaluate(PRUEFUNG_JS, bereich):
             self.befunde.append(f'{self.breite}px {wo}: {befund}')
+
+    def handy(self):
+        """Funde der Bestandsaufnahme 0.13.0 am Handy (NK-252 ff.), mit Beispielhaus."""
+        self.schritt = 'handy-zaehler'
+        self.seite.evaluate("(b) => wechsleZuTab(b)", 'meters')
+        self.seite.wait_for_timeout(700)
+        # NK-252: die Tabelle rollte in ihrer Karte, die Aktionen lagen rechts außerhalb.
+        for befund in self.seite.evaluate(ZAEHLER_AKTIONEN_JS):
+            self.befunde.append(f'{self.breite}px handy/zaehler: {befund}')
 
     def bereich(self, name: str, zustand: str):
         self.schritt = f'{zustand}-{name}'
@@ -256,6 +274,8 @@ def rundgang(chromium: str | None, ausgabe: Path) -> list[str]:
                     seite.wait_for_timeout(1500)
                 for bereich in BEREICHE:
                     gang.bereich(bereich, 'gefuellt')
+                if breite < 720:
+                    gang.handy()
                 # NK-158: die Hilfe hat keinen Eintrag in der Seitenleiste.
                 gang.schritt = 'hilfe'
                 seite.evaluate("() => zeigeHilfe()")

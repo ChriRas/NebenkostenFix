@@ -2506,11 +2506,13 @@ function renderMeters() {
         box.appendChild(title);
         
         const table = document.createElement('table');
+        // NK-252: am Handy wird jede Zeile eine Karte (style.css), die Aktionen bleiben im Bild.
+        table.className = 'zaehler-tabelle';
         table.style.width = '100%';
         table.style.borderCollapse = 'collapse';
         table.style.textAlign = 'left';
         table.innerHTML = `
-            <tr style="border-bottom: 1px solid var(--border-color);">
+            <tr class="zaehler-kopf" style="border-bottom: 1px solid var(--border-color);">
                 <th style="padding: 12px 8px;">Kategorie</th>
                 <th style="padding: 12px 8px;">Zählernummer</th>
                 <th style="padding: 12px 8px;">Wohnung</th>
@@ -2531,9 +2533,11 @@ function renderMeters() {
             const tdCat = document.createElement('td');
             tdCat.style.padding = "12px 8px";
             tdCat.textContent = zaehlerArtName(m.category_name);
+            tdCat.dataset.label = 'Kategorie';
             
             const tdNum = document.createElement('td');
             tdNum.style.padding = "12px 8px";
+            tdNum.dataset.label = 'Zählernummer';
             // NK-219 (V2): die Nummer tippt der Nutzer ein, sie kommt maskiert ins HTML.
             tdNum.innerHTML = escapeHtml(m.meter_number) + (
                 m.is_official 
@@ -2544,12 +2548,14 @@ function renderMeters() {
             const tdApt = document.createElement('td');
             tdApt.style.padding = "12px 8px";
             tdApt.textContent = m.is_main_meter ? "Allgemein" : (m.apartment_name || "-");
+            tdApt.dataset.label = 'Wohnung';
             
             // Find latest reading
             const meterReadings = readings.filter(r => r.meter_id === m.id).sort((a,b) => new Date(b.reading_date) - new Date(a.reading_date));
             const tdRead = document.createElement('td');
             tdRead.style.padding = "12px 8px";
             tdRead.className = "tabular-nums";
+            tdRead.dataset.label = 'Letzter Stand';
             if (meterReadings.length > 0) {
                 const latest = meterReadings[0];
                 tdRead.innerHTML = getReadingHtml(latest, m.einheit);

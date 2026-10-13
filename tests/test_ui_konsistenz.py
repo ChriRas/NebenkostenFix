@@ -336,3 +336,26 @@ def test_heute_ist_das_lokale_datum():
     1 bzw. 2 Uhr stand im Ablesedialog und in den anderen Vorbelegungen noch
     das Datum von gestern."""
     assert "new Date().toISOString()" not in _liest(APP)
+
+
+def _schmal(css: str) -> str:
+    """Alle Blöcke ``@media (max-width: 720px)`` hintereinander."""
+    kopf = "@media (max-width: 720px)"
+    return "".join(_media_block(css[m.start():], kopf) for m in re.finditer(re.escape(kopf), css))
+
+
+def test_zaehlertabelle_wird_am_handy_zur_karte():
+    """NK-252: unter 720 px rollte die Zählertabelle in ihrer Karte (NK-157),
+    Verlauf, Stift und Papierkorb lagen rechts außerhalb des Bilds."""
+    app = _liest(APP)
+    zaehler = app[app.index("function renderMeters("):]
+    zaehler = zaehler[:zaehler.index("\n}\n")]
+    assert "table.className = 'zaehler-tabelle'" in zaehler
+    assert '<tr class="zaehler-kopf"' in zaehler
+    for beschriftung in ("Kategorie", "Zählernummer", "Wohnung", "Letzter Stand"):
+        assert f".dataset.label = '{beschriftung}'" in zaehler, beschriftung
+    schmal = _schmal(_liest(STYLE))
+    karte = re.search(r"\.glass-panel table\.zaehler-tabelle,[^{]*\{([^}]*)\}", schmal)
+    assert karte and "display: block" in karte.group(1) and "overflow-x: visible" in karte.group(1)
+    assert re.search(r"\.zaehler-tabelle \.zaehler-kopf \{\s*display: none;", schmal)
+    assert "content: attr(data-label)" in schmal

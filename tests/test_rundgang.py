@@ -61,6 +61,14 @@ def test_rundgang_in_drei_breiten():
     assert sorted(breite for breite, _ in rundgang.BREITEN) == [390, 768, 1440]
 
 
+def test_rundgang_prueft_am_handy_die_zaehleraktionen():
+    """NK-252: bei 390 px lagen die Zähleraktionen rechts außerhalb des Bilds."""
+    assert '#meters-container button' in rundgang.ZAEHLER_AKTIONEN_JS
+    assert 'window.innerWidth' in rundgang.ZAEHLER_AKTIONEN_JS
+    quelle = (WURZEL / 'scripts' / 'rundgang.py').read_text(encoding='utf-8')
+    assert re.search(r'if breite < 720:\n\s+gang\.handy\(\)', quelle)
+
+
 def test_leere_zeichenflaeche_bleibt_erhalten():
     """Ein Leerhinweis ersetzt die Zeichenfläche nicht per innerHTML: kommen
     später Daten, fände Chart.js sonst kein <canvas> mehr (Fund des Rundgangs)."""

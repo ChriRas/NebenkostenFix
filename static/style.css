@@ -1923,6 +1923,43 @@ a.btn-secondary {
     .dashboard-card {
         padding: 16px;
     }
+
+    /* NK-252: die Zählertabelle rollte in ihrer Karte, Verlauf, Stift und
+       Papierkorb lagen rechts außerhalb. Jeder Zähler wird eine Karte. */
+    .glass-panel table.zaehler-tabelle,
+    .zaehler-tabelle tbody,
+    .zaehler-tabelle tr,
+    .zaehler-tabelle td {
+        display: block;
+        overflow-x: visible;
+    }
+
+    .zaehler-tabelle .zaehler-kopf {
+        display: none;
+    }
+
+    .zaehler-tabelle tr {
+        padding: 8px 0;
+    }
+
+    .zaehler-tabelle td {
+        padding: 4px 0 !important;
+    }
+
+    /* Die Beschriftung steht links daneben; der Inhalt der Zelle fließt wie bisher. */
+    .zaehler-tabelle td[data-label] {
+        position: relative;
+        padding-left: 8rem !important;
+    }
+
+    .zaehler-tabelle td[data-label]::before {
+        content: attr(data-label);
+        position: absolute;
+        left: 0;
+        width: 7.5rem;
+        font-size: 13px;
+        color: var(--text-muted);
+    }
 }
 
 @media (max-width: 560px) {
