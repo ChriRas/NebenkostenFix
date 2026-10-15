@@ -64,7 +64,9 @@ def test_anmeldeseiten_im_design_der_anwendung(anon_client, pfad):
 
 def test_anmeldestil_und_zeichen_sind_ohne_anmeldung_erreichbar(anon_client):
     for pfad in ('/static/anmeldung.css', '/static/marke/zeichen.svg',
-                 '/static/marke/favicon.ico', '/static/vendor/fonts/outfit/outfit.css'):
+                 '/static/marke/favicon.ico', '/static/vendor/fonts/outfit/outfit.css',
+                 '/static/vendor/fonts/instrument-sans/instrument-sans.css',
+                 '/static/vendor/fonts/ibm-plex-mono/ibm-plex-mono.css'):
         assert anon_client.get(pfad).status_code == 200, pfad
     # alles andere bleibt hinter der Anmeldung, auch über Umwege
     for pfad in ('/static/app.js', '/static/index.html', '/static/marke/../app.js',
@@ -72,8 +74,28 @@ def test_anmeldestil_und_zeichen_sind_ohne_anmeldung_erreichbar(anon_client):
         assert anon_client.get(pfad).status_code in (302, 401), pfad
 
 
+def test_anmeldeseite_laedt_die_schriften_der_anwendung_ohne_anmeldung(anon_client):
+    """Kontoblatt: anmeldung.css holt Instrument Sans und IBM Plex Mono per
+    @import; jede Schriftdatei dahinter muss ohne Anmeldung kommen, sonst
+    fällt die Anmeldeseite still auf die Systemschrift zurück."""
+    stil = _text('static/anmeldung.css')
+    importe = re.findall(r"@import url\('([^']+)'\);", stil)
+    assert importe == ['vendor/fonts/instrument-sans/instrument-sans.css',
+                       'vendor/fonts/ibm-plex-mono/ibm-plex-mono.css']
+    assert "--font-sans: 'Instrument Sans'" in stil and 'var(--font-sans)' in stil
+    for imp in importe:
+        antwort = anon_client.get('/static/' + imp)
+        assert antwort.status_code == 200, imp
+        ordner = imp.rsplit('/', 1)[0]
+        dateien = re.findall(r"url\('?(?:\./)?([^')]+\.woff2)'?\)", antwort.get_data(as_text=True))
+        assert dateien, imp
+        for datei in dateien:
+            assert anon_client.get(f'/static/{ordner}/{datei}').status_code == 200, datei
+
+
 @pytest.mark.parametrize('name,frei', [
     ('anmeldung.css', True), ('marke/zeichen.svg', True), ('vendor/fonts/outfit/outfit.css', True),
+    ('vendor/fonts/instrument-sans/instrument-sans-latin.woff2', True),
     ('app.js', False), ('marke/../app.js', False), ('marke/..', False), ('../auth.py', False),
     ('marke\\..\\app.js', False), ('', False), (None, False), ('vendor/phosphor/x.css', False),
 ])

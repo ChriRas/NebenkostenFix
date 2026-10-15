@@ -347,14 +347,14 @@ const sockel = /\.btn-primary,\s*\n\.btn-secondary,\s*\n\.btn-tint,\s*\n\.btn-ge
 pruefe('Knopfsockel bündelt alle vier Klassen (K3)', sockel.test(css));
 pruefe('Sockel: feste Höhe aus dem Token (K3)',
     css.includes('height: var(--knopf-hoehe);')
-    && css.includes('padding: 0 var(--space-5);'));
+    && css.includes('padding: 0 var(--space-4);'));
 pruefe('Sockel: Icon-Regel mit Kindselektor (K3)',
     /\.btn-primary > i,\s*\n\.btn-secondary > i,\s*\n\.btn-tint > i,\s*\n\.btn-gefahr > i\s*\{/.test(css));
 pruefe('Raster-Tokens definiert (K6)',
     css.includes('--space-1: 4px;') && css.includes('--space-7: 48px;')
     && css.includes('--knopf-hoehe: 44px;')
     && css.includes('--knopf-hoehe-klein: 32px;')
-    && css.includes('--primary-tint: rgba(79, 70, 229, 0.08);'));
+    && css.includes('--primary-tint: #EEEDFD;'));
 pruefe('B9: fremdes Blau aus dem Stylesheet vertrieben',
     !css.includes('rgba(37, 99, 235'));
 pruefe('B9: Haken-Grün ohne Rückfallliteral',
@@ -1053,6 +1053,22 @@ async function ausschalterPruefen() {
         sichtbar.join() === 'false,true,false');
 }
 
+// Die Hilfe hat keinen Reiter; zeigeHilfe ließ den Gruß über „Hilfe“ stehen.
+{
+    const m = appQuelle.match(/function zeigeHilfe\([\s\S]*?\n\}/);
+    const gruss = { hidden: false };
+    const hilfe = { classList: { add() {} }, style: {} };
+    if (m) {
+        new Function('document', 'window', 'schliesseBegriffBlase', 'hilfeChecklisteLaden', 'ladeUeber',
+            m[0] + '; zeigeHilfe();')({
+            querySelectorAll: () => [],
+            querySelector: s => s === '.greeting' ? gruss : null,
+            getElementById: id => id === 'tab-hilfe' ? hilfe : null,
+        }, { scrollTo() {} }, () => {}, () => {}, () => {});
+    }
+    pruefe('NK-224: auch die Hilfe zeigt den Gruß nicht', !!m && gruss.hidden === true);
+}
+
 // --- NK-225: „0 von 5“ trotz Beispielhaus wird erklärt -----------------
 {
     const funktion = name => (appQuelle.match(new RegExp('function ' + name + '\\([\\s\\S]*?\\n\\}')) || [''])[0];
@@ -1459,7 +1475,8 @@ async function ablesenPruefen() {
             && gleich.includes('kpi-trend kpi-trend--gleich') && gleich.includes('kpi-wert--erledigt'));
         const css = fs.readFileSync(path.join(__dirname, '..', 'static', 'style.css'), 'utf8');
         pruefe('NK-260: Hover der klickbaren Kacheln steht im Stylesheet',
-            /\.kpi-clickable:hover\s*\{[^}]*translateY\(-2px\)/.test(css)
+            /\.kpi-clickable:hover\s*\{[^}]*background: var\(--surface-alt\)/.test(css)
+            && !/translateY/.test(css)
             && /\.kpi-karte\s*\{[^}]*border-left:\s*4px solid var\(--kpi-farbe/.test(css));
     }
 }

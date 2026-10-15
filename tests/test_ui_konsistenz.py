@@ -127,7 +127,7 @@ def test_diagramm_farbe_ist_einzige_stelle_fuer_kategorienfarben():
     assert "const DIAGRAMM_FARBE = {" in app
     # Chart-Konfigurationen und Karten nutzen die Palette, keine Literale;
     # erlaubt sind nur die Definitionszeilen der Palette selbst.
-    verboten = re.compile(r"'(?:#3B82F6|#10B981|#F59E0B|#8B5CF6|#EF4444|#9CA3AF)'")
+    verboten = re.compile(r"'(?:#4F46E5|#2E7D6B|#C27A12|#8E4FB8|#A3312A|#8C8FA6)'")
     definition = re.compile(r"^\s*(blau|gruen|gelb|lila|rot|grau):", re.UNICODE)
     treffer = [z for z in app.splitlines()
                if verboten.search(z)

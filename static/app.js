@@ -103,12 +103,12 @@ function schriftgroesseZeigen() {
 // hier an genau einer Stelle statt verstreut in den Renderfunktionen.
 // ---------------------------------------------------------------------------
 const DIAGRAMM_FARBE = {
-    blau: '#3B82F6',
-    gruen: '#10B981',
-    gelb: '#F59E0B',
-    lila: '#8B5CF6',
-    rot: '#EF4444',
-    grau: '#9CA3AF',
+    blau: '#4F46E5',
+    gruen: '#2E7D6B',
+    gelb: '#C27A12',
+    lila: '#8E4FB8',
+    rot: '#A3312A',
+    grau: '#8C8FA6',
 };
 
 async function abmelden() {
@@ -218,7 +218,7 @@ window.wrapInterpolated = (valStr, isInterpolated, infoObj) => {
     }
     
     return `<span class="interpolated-wrapper">
-        <span class="interpolated-value"><b style="color:var(--primary);margin-right:4px;font-size:1.1em;">~</b> ${valStr}</span>
+        <span class="interpolated-value"><b style="color:var(--primary);margin-right:4px;">~</b> ${valStr}</span>
         <span class="math-icon" ${clickAttr}><i class="ph ph-calculator" aria-hidden="true"></i></span>
         <div class="glass-tooltip">${ttStr}</div>
     </span>`;
@@ -627,6 +627,8 @@ function zeigeHilfe(abschnitt) {
         tab.classList.remove('active');
         tab.style.display = 'none';
     });
+    const gruss = document.querySelector('.greeting');
+    if (gruss) gruss.hidden = true;
     // data-fest bleibt offen: „Über …“ im Menü der Windows-App darf den
     // Haftungshinweis nicht wegklicken (NK-174).
     document.querySelectorAll('.modal-overlay.active:not([data-fest])')
@@ -1418,7 +1420,7 @@ async function showPropertyDetails(prop) {
                 
                 const item = document.createElement('div');
                 item.style.padding = '12px';
-                item.style.background = 'rgba(255,255,255,0.4)';
+                item.style.background = 'var(--bg-color)';
                 item.style.borderRadius = '8px';
                 item.style.display = 'flex';
                 item.style.justifyContent = 'space-between';
@@ -1509,7 +1511,7 @@ async function renderHeizungsanlagen(propertyId) {
     aktuelleHeizungsanlagen.forEach(anlage => {
         const item = document.createElement('div');
         item.style.padding = '12px';
-        item.style.background = 'rgba(255,255,255,0.4)';
+        item.style.background = 'var(--bg-color)';
         item.style.borderRadius = '8px';
         item.style.display = 'flex';
         item.style.justifyContent = 'space-between';
@@ -1744,7 +1746,7 @@ async function fetchTenants() {
             const title = document.createElement('h3');
             title.textContent = propName;
             title.style.marginBottom = '16px';
-            title.style.borderBottom = '2px solid rgba(79, 70, 229, 0.2)';
+            title.style.borderBottom = '1px solid var(--border-color)';
             title.style.paddingBottom = '8px';
             box.appendChild(title);
             
@@ -1794,7 +1796,7 @@ async function fetchTenants() {
                     const contractBtn = document.createElement('button');
                     contractBtn.className = 'btn-icon';
                     contractBtn.innerHTML = '<i class="ph ph-file-text"></i> Ansehen';
-                    contractBtn.style.fontSize = '0.85rem';
+                    contractBtn.style.fontSize = '13px';
                     contractBtn.style.color = 'var(--primary-color)';
                     contractBtn.onclick = () => huelle.oeffnen(`/api/tenants/${t.id}/contract`);
                     tdContract.appendChild(contractBtn);
@@ -2493,7 +2495,7 @@ function getReadingHtml(r, einheit) {
 
     let valStr = `<strong>${formatVal(r.value)}${escapeHtml(unit)}</strong>`;
     if (r.value_nt !== null && r.value_nt !== undefined) {
-        valStr = `<strong><span style="color: var(--text-muted); font-size: 0.85em; font-weight: normal;">HT:</span> ${formatVal(r.value)}${escapeHtml(unit)} <span style="color: var(--text-muted); font-size: 0.85em; font-weight: normal; margin-left: 8px;">NT:</span> ${formatVal(r.value_nt)}${escapeHtml(unit)}</strong>`;
+        valStr = `<strong><span style="color: var(--text-muted); font-size: 13px; font-weight: normal;">HT:</span> ${formatVal(r.value)}${escapeHtml(unit)} <span style="color: var(--text-muted); font-size: 13px; font-weight: normal; margin-left: 8px;">NT:</span> ${formatVal(r.value_nt)}${escapeHtml(unit)}</strong>`;
     }
     
     let html = `${valStr} <br><small style="color:var(--text-muted)">${new Date(r.reading_date).toLocaleDateString('de-DE')}</small>`;
@@ -2547,7 +2549,7 @@ function renderMeters() {
         const title = document.createElement('h3');
         title.textContent = propName;
         title.style.marginBottom = '16px';
-        title.style.borderBottom = '2px solid rgba(79, 70, 229, 0.2)';
+        title.style.borderBottom = '1px solid var(--border-color)';
         title.style.paddingBottom = '8px';
         box.appendChild(title);
         
@@ -2587,8 +2589,8 @@ function renderMeters() {
             // NK-219: die Nummer tippt der Nutzer ein, sie kommt maskiert ins HTML.
             tdNum.innerHTML = escapeHtml(m.meter_number) + (
                 m.is_official 
-                ? ' <span style="font-size: 13px; padding: 2px 6px; background: var(--primary); color: white; border-radius: 4px; margin-left: 8px;" title="Offizieller Zähler des Versorgers"><i class="ph ph-check-circle"></i> Versorger</span>' 
-                : ' <span style="font-size: 13px; padding: 2px 6px; background: var(--border-color); color: var(--text-color); border-radius: 4px; margin-left: 8px;" title="Privater Zwischenzähler">Privat</span>'
+                ? ' <span class="dq-status-badge green" style="margin-left: 8px;" title="Offizieller Zähler des Versorgers"><i class="ph ph-check-circle"></i> Versorger</span>' 
+                : ' <span class="dq-status-badge none" style="margin-left: 8px;" title="Privater Zwischenzähler">Privat</span>'
             );
             
             // NK-258: ausgebaut (Zaehlerwechsel), Einbauort und Eichfrist.
@@ -2630,8 +2632,8 @@ function renderMeters() {
             // NK-219: der Verlauf war nur über einen Klick auf die Zeile
             // zu finden; der Stift sagt jetzt, dass er nur den letzten Stand ändert.
             const verlaufBtn = document.createElement('button');
-            verlaufBtn.className = 'btn-secondary';
-            verlaufBtn.style.cssText = 'font-size: 0.85rem; padding: 4px 10px; margin-right: 8px;';
+            verlaufBtn.className = 'btn-secondary btn-klein';
+            verlaufBtn.style.cssText = 'margin-right: 8px;';
             verlaufBtn.innerHTML = '<i class="ph ph-clock-counter-clockwise"></i> Verlauf';
             verlaufBtn.title = 'Alle Stände dieses Zählers ansehen';
             verlaufBtn.onclick = () => openHistoryModal(m.id);
@@ -2650,7 +2652,7 @@ function renderMeters() {
                 // NK-257: ohne Ablesung fehlte in der Zeile jeder Weg zum ersten Stand.
                 const ersterBtn = document.createElement('button');
                 ersterBtn.className = 'btn-secondary';
-                ersterBtn.style.cssText = 'font-size: 0.85rem; padding: 4px 10px; margin-right: 8px;';
+                ersterBtn.style.cssText = 'margin-right: 8px;';
                 ersterBtn.innerHTML = '<i class="ph ph-plus" aria-hidden="true"></i> Ersten Stand erfassen';
                 ersterBtn.onclick = () => openAddReadingModal(m.id);
                 tdActions.appendChild(ersterBtn);
@@ -2801,7 +2803,7 @@ function renderInvoices() {
         const title = document.createElement('h3');
         title.textContent = propName;
         title.style.marginBottom = '16px';
-        title.style.borderBottom = '2px solid rgba(79, 70, 229, 0.2)';
+        title.style.borderBottom = '1px solid var(--border-color)';
         title.style.paddingBottom = '8px';
         box.appendChild(title);
         
@@ -2835,14 +2837,14 @@ function renderInvoices() {
                 <div class="accordion-content">
                     <table class="table-zebra" style="width: 100%; border-collapse: collapse; text-align: left;">
                         <thead>
-                            <tr style="border-bottom: 1px solid var(--border-color); background: var(--bg-hover);">
-                                <th style="padding: 12px 16px;">Von</th>
-                                <th style="padding: 12px 16px;">Bis</th>
-                                <th style="padding: 12px 16px;">Rechnungsnr.</th>
-                                <th style="padding: 12px 16px;">Anbieter</th>
-                                <th style="padding: 12px 16px;" class="text-right">Betrag</th>
-                                <th style="padding: 12px 16px;">Beleg</th>
-                                <th style="padding: 12px 16px;" class="text-right">Aktionen</th>
+                            <tr style="border-bottom: 1px solid var(--border-color);">
+                                <th style="padding: 12px 8px;">Von</th>
+                                <th style="padding: 12px 8px;">Bis</th>
+                                <th style="padding: 12px 8px;">Rechnungsnr.</th>
+                                <th style="padding: 12px 8px;">Anbieter</th>
+                                <th style="padding: 12px 8px;" class="text-right">Betrag</th>
+                                <th style="padding: 12px 8px;">Beleg</th>
+                                <th style="padding: 12px 8px;" class="text-right">Aktionen</th>
                             </tr>
                         </thead>
                         <tbody id="tbody-${accId}"></tbody>
@@ -2860,28 +2862,28 @@ function renderInvoices() {
                 const dateOpts = { day: '2-digit', month: '2-digit', year: 'numeric' };
                 
                 const tdDateFrom = document.createElement('td');
-                tdDateFrom.style.padding = "12px 16px";
+                tdDateFrom.style.padding = "12px 8px";
                 tdDateFrom.textContent = new Date(inv.start_date).toLocaleDateString('de-DE', dateOpts);
                 
                 const tdDateTo = document.createElement('td');
-                tdDateTo.style.padding = "12px 16px";
+                tdDateTo.style.padding = "12px 8px";
                 tdDateTo.textContent = new Date(inv.end_date).toLocaleDateString('de-DE', dateOpts);
                 
                 const tdNum = document.createElement('td');
-                tdNum.style.padding = "12px 16px";
+                tdNum.style.padding = "12px 8px";
                 tdNum.textContent = inv.invoice_number || '-';
                 
                 const tdProvider = document.createElement('td');
-                tdProvider.style.padding = "12px 16px";
+                tdProvider.style.padding = "12px 8px";
                 tdProvider.textContent = inv.provider_name || '-';
                 
                 const tdAmt = document.createElement('td');
-                tdAmt.style.padding = "12px 16px";
+                tdAmt.style.padding = "12px 8px";
                 tdAmt.className = "text-right";
                 tdAmt.innerHTML = `<strong>${inv.amount.toFixed(2)} €</strong>`;
                 
                 const tdDoc = document.createElement('td');
-                tdDoc.style.padding = "12px 16px";
+                tdDoc.style.padding = "12px 8px";
                 if (inv.document_path) {
                     let docUrl = dateiAdresse('rechnung', inv.id);
                     let docLabel = inv.filename ? inv.filename : 'Beleg';
@@ -2905,7 +2907,7 @@ function renderInvoices() {
                 tr.appendChild(tdDoc);
                 
                 const tdActions = document.createElement('td');
-                tdActions.style.padding = "12px 16px";
+                tdActions.style.padding = "12px 8px";
                 tdActions.className = "text-right";
                 
                 const editBtn = document.createElement('button');
@@ -2953,7 +2955,7 @@ async function openCostProfileModal(tenantId, tenantName) {
             <div class="form-group" style="background: var(--bg-hover); padding: 12px; border-radius: 8px;">
                 <label style="margin-bottom: 8px;">${escapeHtml(cat.name)}
                     <i class="ph ph-question feld-hilfe" title="Wählen Sie, wie diese Kostenart auf die Wohnungen verteilt wird. Nach Verbrauch (eigener Zähler) weist die ganze Rechnung der Wohnung zu, deren Zähler sie betrifft."></i></label>
-                <select id="profile-cat-${cat.id}" title="Wie wird diese Kostenart umgelegt?" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--border-color); background: rgba(255,255,255,0.8);">
+                <select id="profile-cat-${cat.id}" title="Wie wird diese Kostenart umgelegt?">
                     <option value="qm" ${val === 'qm' ? 'selected' : ''}>Umlage nach Wohnfläche</option>
                     <option value="personen" ${val === 'personen' ? 'selected' : ''}>Umlage nach Personen</option>
                     <option value="direkt" ${val === 'direkt' ? 'selected' : ''}>Nach Verbrauch (eigener Zähler)</option>
@@ -3141,11 +3143,11 @@ async function ladeVorauszahlungen(tenantId) {
             : m.soll === null ? ['text-muted', 'kein Soll']
             : ['dq-status-badge green', 'bezahlt'];
         return `<tr>
-            <td style="padding: 6px 8px;">${escapeHtml(m.monat.slice(5) + '/' + m.monat.slice(0, 4))}</td>
-            <td style="padding: 6px 8px; text-align: right;">${escapeHtml(m.soll === null ? '–' : euroText(m.soll))}</td>
-            <td style="padding: 6px 8px; text-align: right;">${escapeHtml(euroText(m.ist))}</td>
-            <td style="padding: 6px 8px; text-align: right;">${escapeHtml(m.differenz === null ? '–' : euroText(m.differenz))}</td>
-            <td style="padding: 6px 8px;"><span class="${escapeHtml(klasse)}">${escapeHtml(stand)}</span></td>
+            <td style="padding: 8px;">${escapeHtml(m.monat.slice(5) + '/' + m.monat.slice(0, 4))}</td>
+            <td style="padding: 8px; text-align: right;">${escapeHtml(m.soll === null ? '–' : euroText(m.soll))}</td>
+            <td style="padding: 8px; text-align: right;">${escapeHtml(euroText(m.ist))}</td>
+            <td style="padding: 8px; text-align: right;">${escapeHtml(m.differenz === null ? '–' : euroText(m.differenz))}</td>
+            <td style="padding: 8px;"><span class="${escapeHtml(klasse)}">${escapeHtml(stand)}</span></td>
         </tr>`;
     }).join('');
     const saldo = Number(d.saldo);
@@ -3737,14 +3739,14 @@ async function checkPlausibility() {
             alertBox.style.display = 'block';
             alertBox.style.backgroundColor = 'var(--danger-bg)';
             alertBox.style.color = 'var(--danger-color)';
-            alertBox.style.border = '1px solid rgba(220, 38, 38, 0.3)';
-            alertBox.innerHTML = `<i class="ph ph-warning-circle" style="margin-right: 6px;"></i> ${escapeHtml(data.message)}`;
+            alertBox.style.border = '1px solid var(--danger-border)';
+            alertBox.innerHTML = `<i class="ph ph-warning-circle" style="margin-right: 8px;"></i> ${escapeHtml(data.message)}`;
         } else if (data.status === 'success') {
             alertBox.style.display = 'block';
             alertBox.style.backgroundColor = 'var(--success-bg)';
             alertBox.style.color = 'var(--success-color)';
-            alertBox.style.border = '1px solid rgba(34, 197, 94, 0.3)';
-            alertBox.innerHTML = `<i class="ph ph-check-circle" style="margin-right: 6px;"></i> ${escapeHtml(data.message)}`;
+            alertBox.style.border = '1px solid var(--success-bg)';
+            alertBox.innerHTML = `<i class="ph ph-check-circle" style="margin-right: 8px;"></i> ${escapeHtml(data.message)}`;
         } else {
             alertBox.style.display = 'none';
         }
@@ -3978,13 +3980,13 @@ function renderDocuments() {
             <tr style="border-bottom: 1px solid var(--border-color);">
                 <td style="padding: 12px;">${escapeHtml(d.property_name)}</td>
                 <td style="padding: 12px;">
-                    <a href="${imgUrl}" target="_blank" style="color: var(--primary-color); text-decoration: none; font-weight: bold;">
+                    <a href="${imgUrl}" target="_blank" style="color: var(--primary-color); text-decoration: none; font-weight: 600;">
                         <i class="ph ph-file-pdf"></i> ${escapeHtml(d.description)}
                     </a>
                 </td>
                 <td style="padding: 12px;">${new Date(d.upload_date).toLocaleDateString('de-DE')}</td>
                 <td style="padding: 12px; text-align: right;">
-                    <button class="btn-secondary" style="padding: 6px 12px; font-size: 14px; margin-right: 8px;" onclick="openAddInvoiceForDoc(${d.id})">
+                    <button class="btn-secondary btn-klein" style="margin-right: 8px;" onclick="openAddInvoiceForDoc(${d.id})">
                         <i class="ph ph-plus"></i> Rechnung erfassen
                     </button>
                     <button class="btn-icon" title="Beleg bearbeiten" onclick="openAddDocumentModal(${d.id})" style="margin-right: 4px;"><i class="ph ph-pencil-simple"></i></button>
@@ -4473,9 +4475,9 @@ async function ladeSicherungsStatus() {
         const box = document.getElementById('sicherung-erinnerung');
         box.style.display = '';
         const stufen = {
-            rot:    { hintergrund: 'rgba(220, 53, 69, 0.14)', rand: 'rgba(220, 53, 69, 0.55)' },
-            gelb:   { hintergrund: 'rgba(255, 193, 7, 0.14)', rand: 'rgba(255, 193, 7, 0.55)' },
-            gruen:  { hintergrund: 'rgba(40, 167, 69, 0.14)', rand: 'rgba(40, 167, 69, 0.55)' },
+            rot:    { hintergrund: 'var(--danger-bg)', rand: 'var(--danger-border)' },
+            gelb:   { hintergrund: 'var(--warning-bg)', rand: 'var(--warning-color)' },
+            gruen:  { hintergrund: 'var(--success-bg)', rand: 'var(--success-bg)' },
         };
         const farbe = stufen[status.erinnerung.stufe] || stufen.gruen;
         box.style.background = farbe.hintergrund;
@@ -5791,14 +5793,14 @@ async function fetchBillingSuggestions() {
             const card = document.createElement('div');
             // NK-159: auf schmalen Fenstern rutschen die Knöpfe unter den Text
             // (Fund des Rundgangs mit der Beispielabrechnung, 390 px).
-            card.className = 'dashboard-card historie-zeile';
+            card.className = 'dashboard-card glass-panel historie-zeile';
             
             const startFmt = new Date(s.suggested_start).toLocaleDateString('de-DE');
             const endFmt = new Date(s.suggested_end).toLocaleDateString('de-DE');
             
             card.innerHTML = `
                 <div>
-                    <h3 style="margin:0; font-size: 1.1rem;">${escapeHtml(s.tenant_name)} <span style="font-size: 0.9rem; color: var(--text-muted); font-weight: normal;">(${escapeHtml(s.apartment_name)})</span></h3>
+                    <h3 style="margin:0; font-size: 18px;">${escapeHtml(s.tenant_name)} <span style="font-size: 13px; color: var(--text-muted); font-weight: normal;">(${escapeHtml(s.apartment_name)})</span></h3>
                     <p style="margin: 8px 0 0 0; color: var(--text-muted);">
                         Es liegen unberechnete Kosten vor.
                     </p>
@@ -5846,7 +5848,7 @@ async function fetchBillingHistory() {
             const card = document.createElement('div');
             // NK-159: auf schmalen Fenstern rutschen die Knöpfe unter den Text
             // (Fund des Rundgangs mit der Beispielabrechnung, 390 px).
-            card.className = 'dashboard-card historie-zeile';
+            card.className = 'dashboard-card glass-panel historie-zeile';
             
             const startFmt = new Date(r.start_date).toLocaleDateString('de-DE');
             const endFmt = new Date(r.end_date).toLocaleDateString('de-DE');
@@ -5857,20 +5859,20 @@ async function fetchBillingHistory() {
             // Build PDF link buttons dynamically
             let pdfButtons = '';
             if (r.document_path) {
-                pdfButtons += `<a href="${dateiAdresse('abrechnung', r.id)}" class="btn-secondary" target="_blank" style="text-decoration: none; display: flex; align-items: center; gap: 6px; font-size: 0.9rem;" title="Einfache PDF ansehen">
+                pdfButtons += `<a href="${dateiAdresse('abrechnung', r.id)}" class="btn-secondary" target="_blank" style="display: flex; align-items: center; gap: 8px;" title="Einfache PDF ansehen">
                     PDF ansehen (einfach)
                 </a>`;
             } else {
-                pdfButtons += `<button class="btn-secondary" onclick="generateMissingPdf(${r.tenant_id}, '${r.start_date}', '${r.end_date}', false, this)" style="font-size: 0.9rem; border-style: dashed;" title="Einfache PDF nachträglich erstellen">
+                pdfButtons += `<button class="btn-secondary" onclick="generateMissingPdf(${r.tenant_id}, '${r.start_date}', '${r.end_date}', false, this)" style="border-style: dashed;" title="Einfache PDF nachträglich erstellen">
                     PDF erstellen (einfach)
                 </button>`;
             }
             if (r.document_path_detailed) {
-                pdfButtons += `<a href="${dateiAdresse('abrechnung-detailliert', r.id)}" class="btn-secondary" target="_blank" style="text-decoration: none; display: flex; align-items: center; gap: 6px; background: rgba(79, 70, 229, 0.1); color: var(--primary); border: 1px solid rgba(79, 70, 229, 0.3); font-size: 0.9rem;" title="Detaillierte PDF ansehen">
+                pdfButtons += `<a href="${dateiAdresse('abrechnung-detailliert', r.id)}" class="btn-secondary btn-tint" target="_blank" style="display: flex; align-items: center; gap: 8px;" title="Detaillierte PDF ansehen">
                     PDF ansehen (detailliert)
                 </a>`;
             } else {
-                pdfButtons += `<button class="btn-secondary" onclick="generateMissingPdf(${r.tenant_id}, '${r.start_date}', '${r.end_date}', true, this)" style="font-size: 0.9rem; background: rgba(79, 70, 229, 0.05); color: var(--primary); border: 1px dashed rgba(79, 70, 229, 0.3);" title="Detaillierte PDF nachträglich erstellen">
+                pdfButtons += `<button class="btn-secondary" onclick="generateMissingPdf(${r.tenant_id}, '${r.start_date}', '${r.end_date}', true, this)" class="btn-tint" style="border-style: dashed;" title="Detaillierte PDF nachträglich erstellen">
                     PDF erstellen (detailliert)
                 </button>`;
             }
@@ -5878,7 +5880,7 @@ async function fetchBillingHistory() {
             const regelstandBlock = r.veraltet ? regelstandHinweis(r.id, r.regelstand_aenderungen) : '';
             card.innerHTML = `
                 <div>
-                    <h3 style="margin:0; font-size: 1.1rem;">${escapeHtml(r.tenant_name)} <span style="font-size: 0.9rem; color: var(--text-muted); font-weight: normal;">(${escapeHtml(r.apartment_name)} - ${escapeHtml(r.property_name)})</span></h3>
+                    <h3 style="margin:0; font-size: 18px;">${escapeHtml(r.tenant_name)} <span style="font-size: 13px; color: var(--text-muted); font-weight: normal;">(${escapeHtml(r.apartment_name)} - ${escapeHtml(r.property_name)})</span></h3>
                     <p style="margin: 8px 0 0 0; color: var(--text-muted);">
                         Zeitraum: ${startFmt} - ${endFmt} | Erstellt am: ${createdFmt}
                     </p>
@@ -5950,7 +5952,7 @@ function vorauszahlungsBlock(v, tenantId) {
     "Der Vorschlag, oder warum es keinen gibt. Den Knopf gibt es nur mit Mieter (Details)."
     if (!v || (!v.grund && !v.aenderung)) return '';
     const kasten = inhalt => `
-        <div class="dashboard-card glass-panel vorauszahlung-vorschlag" style="margin-bottom: 20px; padding: 16px;">
+        <div class="dashboard-card glass-panel vorauszahlung-vorschlag" style="margin-bottom: 24px; padding: 16px;">
             <h4 style="margin: 0 0 8px 0; display: flex; align-items: center; gap: 8px;">
                 <i class="ph ph-calendar-check"></i> Vorauszahlung anpassen
             </h4>${inhalt}
@@ -5962,16 +5964,16 @@ function vorauszahlungsBlock(v, tenantId) {
     const ab = new Date(v.ab).toLocaleDateString('de-DE');
     const monate = String(v.monate).replace(/\.00$/, '').replace('.', ',');
     const warnung = v.kuenftige > 0
-        ? `<p style="margin: 0 0 12px 0; color: var(--warning-color);">Ab ${escapeHtml(ab)} sind schon ${Number(v.kuenftige)} Vorauszahlungen gebucht. Ändern Sie diese, statt doppelt zu buchen.</p>`
+        ? `<p style="margin: 0 0 12px 0; color: var(--warning-text);">Ab ${escapeHtml(ab)} sind schon ${Number(v.kuenftige)} Vorauszahlungen gebucht. Ändern Sie diese, statt doppelt zu buchen.</p>`
         : '';
     const knopf = tenantId
         ? `<button type="button" class="btn-secondary" onclick="serienbuchungAnlegen(${Number(tenantId)}, '${escapeHtml(v.neu)}', '${escapeHtml(v.ab)}', ${Number(v.kuenftige)})">
                 <i class="ph ph-repeat"></i> Serienbuchung anlegen
             </button>`
-        : `<p style="margin: 0; color: var(--text-muted); font-size: 0.9rem;">Nach der Festsetzung legen Sie die Serienbuchung in den Details an.</p>`;
+        : `<p style="margin: 0; color: var(--text-muted); font-size: 13px;">Nach der Festsetzung legen Sie die Serienbuchung in den Details an.</p>`;
     return kasten(`
             <p style="margin: 0 0 8px 0;">Ab ${escapeHtml(ab)}: ${escapeHtml(euro(v.neu))} im Monat statt ${escapeHtml(euro(v.bisher))}.</p>
-            <p style="margin: 0 0 12px 0; color: var(--text-muted); font-size: 0.9rem;">
+            <p style="margin: 0 0 12px 0; color: var(--text-muted); font-size: 13px;">
                 Grundlage: ${escapeHtml(euro(v.kosten))} Kosten über ${escapeHtml(monate)} Monate, ohne Zuschlag (§ 560 Abs. 4 BGB).
                 Erklären Sie die Anpassung im Anschreiben, zum Beispiel mit dem Platzhalter {vorauszahlung_anpassung}.
             </p>${warnung}${knopf}`);
@@ -5998,7 +6000,7 @@ function berichtZustellungsBlock(id, umschlag) {
     "Der Block zur Zustellung (R-FRIST-02): was gemeldet ist, oder der Weg dorthin."
     if (umschlag.zugestellt_am) {
         return `
-            <div class="dashboard-card glass-panel" style="margin-bottom: 20px; padding: 16px;">
+            <div class="dashboard-card glass-panel" style="margin-bottom: 24px; padding: 16px;">
                 <h4 style="margin: 0 0 8px 0; display: flex; align-items: center; gap: 8px;">
                     <i class="ph ph-check-circle" style="color: var(--success-color);"></i> Zustellung gemeldet
                 </h4>
@@ -6012,11 +6014,11 @@ function berichtZustellungsBlock(id, umschlag) {
     // NK-221: das Feld startet leer; ein vorbelegtes Heute wurde
     // ungelesen gespeichert, und die Einwendungsfrist lief ab falschem Tag.
     return `
-        <div class="dashboard-card glass-panel" style="margin-bottom: 20px; padding: 16px;">
+        <div class="dashboard-card glass-panel" style="margin-bottom: 24px; padding: 16px;">
             <h4 style="margin: 0 0 8px 0; display: flex; align-items: center; gap: 8px;">
                 <i class="ph ph-clock-counter-clockwise"></i> Zustellung melden
             </h4>
-            <p style="margin: 0 0 12px 0; color: var(--text-muted); font-size: 0.9rem;">
+            <p style="margin: 0 0 12px 0; color: var(--text-muted); font-size: 13px;">
                 Tragen Sie nach, wann die Abrechnung beim Mieter war — massgeblich
                 ist der Zugang, nicht das Erstellungsdatum.
             </p>
@@ -6054,19 +6056,19 @@ function berichtVersionenBlock(id, umschlag) {
     const versionen = umschlag.versionen || [];
     let liste = '';
     if (versionen.length > 0) {
-        liste = `<p style="margin: 0 0 8px 0; color: var(--text-muted); font-size: 0.9rem;">`
+        liste = `<p style="margin: 0 0 8px 0; color: var(--text-muted); font-size: 13px;">`
             + versionen.map(v =>
                 `Version ${v.nummer} · ${new Date(v.erstellt_am).toLocaleDateString('de-DE')}`
             ).join(' · ')
             + `</p>`;
     }
     return `
-        <div class="dashboard-card glass-panel" style="margin-bottom: 20px; padding: 16px;">
+        <div class="dashboard-card glass-panel" style="margin-bottom: 24px; padding: 16px;">
             <h4 style="margin: 0 0 8px 0; display: flex; align-items: center; gap: 8px;">
                 <i class="ph ph-clock"></i> Versionen
             </h4>
             ${liste}
-            <p style="margin: 0 0 12px 0; color: var(--text-muted); font-size: 0.9rem;">
+            <p style="margin: 0 0 12px 0; color: var(--text-muted); font-size: 13px;">
                 Die Korrektur rechnet gegen die heutigen Daten, bleibt als neue
                 Version stehen und erzeugt die PDFs neu.
             </p>
@@ -6082,8 +6084,8 @@ function berichtVersionenBlock(id, umschlag) {
 function regelstandHinweis(id, aenderungen) {
     const punkteHtml = (aenderungen || []).map(t => `<li>${escapeHtml(t)}</li>`).join('');
     const erklaerungHtml = punkteHtml ? `<p style="margin: 8px 0 4px 0;">Seitdem rechnet die Software so:</p><ul style="margin: 0 0 8px 0;">${punkteHtml}</ul>` : '';
-    return `<details class="regelstand-hinweis" style="margin: 4px 0 0 0; font-size: 0.9rem;">
-        <summary style="color: var(--warning-color); cursor: pointer;"><i class="ph ph-warning" aria-hidden="true"></i> Nach älterem Regelstand erstellt</summary>
+    return `<details class="regelstand-hinweis" style="margin: 4px 0 0 0; font-size: 13px;">
+        <summary style="color: var(--warning-text); cursor: pointer;"><i class="ph ph-warning" aria-hidden="true"></i> Nach älterem Regelstand erstellt</summary>
         ${erklaerungHtml}
         <p style="margin: 0 0 8px 0;">Die Abrechnung bleibt gültig, ein neuer Regelstand allein verpflichtet nicht zur Korrektur. Sinnvoll ist sie, wenn der heutige Stand spürbar anders rechnet, vor allem zugunsten des Mieters. Zulasten des Mieters ist eine Korrektur nur bis zum Ende der Abrechnungsfrist durchsetzbar.</p>
         <button type="button" class="btn-secondary" onclick="korrekturErstellen(${Number(id)})">Unterschied ansehen</button>
@@ -6165,9 +6167,9 @@ async function openReportDetails(id) {
         
         let html = `
             <div style="margin-bottom: 24px;">
-                <h3 style="margin: 0 0 8px 0; font-size: 1.25rem;">Details zur Abrechnung</h3>
+                <h3 style="margin: 0 0 8px 0; font-size: 18px;">Details zur Abrechnung</h3>
                 <p style="color: var(--text-muted); margin: 0;">Zeitraum: ${new Date(umschlag.start_date || data.start_date).toLocaleDateString('de-DE')} - ${new Date(umschlag.end_date || data.end_date).toLocaleDateString('de-DE')}</p>
-                ${umschlag.version ? `<p style="color: var(--text-muted); margin: 4px 0 0 0; font-size: 0.9rem;">Version ${umschlag.version} · erstellt mit Software ${escapeHtml(umschlag.software_version || '')}, Regelstand ${escapeHtml(umschlag.regel_version || '')}</p>` : ''}
+                ${umschlag.version ? `<p style="color: var(--text-muted); margin: 4px 0 0 0; font-size: 13px;">Version ${umschlag.version} · erstellt mit Software ${escapeHtml(umschlag.software_version || '')}, Regelstand ${escapeHtml(umschlag.regel_version || '')}</p>` : ''}
                 ${regelstandBlock}
             </div>
             <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px;">
@@ -6185,12 +6187,12 @@ async function openReportDetails(id) {
             ${versionenBlock}
             <table class="data-table" style="width: 100%; border-collapse: collapse; text-align: left;">
                 <thead>
-                    <tr style="background-color: var(--bg-hover);">
-                        <th style="padding: 12px 8px; font-weight: 600; font-size: 0.9rem;">Kostenart</th>
-                        <th style="padding: 12px 8px; font-weight: 600; font-size: 0.9rem;">Rechnungszeitraum</th>
-                        <th style="padding: 12px 8px; font-weight: 600; font-size: 0.9rem;">Umlage-Details</th>
-                        <th style="padding: 12px 8px; font-weight: 600; font-size: 0.9rem; text-align: right;">Betrag (€)</th>
-                        <th style="padding: 12px 8px; font-weight: 600; font-size: 0.9rem; text-align: center;">Belege</th>
+                    <tr>
+                        <th>Kostenart</th>
+                        <th>Rechnungszeitraum</th>
+                        <th>Umlage-Details</th>
+                        <th style="text-align: right;">Betrag (€)</th>
+                        <th style="text-align: center;">Belege</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -6217,8 +6219,8 @@ async function openReportDetails(id) {
             html += `
                 <tr style="border-bottom: ${hasSub ? 'none' : '1px solid var(--border-color)'};">
                     <td style="font-weight: 500; padding: 12px 8px;">${escapeHtml(item.category)}</td>
-                    <td style="color: var(--text-muted); font-size: 0.9rem; white-space: nowrap; padding: 12px 8px;">${escapeHtml(item.period)}</td>
-                    <td style="color: var(--text-muted); font-size: 0.875rem; padding: 12px 8px;">${hasSub ? '' : itemDesc}</td>
+                    <td style="color: var(--text-muted); font-size: 13px; white-space: nowrap; padding: 12px 8px;">${escapeHtml(item.period)}</td>
+                    <td style="color: var(--text-muted); font-size: 13px; padding: 12px 8px;">${hasSub ? '' : itemDesc}</td>
                     <td style="font-weight: 600; text-align: right; white-space: nowrap; padding: 12px 8px;">${formatiereBetrag(item.tenant_cost)} €</td>
                     <td style="text-align: center; padding: 12px 8px;">${belegHtml}</td>
                 </tr>
@@ -6227,7 +6229,7 @@ async function openReportDetails(id) {
             if (hasSub) {
                 item.sub_items.forEach((sub, idx) => {
                     const isLast = idx === item.sub_items.length - 1;
-                    const icon = sub.type === 'eigenverbrauch' ? '<i class="ph ph-door" style="margin-right: 6px; font-size: 1.1em; color: var(--primary);"></i>' : '<i class="ph ph-house" style="margin-right: 6px; font-size: 1.1em; color: var(--text-muted);"></i>';
+                    const icon = sub.type === 'eigenverbrauch' ? '<i class="ph ph-door" style="margin-right: 8px; font-size: 1.1em; color: var(--primary);"></i>' : '<i class="ph ph-house" style="margin-right: 8px; font-size: 1.1em; color: var(--text-muted);"></i>';
                     
                     let subDesc = escapeHtml(sub.description);
                     if (item.meter_details) {
@@ -6245,12 +6247,12 @@ async function openReportDetails(id) {
                     html += `
                         <tr style="border-bottom: ${isLast ? '1px solid var(--border-color)' : 'none'}; background-color: var(--bg-hover);">
                             <td colspan="2" style="padding: 4px 8px;"></td>
-                            <td style="color: var(--text-muted); font-size: 0.85rem; padding: 4px 8px; padding-left: 24px;">
+                            <td style="color: var(--text-muted); font-size: 13px; padding: 4px 8px; padding-left: 24px;">
                                 <div style="display: flex; align-items: center;">
                                     ${icon} ${subDesc}
                                 </div>
                             </td>
-                            <td style="color: var(--text-muted); font-size: 0.85rem; text-align: right; padding: 4px 8px;">${formatiereBetrag(sub.cost)} €</td>
+                            <td style="color: var(--text-muted); font-size: 13px; text-align: right; padding: 4px 8px;">${formatiereBetrag(sub.cost)} €</td>
                             <td></td>
                         </tr>
                     `;
@@ -6260,20 +6262,20 @@ async function openReportDetails(id) {
         
         html += `
                 <tr style="border-top: 2px solid var(--text-color);">
-                    <td colspan="3" style="font-weight: 700; text-align: right; padding: 12px 8px;">Gesamtkosten der Periode:</td>
-                    <td style="font-weight: 700; text-align: right; padding: 12px 8px;">${formatiereBetrag(data.total_amount)} €</td>
+                    <td colspan="3" style="font-weight: 600; text-align: right; padding: 12px 8px;">Gesamtkosten der Periode:</td>
+                    <td style="font-weight: 600; text-align: right; padding: 12px 8px;">${formatiereBetrag(data.total_amount)} €</td>
                     <td></td>
                 </tr>
                 <tr>
-                    <td colspan="3" style="font-weight: 700; text-align: right; padding: 12px 8px;">Abzüglich geleistete Vorauszahlungen:</td>
-                    <td style="font-weight: 700; text-align: right; padding: 12px 8px; color: var(--danger-color);">- ${formatiereBetrag(data.prepaid_amount)} €</td>
+                    <td colspan="3" style="font-weight: 600; text-align: right; padding: 12px 8px;">Abzüglich geleistete Vorauszahlungen:</td>
+                    <td style="font-weight: 600; text-align: right; padding: 12px 8px; color: var(--danger-color);">- ${formatiereBetrag(data.prepaid_amount)} €</td>
                     <td></td>
                 </tr>
                 <tr style="background: var(--bg-hover);">
-                    <td colspan="3" style="font-weight: 800; text-align: right; padding: 16px 8px; font-size: 1.1em;">
+                    <td colspan="3" style="font-weight: 600; text-align: right; padding: 16px 8px; font-size: 18px;">
                         ${data.balance > 0 ? 'Nachzahlung des Mieters:' : (data.balance < 0 ? 'Guthaben des Mieters:' : 'Saldobetrag:')}
                     </td>
-                    <td style="font-weight: 800; text-align: right; padding: 16px 8px; font-size: 1.1em; color: var(--primary-color);">
+                    <td style="font-weight: 600; text-align: right; padding: 16px 8px; font-size: 18px; color: var(--primary-color);">
                         ${formatiereBetrag(data.balance)} €
                     </td>
                     <td></td>
@@ -6424,8 +6426,8 @@ function openBillingSelectionModal(suggestion) {
                 <label style="display: flex; align-items: center; gap: 12px; cursor: pointer; flex: 1;">
                     <input type="checkbox" class="category-select-cb" value="${cat.category_id}" checked style="width: 18px; height: 18px;">
                     <div>
-                        <div style="font-weight: bold;">${escapeHtml(cat.category_name)}</div>
-                        <div style="font-size: 0.85rem; color: var(--text-muted);">${startFmt} - ${endFmt} (${cat.invoice_count} Rechnungen)</div>
+                        <div style="font-weight: 600;">${escapeHtml(cat.category_name)}</div>
+                        <div style="font-size: 13px; color: var(--text-muted);">${startFmt} - ${endFmt} (${cat.invoice_count} Rechnungen)</div>
                     </div>
                 </label>
             </div>
@@ -6526,27 +6528,27 @@ async function generateBillPreview(tenantId, startDate, endDate, categoryIds = n
             let pfColor = 'var(--success-color)';
             let pfIcon = 'ph-check-circle';
             let pfTitle = 'Zählerstände: Ausgezeichnet (Alle Ablesungen innerhalb von 7 Tagen zum Stichtag)';
-            let pfBg = 'rgba(16, 185, 129, 0.1)';
-            let pfBorder = 'rgba(16, 185, 129, 0.3)';
+            let pfBg = 'var(--success-bg)';
+            let pfBorder = 'var(--success-bg)';
             
             if (zaehlerStatus === 'warning') {
                 pfColor = 'var(--danger-color)';
                 pfIcon = 'ph-warning-circle';
                 pfTitle = 'Zählerstände: Warnung (Große Lücken oder fehlende Daten)';
                 pfBg = 'var(--danger-bg)';
-                pfBorder = 'rgba(220, 38, 38, 0.3)';
+                pfBorder = 'var(--danger-border)';
             } else if (zaehlerStatus === 'acceptable') {
-                pfColor = 'var(--warning-color)';
+                pfColor = 'var(--warning-text)';
                 pfIcon = 'ph-info';
                 pfTitle = 'Zählerstände: Akzeptabel (Einige Ablesungen bis zu 14 Tage Toleranz)';
                 pfBg = 'var(--warning-bg)';
-                pfBorder = 'rgba(217, 119, 6, 0.3)';
+                pfBorder = 'var(--warning-bg)';
             }
             
             html += `
             <div style="background: ${pfBg}; border: 1px solid ${pfBorder}; border-radius: 8px; padding: 12px; margin-bottom: 24px;">
                 <details>
-                    <summary style="cursor: pointer; font-weight: bold; color: ${pfColor}; margin-bottom: 4px; display: flex; align-items: center; gap: 8px;">
+                    <summary style="cursor: pointer; font-weight: 600; color: ${pfColor}; margin-bottom: 4px; display: flex; align-items: center; gap: 8px;">
                         <i class="ph ${pfIcon}" style="font-size: 1.2rem;"></i>
                         ${pfTitle} [Details einblenden]
                     </summary>
@@ -6568,15 +6570,15 @@ async function generateBillPreview(tenantId, startDate, endDate, categoryIds = n
                             <div class="glass-tooltip">${ttStr}</div>
                         </span>`;
                     }
-                    valStr = `<div style="font-size: 0.85rem; color: var(--text-muted); display: flex; align-items: center; margin-top: 4px;">Abweichung: Start ${c.start_offset_days}T, Ende ${c.end_offset_days}T ${interpTag}</div>`;
+                    valStr = `<div style="font-size: 13px; color: var(--text-muted); display: flex; align-items: center; margin-top: 4px;">Abweichung: Start ${c.start_offset_days}T, Ende ${c.end_offset_days}T ${interpTag}</div>`;
                 } else {
-                    valStr = `<div style="font-size: 0.85rem; color: var(--danger-color); margin-top: 4px;">Keine ausreichenden Daten</div>`;
+                    valStr = `<div style="font-size: 13px; color: var(--danger-color); margin-top: 4px;">Keine ausreichenden Daten</div>`;
                 }
                 
                 html += `
                         <div style="background: white; border: 1px solid var(--border-color); padding: 8px; border-radius: 4px;">
                             <div style="display: flex; justify-content: space-between; align-items: center;">
-                                <div style="font-weight: 500; font-size: 0.9rem;">${escapeHtml(zaehlerArtName(c.category))} (${escapeHtml(c.meter_type)})</div>
+                                <div style="font-weight: 500; font-size: 13px;">${escapeHtml(zaehlerArtName(c.category))} (${escapeHtml(c.meter_type)})</div>
                                 ${statusIcon}
                             </div>
                             <div style="font-size: 13px; color: var(--text-muted); margin-top: 4px;">Zähler: ${escapeHtml(c.meter_number || 'N/A')}</div>
@@ -6596,8 +6598,8 @@ async function generateBillPreview(tenantId, startDate, endDate, categoryIds = n
         const hinweise = hinweisTexte.concat((data.warnings || []).filter(w =>
             typeof w !== 'string' || (!w.includes('interpoliert') && !hinweisTexte.includes(w))));
         if (hinweise.length > 0) {
-            html += `<div style="background: var(--warning-bg); border: 1px solid rgba(217, 119, 6, 0.3); border-radius: 8px; padding: 12px; margin-bottom: 24px;">
-                <div style="font-weight: bold; color: var(--warning-color); margin-bottom: 6px;">Hinweise zur Abrechnung</div>
+            html += `<div style="background: var(--warning-bg); border: 1px solid var(--warning-bg); border-radius: 8px; padding: 12px; margin-bottom: 24px;">
+                <div style="font-weight: 600; color: var(--warning-text); margin-bottom: 8px;">Hinweise zur Abrechnung</div>
                 <ul class="jahr-warnungen" style="margin: 0;">${warnungenHtml(hinweise)}</ul>
             </div>`;
         }
@@ -6626,11 +6628,11 @@ async function generateBillPreview(tenantId, startDate, endDate, categoryIds = n
             // Inject meter details if available
             if (item.meter_details) {
                 const md = item.meter_details;
-                let mdStr = `<div style="margin-top: 8px; font-size: 13px; background: var(--bg-color); padding: 8px; border-radius: 4px; border: 1px dashed #d1d5db;">`;
+                let mdStr = `<div style="margin-top: 8px; font-size: 13px; background: var(--bg-color); padding: 8px; border-radius: 4px; border: 1px dashed var(--control-border);">`;
                 if (md.tenant_meter && md.tenant_meter.status !== 'no_data') {
                     let tCons = md.tenant_consumption !== null ? md.tenant_consumption.toFixed(1) : 'N/A';
                     if (tCons !== 'N/A') tCons = window.wrapInterpolated(tCons, md.tenant_meter.is_interpolated, md.tenant_meter);
-                    mdStr += `<div><span style="font-weight:bold;">Ihr Wohnungszähler:</span> ${tCons} ${escapeHtml(md.unit)}</div>`;
+                    mdStr += `<div><span style="font-weight:600;">Ihr Wohnungszähler:</span> ${tCons} ${escapeHtml(md.unit)}</div>`;
                 }
                 if (md.main_meter && md.main_meter.status !== 'no_data') {
                     let mCons = md.main_consumption !== null ? md.main_consumption.toFixed(1) : 'N/A';
@@ -6645,13 +6647,13 @@ async function generateBillPreview(tenantId, startDate, endDate, categoryIds = n
                     const hzZeitraum = mm.target_start_date && mm.target_end_date
                         ? ` (${datumText(mm.target_start_date)} bis ${datumText(mm.target_end_date)})`
                         : '';
-                    mdStr += `<div><span style="font-weight:bold;">Hauptzähler${escapeHtml(hzZeitraum)}:</span> ${mCons} ${escapeHtml(md.unit)}</div>`;
-                    mdStr += `<div><span style="font-weight:bold;">Allgemeinverbrauch:</span> ${aCons} ${escapeHtml(md.unit)}</div>`;
+                    mdStr += `<div><span style="font-weight:600;">Hauptzähler${escapeHtml(hzZeitraum)}:</span> ${mCons} ${escapeHtml(md.unit)}</div>`;
+                    mdStr += `<div><span style="font-weight:600;">Allgemeinverbrauch:</span> ${aCons} ${escapeHtml(md.unit)}</div>`;
                     // NK-209: der Anteil, mit dem gerechnet wurde (Personentage)
                     if (md.allgemein_quote != null && md.allgemein_anteil != null) {
                         const prozent = (md.allgemein_quote * 100).toLocaleString('de-DE',
                             { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                        mdStr += `<div><span style="font-weight:bold;">Ihr Anteil am Allgemeinverbrauch:</span> ${md.allgemein_anteil.toFixed(1)} ${escapeHtml(md.unit)} (${prozent} %${md.preis_ht != null ? ', nach den Kosten von HT und NT gewichtet' : ''})</div>`;
+                        mdStr += `<div><span style="font-weight:600;">Ihr Anteil am Allgemeinverbrauch:</span> ${md.allgemein_anteil.toFixed(1)} ${escapeHtml(md.unit)} (${prozent} %${md.preis_ht != null ? ', nach den Kosten von HT und NT gewichtet' : ''})</div>`;
                     }
                 }
                 mdStr += `</div>`;
@@ -6661,8 +6663,8 @@ async function generateBillPreview(tenantId, startDate, endDate, categoryIds = n
             html += `
                 <tr style="border-bottom: 1px solid var(--border-color);">
                     <td style="font-weight: 500; padding: 12px 8px; vertical-align: top;">${escapeHtml(item.category)}</td>
-                    <td style="color: var(--text-muted); font-size: 0.9rem; white-space: nowrap; padding: 12px 8px; vertical-align: top;">${escapeHtml(item.period)}</td>
-                    <td style="color: var(--text-muted); font-size: 0.875rem; padding: 12px 8px; vertical-align: top;">${detailsHtml}</td>
+                    <td style="color: var(--text-muted); font-size: 13px; white-space: nowrap; padding: 12px 8px; vertical-align: top;">${escapeHtml(item.period)}</td>
+                    <td style="color: var(--text-muted); font-size: 13px; padding: 12px 8px; vertical-align: top;">${detailsHtml}</td>
                     <td style="text-align: right; font-weight: 500; padding: 12px 8px; vertical-align: top;">${escapeHtml(euroText(item.tenant_cost))}</td>
                 </tr>
             `;
@@ -6673,17 +6675,17 @@ async function generateBillPreview(tenantId, startDate, endDate, categoryIds = n
                 <tfoot>
                     <tr style="border-top: 2px solid var(--border-color);">
                         <td colspan="3" style="text-align: right; padding: 12px 8px;">Gesamtkosten der Periode:</td>
-                        <td style="text-align: right; font-weight: bold; padding: 12px 8px;">${escapeHtml(euroText(data.total_amount))}</td>
+                        <td style="text-align: right; font-weight: 600; padding: 12px 8px;">${escapeHtml(euroText(data.total_amount))}</td>
                     </tr>
                     <tr>
                         <td colspan="3" style="text-align: right; padding: 12px 8px;">Abzüglich geleistete Vorauszahlungen:</td>
                         <td style="text-align: right; color: var(--danger-color); padding: 12px 8px;">- ${escapeHtml(euroText(data.prepaid_amount))}</td>
                     </tr>
                     <tr style="background: var(--bg-hover);">
-                        <td colspan="3" style="text-align: right; font-size: 1.1rem; font-weight: bold; padding: 16px 8px;">
+                        <td colspan="3" style="text-align: right; font-size: 18px; font-weight: 600; padding: 16px 8px;">
                             ${data.balance > 0 ? 'Nachzahlung des Mieters' : (data.balance < 0 ? 'Guthaben des Mieters' : 'Saldobetrag')}
                         </td>
-                        <td style="text-align: right; font-size: 1.1rem; font-weight: bold; color: var(--primary-color); padding: 16px 8px;">${escapeHtml(euroText(data.balance))}</td>
+                        <td style="text-align: right; font-size: 18px; font-weight: 600; color: var(--primary-color); padding: 16px 8px;">${escapeHtml(euroText(data.balance))}</td>
                     </tr>
                 </tfoot>
             </table>
@@ -6925,12 +6927,12 @@ function renderMehrjahresblick(jahre) {
     }
     const wert = w => (w === null || w === undefined ? '–' : euroText(w));
     const zeile = (titel, werte, starkAttr = '') => {
-        const werteHtml = werte.map(w => `<td style="padding: 6px 8px; text-align: right;">${escapeHtml(w)}</td>`).join('');
-        return `<tr${starkAttr}><th scope="row" style="text-align: left; padding: 6px 8px; font-weight: inherit;">${escapeHtml(titel)}</th>${werteHtml}</tr>`;
+        const werteHtml = werte.map(w => `<td style="padding: 8px; text-align: right;">${escapeHtml(w)}</td>`).join('');
+        return `<tr${starkAttr}><th scope="row" style="text-align: left; padding: 8px; font-weight: inherit;">${escapeHtml(titel)}</th>${werteHtml}</tr>`;
     };
     const arten = [...new Set(jahre.flatMap(j => Object.keys(j.je_qm)))].sort();
-    const jahreHtml = jahre.map(j => `<th scope="col" style="text-align: right; padding: 6px 8px;">${escapeHtml(j.jahr)}</th>`).join('');
-    kopf.innerHTML = `<th scope="col" style="text-align: left; padding: 6px 8px;">€ je m² und Jahr</th>${jahreHtml}`;
+    const jahreHtml = jahre.map(j => `<th scope="col" style="text-align: right; padding: 8px;">${escapeHtml(j.jahr)}</th>`).join('');
+    kopf.innerHTML = `<th scope="col" style="text-align: left; padding: 8px;">€ je m² und Jahr</th>${jahreHtml}`;
     zeilen.innerHTML = arten.map(a => zeile(a, jahre.map(j => wert(j.je_qm[a])))).join('')
         + zeile('Gesamt', jahre.map(j => wert(j.je_qm_gesamt)), ' style="font-weight: 600;"')
         + zeile('Vorauszahlungen im Jahr', jahre.map(j => (j.belegte_tage ? euroText(j.vorauszahlung) : '–')))
@@ -7029,8 +7031,9 @@ function renderConsumptionTrend(timeseries_data) {
         const empty = document.createElement('div');
         empty.style.cssText = 'text-align: center; color: var(--text-muted);';
         const emptyIcon = document.createElement('i');
-        emptyIcon.className = 'ph ph-chart-line-up';
-        emptyIcon.style.cssText = 'font-size: 48px; opacity: 0.4; display: block; margin-bottom: 12px;';
+        emptyIcon.className = 'ph ph-chart-line-up leer-icon';
+        emptyIcon.setAttribute('aria-hidden', 'true');
+        emptyIcon.style.marginInline = 'auto';
         empty.appendChild(emptyIcon);
         const emptyText = document.createElement('p');
         emptyText.textContent = 'Noch keine Verbrauchsdaten vorhanden.';
@@ -7084,13 +7087,13 @@ function renderConsumptionTrend(timeseries_data) {
     
     // Header with date range
     const header = document.createElement('div');
-    header.style.cssText = 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;';
+    header.style.cssText = 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;';
     
     const title = document.createElement('div');
     title.className = 'dq-meter-title';
     title.style.display = 'flex';
     title.style.alignItems = 'center';
-    title.style.gap = '6px';
+    title.style.gap = '8px';
     const calIcon = document.createElement('i');
     calIcon.className = 'ph ph-calendar';
     calIcon.style.color = 'var(--primary)';
@@ -7105,14 +7108,14 @@ function renderConsumptionTrend(timeseries_data) {
     
     // Consumption metrics
     const metricsGrid = document.createElement('div');
-    metricsGrid.style.cssText = 'display: flex; flex-direction: column; gap: 10px;';
+    metricsGrid.style.cssText = 'display: flex; flex-direction: column; gap: 12px;';
     
     ['Strom', 'Gas', 'Wasser'].forEach(cat => {
         const cfg = categoryConfig[cat];
         const catData = data[cat];
         
         const row = document.createElement('div');
-        row.style.cssText = 'display: flex; align-items: center; gap: 10px;';
+        row.style.cssText = 'display: flex; align-items: center; gap: 12px;';
         
         // Icon
         const iconWrap = document.createElement('div');
@@ -7204,7 +7207,7 @@ async function renderTenantOverview(propId) {
     propTenants.forEach((tenant, idx) => {
         const card = document.createElement('div');
         card.className = 'dq-meter-card';
-        card.style.borderLeftColor = tenant.move_out_date ? DIAGRAMM_FARBE.grau : DIAGRAMM_FARBE.gruen;
+        card.style.borderLeftColor = tenant.move_out_date ? 'var(--field-border)' : 'var(--primary)';
         
         // Header
         const header = document.createElement('div');
@@ -7216,7 +7219,7 @@ async function renderTenantOverview(propId) {
         name.className = 'dq-meter-title';
         name.style.display = 'flex';
         name.style.alignItems = 'center';
-        name.style.gap = '6px';
+        name.style.gap = '8px';
         const icon = document.createElement('i');
         icon.className = 'ph ph-user';
         icon.style.color = 'var(--primary)';
@@ -7285,7 +7288,7 @@ async function renderTenantOverview(propId) {
         
         if (profileKeys.length > 0) {
             const pillContainer = document.createElement('div');
-            pillContainer.style.cssText = 'display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-color);';
+            pillContainer.style.cssText = 'display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-color);';
             
             profileKeys.forEach(catId => {
                 const bt = profiles[catId];
@@ -7294,10 +7297,10 @@ async function renderTenantOverview(propId) {
                 const pill = document.createElement('span');
                 pill.style.cssText = `
                     display: inline-flex; align-items: center; gap: 4px;
-                    padding: 3px 8px; border-radius: 12px; font-size: 13px; font-weight: 500;
-                    background: ${billingTypeColors[bt] || DIAGRAMM_FARBE.grau}15;
-                    color: ${billingTypeColors[bt] || DIAGRAMM_FARBE.grau};
-                    border: 1px solid ${billingTypeColors[bt] || DIAGRAMM_FARBE.grau}30;
+                    padding: 4px 8px; border-radius: var(--radius-chip); font-size: 13px; font-weight: 600; line-height: 1.2;
+                    background: var(--surface);
+                    color: var(--text-main);
+                    border: 1px solid ${billingTypeColors[bt] || DIAGRAMM_FARBE.grau};
                 `;
                 pill.textContent = `${catName}: ${billingTypeLabels[bt] || bt}`;
                 pillContainer.appendChild(pill);
@@ -7430,7 +7433,7 @@ function renderDataQuality(data) {
         const iconClass = categoryIcons[artName] || 'ph-gauge';
         const titleIcon = document.createElement('i');
         titleIcon.className = `ph ${iconClass}`;
-        titleIcon.style.marginRight = '6px';
+        titleIcon.style.marginRight = '8px';
         title.appendChild(titleIcon);
         const titleText = document.createTextNode(artName);
         title.appendChild(titleText);
@@ -7552,7 +7555,7 @@ function renderFinanceCharts(cashflowData) {
                 {
                     label: 'Einnahmen (ausstehend)',
                     data: cashflowData.map(d => d.in_forecast || 0),
-                    backgroundColor: "rgba(16, 185, 129, 0.35)",
+                    backgroundColor: DIAGRAMM_FARBE.gruen + '59',
                     borderColor: DIAGRAMM_FARBE.gruen,
                     borderWidth: 1,
                     borderDash: [4, 4],
@@ -7567,7 +7570,7 @@ function renderFinanceCharts(cashflowData) {
                 {
                     label: 'Ausgaben (ausstehend)',
                     data: cashflowData.map(d => d.out_forecast || 0),
-                    backgroundColor: "rgba(239, 68, 68, 0.35)",
+                    backgroundColor: DIAGRAMM_FARBE.rot + '59',
                     borderColor: DIAGRAMM_FARBE.rot,
                     borderWidth: 1,
                     borderDash: [4, 4],
@@ -7679,7 +7682,7 @@ function showKpiHistoryModal(title, historyData, unit) {
     let rows = '';
     historyData.forEach((entry, idx) => {
         const isLast = idx === historyData.length - 1;
-        const bgColor = isLast ? 'background: rgba(99, 102, 241, 0.08);' : '';
+        const bgColor = isLast ? 'background: var(--primary-tint);' : '';
         const fontWeight = isLast ? 'font-weight: 600;' : '';
         const valueStr = unit === '€'
             ? entry.value.toLocaleString('de-DE', {style: 'currency', currency: 'EUR'})
@@ -7687,20 +7690,20 @@ function showKpiHistoryModal(title, historyData, unit) {
         const period = entry.period || entry.year;
         rows += `
             <tr style="${bgColor}">
-                <td style="padding: 10px 12px; ${fontWeight}">${escapeHtml(entry.year)}</td>
-                <td style="padding: 10px 12px; color: var(--text-muted); font-size: 0.85em;">${escapeHtml(period)}</td>
-                <td style="padding: 10px 12px; text-align: right; ${fontWeight}">${escapeHtml(valueStr)}</td>
+                <td class="zelle" style="${fontWeight}">${escapeHtml(entry.year)}</td>
+                <td class="zelle" style="color: var(--text-muted); font-size: 13px;">${escapeHtml(period)}</td>
+                <td class="zelle" style="text-align: right; font-family: var(--font-mono); ${fontWeight}">${escapeHtml(valueStr)}</td>
             </tr>
         `;
     });
     
     content.innerHTML = `
-        <table style="width: 100%; border-collapse: collapse;">
+        <table class="tabelle">
             <thead>
-                <tr style="border-bottom: 2px solid var(--border-color);">
-                    <th style="padding: 8px 12px; text-align: left; font-size: 0.85em; color: var(--text-muted);">Jahr</th>
-                    <th style="padding: 8px 12px; text-align: left; font-size: 0.85em; color: var(--text-muted);">Zeitraum</th>
-                    <th style="padding: 8px 12px; text-align: right; font-size: 0.85em; color: var(--text-muted);">Wert</th>
+                <tr class="tabellen-kopfzeile">
+                    <th class="zelle">Jahr</th>
+                    <th class="zelle">Zeitraum</th>
+                    <th class="zelle" style="text-align: right;">Wert</th>
                 </tr>
             </thead>
             <tbody>${rows}</tbody>
@@ -7942,7 +7945,7 @@ function renderAptConsumptionChart(ownConsumptionData) {
     container.innerHTML = '';
     
     if (!ownConsumptionData || ownConsumptionData.length === 0) {
-        container.innerHTML = '<div style="color: var(--text-muted); text-align: center; width: 100%; grid-column: 1 / -1; padding: 20px;">Keine Verbrauchsdaten vorhanden.</div>';
+        container.innerHTML = '<div style="color: var(--text-muted); text-align: center; width: 100%; grid-column: 1 / -1; padding: 24px;">Keine Verbrauchsdaten vorhanden.</div>';
         return;
     }
     
@@ -7980,14 +7983,15 @@ function renderAptConsumptionChart(ownConsumptionData) {
     
     Object.values(groupedData).forEach(group => {
         const card = document.createElement('div');
-        card.style.cssText = 'background-color: white; border-radius: 12px; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); border: 1px solid var(--border-color); padding: 20px; display: flex; flex-direction: column; justify-content: center;';
+        card.style.cssText = 'background-color: var(--surface); border-radius: 12px; border: 1px solid var(--border-color); padding: 24px; display: flex; flex-direction: column; justify-content: center;';
         
         const header = document.createElement('div');
-        header.style.cssText = 'color: var(--text-muted); font-weight: 500; font-size: 14px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;';
+        header.style.cssText = 'color: var(--text-muted); font-weight: 500; font-size: 13px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;';
         header.innerHTML = `<span class="verbrauch-symbol">${getIcon(group.category)}</span><span>${escapeHtml(group.category)}</span>`;
         
         const valueDiv = document.createElement('div');
-        valueDiv.style.cssText = 'color: var(--text-main); font-size: 30px; font-weight: 700; text-align: center; margin: 10px 0;';
+        valueDiv.className = 'kpi-wert';
+        valueDiv.style.cssText = 'text-align: center; margin: 12px 0;';
         const latestValue = group.periods[group.periods.length - 1].value;
         valueDiv.innerText = `${latestValue.toLocaleString('de-DE')} ${escapeHtml(group.unit)}`;
         
@@ -7999,7 +8003,7 @@ function renderAptConsumptionChart(ownConsumptionData) {
         } else {
             let periodsHtml = '<div style="font-weight: 500; margin-bottom: 4px;">Zeiträume:</div>';
             group.periods.forEach(p => {
-                periodsHtml += `<div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 2px;">
+                periodsHtml += `<div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 4px;">
                     <span>${escapeHtml(p.period)}</span>
                     <span style="font-weight: 500;">${p.value.toLocaleString('de-DE')} ${escapeHtml(group.unit)}</span>
                 </div>`;
@@ -8248,14 +8252,14 @@ function renderPayments() {
         const zeile = (zahlungen, text, betrag) => zahlungen.length === 0 ? '' : `
                 <div style="display: flex; justify-content: space-between; width: 100%;">
                     <span>${text}:</span>
-                    <strong>${betrag.toLocaleString('de-DE', {style: 'currency', currency: 'EUR'})}</strong>
+                    <strong class="tabular-nums">${betrag.toLocaleString('de-DE', {style: 'currency', currency: 'EUR'})}</strong>
                 </div>`;
         const mieteHtml = zeile(mietePayments, 'Miete', group.latestMiete);
         const nkHtml = zeile(nkPayments, 'Nebenkosten', group.latestNK);
         const gesamtHtml = mietePayments.length + nkPayments.length === 0 ? '' : `<hr style="width: 100%; border: 0; border-top: 1px solid var(--border-color); margin: 4px 0;">
                 <div style="display: flex; justify-content: space-between; width: 100%; color: var(--text-color);">
                     <span><strong>Gesamt (mtl.):</strong></span>
-                    <strong style="color: var(--primary-color);">${totalMonthly.toLocaleString('de-DE', {style: 'currency', currency: 'EUR'})}</strong>
+                    <strong class="tabular-nums" style="color: var(--primary-color);">${totalMonthly.toLocaleString('de-DE', {style: 'currency', currency: 'EUR'})}</strong>
                 </div>`;
         
         const card = document.createElement('div');
@@ -8275,7 +8279,7 @@ function renderPayments() {
                 ${group.kaution > 0 ? `
                 <div style="display: flex; justify-content: space-between; width: 100%; color: var(--text-muted); font-size: 13px;">
                     <span>Kaution:</span>
-                    <span>${group.kaution.toLocaleString('de-DE', {style: 'currency', currency: 'EUR'})}</span>
+                    <span class="tabular-nums">${group.kaution.toLocaleString('de-DE', {style: 'currency', currency: 'EUR'})}</span>
                 </div>
                 ` : ''}
                 ${gesamtHtml}
@@ -8333,8 +8337,8 @@ function openPaymentDetailsModal(tenantId) {
             const dateStr = p.payment_date ? new Date(p.payment_date).toLocaleDateString('de-DE') : '-';
             tr.innerHTML = `
                 <td style="text-align: center;"><input type="checkbox" class="payment-row-cb" value="${p.id}" onchange="toggleDeleteSelectedButton()"></td>
-                <td style="padding: 12px 16px;">${dateStr}${isFuture ? ' <i class="ph ph-clock text-secondary" style="font-size: 0.9em; margin-left: 4px;" title="Zukunft"></i>' : ''}</td>
-                <td><span class="badge ${p.type === 'Miete' ? 'badge-primary' : (p.type === 'Nebenkostenvorauszahlung' ? 'badge-info' : 'badge-secondary')}" style="font-size: 0.85em; padding: 4px 8px;">${escapeHtml(p.type)}</span></td>
+                <td>${dateStr}${isFuture ? ' <i class="ph ph-clock text-secondary" style="font-size: 13px; margin-left: 4px;" title="Zukunft"></i>' : ''}</td>
+                <td><span class="badge ${p.type === 'Miete' ? 'badge-primary' : (p.type === 'Nebenkostenvorauszahlung' ? 'badge-info' : 'badge-secondary')}" style="font-size: 13px; padding: 4px 8px;">${escapeHtml(p.type)}</span></td>
                 <td style="text-align: right; font-weight: 500;">${p.amount.toLocaleString('de-DE', {style: 'currency', currency: 'EUR'})}</td>
                 <td style="text-align: center; width: 60px;">
                     <button class="btn-icon" onclick="deletePayment(${p.id})" title="Löschen"><i class="ph ph-trash" style="color: var(--danger-color);"></i></button>
@@ -8685,9 +8689,9 @@ async function openInterpolationAudit(meter_id, start_date, end_date) {
                 
                 tableRows += `
                 <tr>
-                    <td>${stepCount++}. Intervall<br><span style="font-size:0.85em;color:var(--text-muted);">${d1.toLocaleDateString('de-DE')} bis ${d2.toLocaleDateString('de-DE')}</span></td>
+                    <td>${stepCount++}. Intervall<br><span style="font-size: 13px;color:var(--text-muted);">${d1.toLocaleDateString('de-DE')} bis ${d2.toLocaleDateString('de-DE')}</span></td>
                     <td>${intervalConsumption.toFixed(2)} ${escapeHtml(data.unit)} / ${intervalDays} Tage<br><b>= ${dailyRate.toFixed(4)} ${escapeHtml(data.unit)}/Tag</b></td>
-                    <td>${overlapDays} Tage<br><span style="font-size:0.85em;color:var(--text-muted);">(${overlapStart.toLocaleDateString('de-DE')} - ${(new Date(overlapEnd.getTime() - (1000 * 60 * 60 * 24))).toLocaleDateString('de-DE')})</span></td>
+                    <td>${overlapDays} Tage<br><span style="font-size: 13px;color:var(--text-muted);">(${overlapStart.toLocaleDateString('de-DE')} - ${(new Date(overlapEnd.getTime() - (1000 * 60 * 60 * 24))).toLocaleDateString('de-DE')})</span></td>
                     <td style="font-weight:600; text-align:right;">${partConsumption.toFixed(2)} ${escapeHtml(data.unit)}</td>
                 </tr>
                 `;
@@ -8709,10 +8713,10 @@ async function openInterpolationAudit(meter_id, start_date, end_date) {
                 
                 tableRows += `
                 <tr style="background:var(--warning-bg);">
-                    <td>Fallback-Schätzung<br><span style="font-size:0.85em;color:var(--text-muted);">Für Randtage</span></td>
+                    <td>Fallback-Schätzung<br><span style="font-size: 13px;color:var(--text-muted);">Für Randtage</span></td>
                     <td>Globale Rate<br><b>= ${globalRate.toFixed(4)} ${escapeHtml(data.unit)}/Tag</b></td>
                     <td>${missingDays} fehlende Tage</td>
-                    <td style="font-weight:600; text-align:right; color:var(--warning-color);">+ ${fallbackConsumption.toFixed(2)} ${escapeHtml(data.unit)}</td>
+                    <td style="font-weight:600; text-align:right; color:var(--warning-text);">+ ${fallbackConsumption.toFixed(2)} ${escapeHtml(data.unit)}</td>
                 </tr>
                 `;
             }
@@ -8720,11 +8724,11 @@ async function openInterpolationAudit(meter_id, start_date, end_date) {
         
         timelineHtml += `
             </div>
-            <div style="margin-top: 60px; font-size: 0.85em; color: var(--text-muted);">
+            <div style="margin-top: 48px; font-size: 13px; color: var(--text-muted);">
                 <b>Legende:</b> 
-                <span style="display:inline-block; width:12px; height:12px; background:#d1d5db; margin-left:8px; border-radius:2px;"></span> Ablesezeitraum
+                <span style="display:inline-block; width:12px; height:12px; background:var(--control-border); margin-left:8px; border-radius:2px;"></span> Ablesezeitraum
                 <span style="display:inline-block; width:12px; height:12px; background:var(--primary); margin-left:8px; border-radius:2px;"></span> Abrechnungszeitraum
-                <span style="display:inline-block; width:12px; height:12px; border: 1px solid var(--secondary); background: repeating-linear-gradient(45deg, rgba(16,185,129,0.4), rgba(16,185,129,0.4) 3px, rgba(16,185,129,0.7) 3px, rgba(16,185,129,0.7) 6px); margin-left:8px; border-radius:2px;"></span> Verrechnete Überlappung
+                <span style="display:inline-block; width:12px; height:12px; border: 1px solid var(--warning-text); background: repeating-linear-gradient(45deg, var(--warning-bg), var(--warning-bg) 3px, var(--warning-color) 3px, var(--warning-color) 6px); margin-left:8px; border-radius:2px;"></span> Verrechnete Überlappung
             </div>
         </div>`;
         
@@ -8741,7 +8745,7 @@ async function openInterpolationAudit(meter_id, start_date, end_date) {
             </thead>
             <tbody>
                 ${tableRows}
-                <tr style="background:var(--bg-color); font-size: 1.1em;">
+                <tr style="background:var(--bg-color);">
                     <td colspan="3" style="text-align:right; font-weight:600;">Gesamtsumme (Interpoliert):</td>
                     <td style="font-weight:600; color:var(--primary); text-align:right;">${totalConsumption.toFixed(2)} ${escapeHtml(data.unit)}</td>
                 </tr>

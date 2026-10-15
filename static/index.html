@@ -14,7 +14,8 @@
          Kein Code aus dem Internet -- ohne Internet funktioniert alles,
          und keine IP-Adresse geht an Google oder ein CDN (F-54).
          Feste Versionen, Lizenzen liegen neben den Dateien. -->
-    <link rel="stylesheet" href="/static/vendor/fonts/outfit/outfit.css">
+    <link rel="stylesheet" href="/static/vendor/fonts/instrument-sans/instrument-sans.css">
+    <link rel="stylesheet" href="/static/vendor/fonts/ibm-plex-mono/ibm-plex-mono.css">
     <link rel="stylesheet" href="/static/vendor/phosphor/regular/style.css">
     <link rel="stylesheet" href="/static/vendor/phosphor/fill/style.css">
     <link rel="stylesheet" href="/static/style.css?v=12">
@@ -22,11 +23,6 @@
 </head>
 
 <body>
-    <div class="background-blobs">
-        <div class="blob blob-1"></div>
-        <div class="blob blob-2"></div>
-    </div>
-
     <div class="app-container">
         <!-- Sidebar -->
         <aside class="sidebar glass-panel">
@@ -233,7 +229,7 @@
                             <div>
                                 <h3 id="detail-prop-title">Wohnungen in Immobilien-Name</h3>
                                 <p id="detail-prop-sqm"
-                                    style="color: var(--text-muted); font-size: 14px; margin-top: 4px;">Gesamtfläche: 0
+                                    style="color: var(--text-muted); font-size: 13px; margin-top: 4px;">Gesamtfläche: 0
                                     m²</p>
                             </div>
                             <div class="zeile-eng">
@@ -509,7 +505,7 @@
                             <button class="btn-primary" id="btn-update-installieren" style="display: none;"
                                 onclick="updateInstallieren()">Update installieren</button>
                         </div>
-                        <p id="update-stand" style="margin: 12px 0 0; line-height: 1.5; font-size: 0.9rem;"></p>
+                        <p id="update-stand" style="margin: 12px 0 0; line-height: 1.5; font-size: 13px;"></p>
                     </div>
 
                     <!-- NK-153 (D-89): geloeschte Mietverhaeltnisse, deren
@@ -518,7 +514,7 @@
                         <div class="abstand-unten-klein">
                             <h3>Gesperrte Mietverhältnisse</h3>
                         </div>
-                        <p style="margin: 0 0 12px; color: var(--text-muted); line-height: 1.5; font-size: 0.9rem;">
+                        <p style="margin: 0 0 12px; color: var(--text-muted); line-height: 1.5; font-size: 13px;">
                             Gelöschte Mieter, deren festgesetzte Abrechnungen und Zahlungen der
                             Aufbewahrungspflicht unterliegen (§ 147 AO, § 257 HGB). Sie sind überall
                             ausgeblendet und werden nach dem genannten Tag automatisch gelöscht.
@@ -575,13 +571,13 @@
                                     <input type="password" id="sicherung-passphrase2" autocomplete="new-password"
                                         minlength="12" placeholder="Passphrase wiederholen" style="flex: 1; min-width: 200px;">
                                 </div>
-                                <p style="font-size: 13px; color: var(--text-muted); margin: 6px 0 0;">
+                                <p style="font-size: 13px; color: var(--text-muted); margin: 8px 0 0;">
                                     Ohne die Passphrase lässt sich die Sicherung nicht mehr öffnen — niemand
                                     kann sie wiederherstellen. Bewahren Sie sie getrennt von der Sicherung auf.
                                 </p>
                             </div>
                         </div>
-                        <div id="sicherung-festplatte" style="display: none; font-size: 13px; padding: 10px 14px; border-radius: 8px; margin-bottom: 16px; line-height: 1.5; background: var(--bg-hover);"></div>
+                        <div id="sicherung-festplatte" style="display: none; font-size: 13px; padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; line-height: 1.5; background: var(--bg-hover);"></div>
                         <div class="form-group feld-zeile">
                             <input class="feld-breit" type="text" id="sicherung-ziel" placeholder="Verzeichnis für die Sicherung"
                                 list="sicherung-ziele">
@@ -918,7 +914,7 @@
 
                     <!-- Zone 3: Mieterübersicht -->
                     <div class="dashboard-card glass-panel">
-                        <h3 style="margin-bottom: 20px; display: flex; align-items: center; gap: 8px;">
+                        <h3 style="margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">
                             <i class="ph ph-users-three text-primaer"></i>
                             Mieterübersicht
                         </h3>
@@ -959,8 +955,8 @@
                                 <canvas id="chart-apt-costs"></canvas>
                                 <div id="chart-apt-costs-empty"
                                     style="display: none; text-align: center; color: var(--text-muted);">
-                                    <i class="ph ph-chart-pie-slice"
-                                        style="font-size: 48px; margin-bottom: 16px; opacity: 0.5;"></i>
+                                    <i class="ph ph-chart-pie-slice leer-icon" aria-hidden="true"
+                                        style="margin-inline: auto;"></i>
                                     <p>Noch keine Abrechnung erstellt.<br>Sobald die erste Nebenkostenabrechnung
                                         abgeschlossen ist, sehen Sie hier die Kostenverteilung.</p>
                                 </div>
@@ -993,7 +989,7 @@
                                     <i class="ph ph-house-line text-primaer"></i>
                                     Noch nichts zu sehen?
                                 </h3>
-                                <p style="margin: 0; color: var(--text-muted); font-size: 0.92em;">
+                                <p style="margin: 0; color: var(--text-muted); font-size: 13px;">
                                     Legen Sie eine Beispielimmobilie an: ein kleines Haus mit zwei Wohnungen,
                                     Zählern in allen vier Zuständen der Aktualität und einer Warnung.
                                     Sie können sie danach wie jede andere Immobilie bearbeiten oder löschen.
@@ -1034,7 +1030,7 @@
                                 <i class="ph ph-warning" style="color: var(--danger-color);"></i>
                                 Warnungen
                             </h3>
-                            <p style="margin: 0 0 16px 0; color: var(--text-muted); font-size: 0.92em;">
+                            <p style="margin: 0 0 16px 0; color: var(--text-muted); font-size: 13px;">
                                 Diese Warnungen zeigen, wo eine Abrechnung ins Wanken gerät: Wer nach Verbrauch
                                 abrechnet, braucht einen Zähler, der die Wohnung misst. Ohne ihn lassen sich diese
                                 Kosten nicht nach Verbrauch verteilen: Heizkosten gehen dann ganz nach Wohnfläche,
@@ -1059,7 +1055,7 @@
                                 <!-- Summary counts injected by JS -->
                             </div>
                         </div>
-                        <p style="margin: 0 0 20px 0; color: var(--text-muted); font-size: 0.92em;">
+                        <p style="margin: 0 0 24px 0; color: var(--text-muted); font-size: 13px;">
                             Die Farbe sagt, wie alt die letzte Ablesung ist: <strong>grün</strong> unter 90 Tagen,
                             <strong>gelb</strong> unter 180, <strong>rot</strong> 180 Tage und mehr —
                             <strong>ohne Punkt</strong> heißt nie gelesen. Ohne aktuellen Stand rechnet die
@@ -1638,7 +1634,7 @@
                             <span id="tenant-contract-name">Datei auswählen...</span>
                         </label>
                     </div>
-                    <div id="tenant-contract-info" style="font-size: 0.85rem; color: var(--text-muted); margin-top: 4px; display: none;"></div>
+                    <div id="tenant-contract-info" style="font-size: 13px; color: var(--text-muted); margin-top: 4px; display: none;"></div>
                 </div>
             </div>
             <div class="modal-footer">
@@ -1985,7 +1981,7 @@
                             style="display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none;">
                             <input type="checkbox" id="reading-is-official" style="width: 16px; height: 16px;"
                                 onchange="document.getElementById('group-reading-provider').style.display = this.checked ? 'block' : 'none';">
-                            <span style="font-size: 14px; font-weight: 500; color: var(--text-color);">Ablesung stammt aus
+                            <span style="font-size: 15px; font-weight: 500; color: var(--text-color);">Ablesung stammt aus
                                 offizieller Rechnung</span>
                         </label>
                     </div>
@@ -1994,7 +1990,7 @@
                         <select id="reading-provider"></select>
                     </div>
                     <div id="plausibility-alert"
-                        style="display: none; padding: 12px; border-radius: 8px; margin-top: 16px; font-size: 14px; font-weight: 500;">
+                        style="display: none; padding: 12px; border-radius: 8px; margin-top: 16px; font-size: 15px; font-weight: 500;">
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -2326,7 +2322,7 @@
                 <div class="form-group">
                     <label for="frei-mieter">Mieter</label>
                     <select id="frei-mieter" class="form-control"></select>
-                    <p style="margin: 8px 0 0 0; color: var(--text-muted); font-size: 14px;">
+                    <p style="margin: 8px 0 0 0; color: var(--text-muted); font-size: 13px;">
                         Abgerechnet wird auf das Mietverhältnis dieser Person; liegt der
                         gewählte Zeitraum vor dem Einzug oder nach dem Auszug, stutzt die
                         Abrechnung ihn auf den Mietzeitraum.
@@ -2343,7 +2339,7 @@
                     </div>
                 </div>
                 <div id="frei-zeitraumvorschlag" class="zeitraumvorschlag" hidden></div>
-                <p style="margin-bottom: 0; color: var(--text-muted); font-size: 14px;">
+                <p style="margin-bottom: 0; color: var(--text-muted); font-size: 13px;">
                     In die Abrechnung fließen alle Kostenarten ein, für die im gewählten
                     Zeitraum Rechnungen vorliegen. Vorbelegt ist der Vorschlag der App, ohne
                     Vorschlag das vergangene Kalenderjahr. Sie können beide Daten frei ändern.
@@ -2410,14 +2406,14 @@
                         class="ph ph-x"></i></button>
             </div>
             <div class="modal-body">
-                <p id="anschreiben-status" style="margin: 0 0 12px 0; color: var(--text-muted); font-size: 0.9rem;"></p>
+                <p id="anschreiben-status" style="margin: 0 0 12px 0; color: var(--text-muted); font-size: 13px;"></p>
                 <div class="form-group">
                     <label for="anschreiben-text">Der Text des Anschreibens. Platzhalter füllt die Software aus.</label>
                     <textarea id="anschreiben-text" rows="12" style="width: 100%; font-family: inherit;"></textarea>
                 </div>
                 <div class="form-group">
                     <label>Platzhalter</label>
-                    <p id="anschreiben-platzhalter" style="margin: 0; color: var(--text-muted); font-size: 0.9rem;"></p>
+                    <p id="anschreiben-platzhalter" style="margin: 0; color: var(--text-muted); font-size: 13px;"></p>
                 </div>
             </div>
             <div class="modal-footer">
@@ -2520,7 +2516,7 @@
             <div class="modal-header">
                 <div>
                     <h2 style="margin-bottom: 4px;">Berechnungsprotokoll</h2>
-                    <p style="color: var(--text-muted); font-size: 0.9em; margin: 0;">Der Dreisatz hinter den Kulissen: Transparente Darstellung der Stückweise-Interpolation</p>
+                    <p style="color: var(--text-muted); font-size: 13px; margin: 0;">Der Dreisatz hinter den Kulissen: Transparente Darstellung der Stückweise-Interpolation</p>
                 </div>
                 <button class="btn-icon no-print"
                     onclick="document.getElementById('interpolation-audit-modal').classList.remove('active')" aria-label="Schließen"><i
@@ -2533,7 +2529,7 @@
                 <button type="button" class="btn-secondary"
                     onclick="document.getElementById('interpolation-audit-modal').classList.remove('active')">Schließen</button>
                 <button type="button" class="btn-primary" onclick="huelle.drucken()">
-                    <i class="ph ph-printer" style="margin-right: 6px;"></i> Drucken / als PDF speichern
+                    <i class="ph ph-printer" style="margin-right: 8px;"></i> Drucken / als PDF speichern
                 </button>
             </div>
         </div>

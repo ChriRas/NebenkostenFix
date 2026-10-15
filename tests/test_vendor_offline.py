@@ -14,8 +14,9 @@ und beigeleget Lizenz. Diese Prüfungen halten das fest:
    ``app.js``) enthalten keine fremde Adresse. ``data:``-Adressen sind
    erlaubt: sie tragen die Daten in sich (SVG-Namensraum im Kopfpfeil von
    style.css) und gehen an niemanden.
-2. Die drei Pakete liegen mit Lizenzdatei vor — Chart.js (MIT),
-   Phosphor-Icons (MIT), Outfit (OFL).
+2. Die Pakete liegen mit Lizenzdatei vor — Chart.js (MIT),
+   Phosphor-Icons (MIT), die Schriften Instrument Sans und IBM Plex Mono
+   (Kontoblatt) sowie Outfit (OFL, noch von den Anmeldeseiten verlinkt).
 3. Jede gebündelte Datei ist gegen ihren sha256 gepinnt. Die Kommentare
    im Bündel von Chart.js nennen Webseiten — gesehen wird das nicht als
    Netzadresse, sondern dadurch, dass der Inhalt unveränderlich ist: Wer
@@ -57,6 +58,22 @@ PAKETE = {
         'fonts/outfit/OFL.txt',
         None,
     ),
+    'fonts/instrument-sans': (
+        ['fonts/instrument-sans/instrument-sans.css',
+         'fonts/instrument-sans/instrument-sans-latin.woff2',
+         'fonts/instrument-sans/instrument-sans-latin-ext.woff2'],
+        'fonts/instrument-sans/OFL.txt',
+        b"font-family: 'Instrument Sans';",
+    ),
+    'fonts/ibm-plex-mono': (
+        ['fonts/ibm-plex-mono/ibm-plex-mono.css',
+         'fonts/ibm-plex-mono/ibm-plex-mono-400-latin.woff2',
+         'fonts/ibm-plex-mono/ibm-plex-mono-400-latin-ext.woff2',
+         'fonts/ibm-plex-mono/ibm-plex-mono-500-latin.woff2',
+         'fonts/ibm-plex-mono/ibm-plex-mono-500-latin-ext.woff2'],
+        'fonts/ibm-plex-mono/OFL.txt',
+        b"font-family: 'IBM Plex Mono';",
+    ),
 }
 
 # Der Pin: sha256 jeder gebündelten Datei. Ein neues Paket heißt: Datei
@@ -79,6 +96,22 @@ PINS = {
         '6c18d579fd87c3776be068b762cbc83fde3acb543d49eabd3ade842eb987e887',
     'fonts/outfit/outfit-latin-ext.woff2':
         '0f53d1c03b3918d744a843b5039001ee31695ca1e255e3914188df81beb461e9',
+    'fonts/instrument-sans/instrument-sans.css':
+        '9e83aad9258a5d9c5682b62891dc690d6a62f46b433bfc893634de526c083057',
+    'fonts/instrument-sans/instrument-sans-latin.woff2':
+        '2ee17598a98d8a59e4df8152d015bec9ab8e4d5672cc0ab42bef806b568e3971',
+    'fonts/instrument-sans/instrument-sans-latin-ext.woff2':
+        'c4fcfea41f2c1cfeea9211fa43679845454a1d0e0d7e95e069c7e73c4ae302d2',
+    'fonts/ibm-plex-mono/ibm-plex-mono.css':
+        'a3db36e20c83b4897fa42e3fed178bd4c830705f920a7affa1c9ad48653e586a',
+    'fonts/ibm-plex-mono/ibm-plex-mono-400-latin.woff2':
+        '08949f728dc52d528e69b1667d15c89a5686a4ee9a296ff90983985f99c380f7',
+    'fonts/ibm-plex-mono/ibm-plex-mono-400-latin-ext.woff2':
+        '6bc0f226a5b7884a8170e3f62c63d7675609d4631bdc5931b5cdab81821f00eb',
+    'fonts/ibm-plex-mono/ibm-plex-mono-500-latin.woff2':
+        '01d285447409c8a588692162439a038b8cbd7871309ee20267b0d2d91c6e8e22',
+    'fonts/ibm-plex-mono/ibm-plex-mono-500-latin-ext.woff2':
+        '6bb06407c97584b0867a959e05e8874693bfeb8c317de190811c51598f2d99ea',
 }
 
 
@@ -142,7 +175,8 @@ def test_index_laedt_nur_gebuendeltes():
     for fremd in ('fonts.googleapis', 'fonts.gstatic', 'unpkg.com',
                   'cdn.jsdelivr.net'):
         assert fremd not in html, f'index.html verweist noch auf {fremd}.'
-    for gebuendelt in ('vendor/fonts/outfit/outfit.css',
+    for gebuendelt in ('vendor/fonts/instrument-sans/instrument-sans.css',
+                       'vendor/fonts/ibm-plex-mono/ibm-plex-mono.css',
                        'vendor/phosphor/regular/style.css',
                        'vendor/phosphor/fill/style.css',
                        'vendor/chartjs/chart.umd.min.js'):
@@ -154,6 +188,9 @@ def test_gebuendelte_dateien_werden_ausgeliefert(auth_client):
     antwort = auth_client.get('/static/vendor/chartjs/chart.umd.min.js')
     assert antwort.status_code == 200
     assert b'Chart.js' in antwort.data
-    antwort = auth_client.get('/static/vendor/fonts/outfit/outfit-latin.woff2')
-    assert antwort.status_code == 200
-    assert antwort.data[:4] == b'wOF2'
+    for schrift in ('outfit/outfit-latin.woff2',
+                    'instrument-sans/instrument-sans-latin.woff2',
+                    'ibm-plex-mono/ibm-plex-mono-400-latin.woff2'):
+        antwort = auth_client.get(f'/static/vendor/fonts/{schrift}')
+        assert antwort.status_code == 200, schrift
+        assert antwort.data[:4] == b'wOF2', schrift

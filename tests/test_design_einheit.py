@@ -137,3 +137,111 @@ def test_hidden_gilt_auch_fuer_knoepfe():
     stand dort vor der Übernahme)."""
     for stil in (STIL, ANMELDUNG):
         assert re.search(r'\[hidden\]\s*\{\s*display:\s*none\s*!important;', stil)
+
+
+# --- Kontoblatt (Konzept A): flach, Farben nur über Tokens -----------------
+# Ohne Schatten, Verläufe und Anheben beim Überfahren; jede Farbe kommt aus
+# :root, damit ein dunkles Thema später nur die Tokens neu setzt.
+
+def test_kontoblatt_halbtransparente_farben_nur_als_token():
+    for zeile in STIL.splitlines():
+        if 'rgba(' in zeile:
+            assert zeile.strip().startswith('--'), zeile.strip()
+    for name, text in (('index.html', SEITE), ('app.js', SKRIPT)):
+        assert 'rgba(' not in text, name
+
+
+def test_kontoblatt_ohne_schatten_und_anheben():
+    for name, text in (('style.css', STIL), ('index.html', SEITE), ('app.js', SKRIPT)):
+        for wert in re.findall(r'box-shadow:\s*([^;"\'}]+)', text):
+            assert wert.startswith(('none', 'inset')), f'{name}: box-shadow: {wert}'
+        assert 'translateY' not in text, name
+    assert 'background-blobs' not in SEITE and '.blob' not in STIL
+
+
+def test_kontoblatt_verlauf_nur_als_ocker_schraffur_der_ueberlappung():
+    for name, text in (('style.css', STIL), ('app.js', SKRIPT), ('index.html', SEITE)):
+        for treffer in re.finditer(r'([a-z-]*gradient)\(([^;]*?)\);', text, flags=re.S):
+            assert treffer.group(1) == 'repeating-linear-gradient', name
+            assert 'var(--warning-' in treffer.group(2), name
+
+
+def test_kontoblatt_schriften_nur_ueber_tokens():
+    for name, text in (('style.css', STIL), ('app.js', SKRIPT), ('index.html', SEITE)):
+        for wert in re.findall(r'font-family:\s*([^;"\'}]+)', text):
+            assert wert.strip() in ('var(--font-sans)', 'var(--font-mono)', 'inherit'), \
+                f'{name}: font-family: {wert}'
+    assert "--font-sans: 'Instrument Sans'" in STIL
+    assert "--font-mono: 'IBM Plex Mono'" in STIL
+    for css in ('instrument-sans/instrument-sans.css', 'ibm-plex-mono/ibm-plex-mono.css'):
+        assert f'/static/vendor/fonts/{css}' in SEITE
+
+
+# Kontoblatt-Skala für Inline-Stile: Text 13/15/18/24/32 px, Stärken bis 600.
+# Symbole (Phosphor-<i class="ph …">, icon.style) dürfen eigene Größen haben.
+SKALA_PX = {'13px', '15px', '18px', '24px', '32px'}
+STAERKEN = {'400', '500', '600', 'normal', 'inherit'}
+RASTER_PX = {0, 4, 8, 12, 16, 24, 32, 48}
+ABSTAND = re.compile(
+    r'(?<![-\w])(?:margin|padding)(?:-(?:top|bottom|left|right|inline|block))?\s*:\s*([^;"\'`]+)'
+    r'|(?<![-\w])(?:row-|column-)?gap\s*:\s*([^;"\'`]+)'
+    r'|\.style\.(?:margin|padding|gap)\w*\s*=\s*[\'"]([^\'"]+)')
+
+
+def _inline_quellen():
+    return (('index.html', _ohne_kommentare_html(SEITE)), ('app.js', _ohne_kommentare_js(SKRIPT)))
+
+
+def test_kontoblatt_inline_schrift_nur_auf_der_skala():
+    funde = []
+    for name, text in _inline_quellen():
+        for nr, zeile in enumerate(text.splitlines(), 1):
+            if 'class="ph ' in zeile or re.search(r'[iI]con\.style', zeile):
+                continue
+            funde += [f'{name}:{nr} font-size: {w}'
+                      for w in re.findall(r'font-size:\s*([0-9.]+(?:px|rem|em))', zeile)
+                      if w not in SKALA_PX]
+            funde += [f'{name}:{nr} font-weight: {w}'
+                      for w in re.findall(r'font-weight:\s*(\w+)', zeile) if w not in STAERKEN]
+    assert funde == [], funde
+
+
+def test_kontoblatt_inline_abstaende_auf_dem_raster():
+    funde = []
+    for name, text in _inline_quellen():
+        for m in ABSTAND.finditer(text):
+            wert = next(g for g in m.groups() if g is not None)
+            for zahl, einheit in re.findall(r'(-?\d+(?:\.\d+)?)(px|rem|em|%)?', wert):
+                if einheit == '%':
+                    continue
+                if einheit in ('rem', 'em') or (abs(float(zahl)) not in RASTER_PX):
+                    nr = text.count('\n', 0, m.start()) + 1
+                    funde.append(f'{name}:{nr} {m.group(0).strip()}')
+    assert funde == [], funde
+
+
+def test_kontoblatt_seitentitel_und_tabellenkopf_einheitlich():
+    # Jede Seite außer der Übersicht beginnt mit einem Kopf samt h2; die
+    # gemeinsame Regel macht daraus den 32-px-Titel des Kontoblatts.
+    seiten = list(re.finditer(r'<section[^>]*\btab-content\b[^>]*>', SEITE))
+    assert len(seiten) >= 10
+    for seite in seiten:
+        tab = re.search(r'id="([^"]+)"', seite.group(0)).group(1)
+        rest = SEITE[seite.end():]
+        erstes = re.search(r'<(\w+)([^>]*)>', rest)
+        assert 'section-header' in erstes.group(2), f'{tab} beginnt nicht mit .section-header'
+        assert re.match(r'\s*(?:<div>\s*)?<h2\b', rest[erstes.end():]), f'{tab}: Kopf ohne h2 vorn'
+    titel = re.search(r'\.tab-content:not\(#tab-dashboard\) > \.section-header:first-child h2\s*\{([^}]*)\}', STIL)
+    assert titel and 'font-size: 32px' in titel.group(1), 'Seitentitel-Regel fehlt'
+    kopf = re.search(r'\nthead th,\s*\.zaehler-kopf th\s*\{([^}]*)\}', STIL)
+    assert kopf and 'text-transform: uppercase' in kopf.group(1), 'Spaltenkopf-Regel fehlt'
+    # h3 ohne eigene Klasse ist Kartentitel: dieselbe Stufe wie .karten-kopf.
+    assert re.search(r'\nh3 \{\s*font-size: 18px;', STIL)
+
+
+def test_kontoblatt_betraege_in_plex_mono():
+    """Ein Euro-Betrag, den ein nacktes <strong>/<span> umschließt, erbte die
+    Textschrift (Zahlungskarte). Beträge tragen .tabular-nums."""
+    nackt = re.findall(
+        r'<(?:strong|b|span)(?: style="[^"]*")?>\$\{[^}]*currency', _ohne_kommentare_js(SKRIPT))
+    assert not nackt, nackt

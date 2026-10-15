@@ -56,4 +56,5 @@ def test_kpi_kacheln_ohne_inline_style():
     assert {'kpi-karte', 'kpi-trend--hoch', 'kpi-wert--offen'} <= klassen
     for klasse in sorted(k for k in klassen if k.startswith('kpi-')):
         assert re.search(rf'\.{re.escape(klasse)}\b', STIL), klasse
-    assert re.search(r'\.kpi-clickable:hover\s*\{[^}]*transform', STIL)
+    assert re.search(r'\.kpi-clickable:hover\s*\{[^}]*background', STIL)
+    assert 'translateY' not in STIL  # Kontoblatt: Hover hebt nichts an
