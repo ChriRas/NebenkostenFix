@@ -1,6 +1,6 @@
 """Rundgang als neuer Nutzer, als Prüfung (NK-157, F-89).
 
-    python scripts/rundgang.py --ausgabe rundgang-bilder [--chromium /pfad/chrome]
+    python scripts/rundgang.py --ausgabe rundgang-bilder [--chromium /pfad/chrome] [--readme ordner]
 
 Startet NebenkostenFix mit einem leeren Datenordner (waitress, freier Port),
 fährt mit Chromium durch die Anwendung, wie es ein neuer Nutzer täte, und
@@ -61,6 +61,12 @@ DIALOGE = {
     'rechnungstabelle': 'oeffneRechnungstabelle()',  # NK-161
     'jahresassistent': 'oeffneJahrAssistent()',  # NK-160
 }
+
+# --readme: Bilder für README (1440×900) und Microsoft Store (1920×1080) aus
+# der Beispielimmobilie. Name → Bereich, None ist die Hilfe.
+README_BILDER = {'uebersicht': 'dashboard', 'abrechnung': 'billing', 'hilfe': None}
+STORE_BILDER = {'1-heute': 'dashboard', '2-rechnungen': 'invoices', '3-zaehler': 'meters',
+                '4-abrechnungen': 'billing', '5-statistiken': 'reports', '6-hilfe': None}
 
 RUECKFRAGE_BEJAHEN = ("() => { if (document.getElementById('frage-modal')"
                       ".classList.contains('active')) frageAntwort(true); }")
@@ -279,7 +285,17 @@ class Rundgang:
                                     'unter dem Inhalt darüber')
 
 
-def rundgang(chromium: str | None, ausgabe: Path) -> list[str]:
+def schaufenster(seite, ordner: Path, bilder: dict[str, str | None]) -> None:
+    """Aufnahmen im Bildausschnitt, ohne Einführungstour, von oben."""
+    ordner.mkdir(parents=True, exist_ok=True)
+    for name, bereich in bilder.items():
+        seite.evaluate("(b) => { tourBeenden(); b ? wechsleZuTab(b) : zeigeHilfe(); window.scrollTo(0, 0); }",
+                       bereich)
+        seite.wait_for_timeout(1500)  # Diagramme gezeichnet, Aufsteigen vorbei
+        seite.screenshot(path=str(ordner / f'{name}.png'))
+
+
+def rundgang(chromium: str | None, ausgabe: Path, readme: Path | None = None) -> list[str]:
     from playwright.sync_api import sync_playwright
 
     ausgabe.mkdir(parents=True, exist_ok=True)
@@ -341,6 +357,12 @@ def rundgang(chromium: str | None, ausgabe: Path) -> list[str]:
                     seite.wait_for_timeout(1500)
                 for bereich in BEREICHE:
                     gang.bereich(bereich, 'gefuellt')
+                if readme and nummer == 0:
+                    gang.schritt = 'readme'
+                    schaufenster(seite, readme, README_BILDER)
+                    seite.set_viewport_size({'width': 1920, 'height': 1080})
+                    schaufenster(seite, readme / 'store', STORE_BILDER)
+                    seite.set_viewport_size({'width': breite, 'height': hoehe})
                 if breite < 720:
                     gang.handy()
                 # NK-158: die Hilfe hat keinen Eintrag in der Seitenleiste.
@@ -396,8 +418,10 @@ def main(argv: list[str] | None = None) -> int:
     zerleger = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     zerleger.add_argument('--ausgabe', type=Path, default=Path('rundgang-bilder'))
     zerleger.add_argument('--chromium', help='Pfad zu Chromium (sonst der von Playwright)')
+    zerleger.add_argument('--readme', type=Path,
+                          help='Ordner für README- und Store-Bilder (store/) aus der Beispielimmobilie')
     argumente = zerleger.parse_args(argv)
-    befunde = rundgang(argumente.chromium, argumente.ausgabe)
+    befunde = rundgang(argumente.chromium, argumente.ausgabe, argumente.readme)
     bericht = {'befunde': befunde, 'bilder': len(list(argumente.ausgabe.glob('*.png')))}
     (argumente.ausgabe / 'bericht.json').write_text(
         json.dumps(bericht, ensure_ascii=False, indent=2), encoding='utf-8')

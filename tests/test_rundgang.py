@@ -155,3 +155,17 @@ def test_ci_faehrt_den_dom_rauchtest():
     """
     workflow = (WURZEL / '.github' / 'workflows' / 'rundgang.yml').read_text(encoding='utf-8')
     assert 'run: node scripts/rauchtest_design.js' in workflow
+
+
+def test_readme_bilder_kommen_aus_dem_rundgang():
+    """README und Store zeigen dieselbe Oberfläche wie die App: der Rundgang
+    nimmt sie mit --readme auf, die CI legt sie ins Artefakt."""
+    readme = (WURZEL / 'README.md').read_text(encoding='utf-8')
+    assert set(re.findall(r'docs/bilder/(\w+)\.png', readme)) == set(rundgang.README_BILDER)
+    for bereich in [*rundgang.README_BILDER.values(), *rundgang.STORE_BILDER.values()]:
+        assert bereich is None or bereich in rundgang.BEREICHE
+    assert len(rundgang.STORE_BILDER) <= 10  # Grenze des Microsoft Store
+    for name in ('tourBeenden', 'wechsleZuTab', 'zeigeHilfe'):
+        assert re.search(rf'function {name}\(', SKRIPT), name
+    workflow = (WURZEL / '.github' / 'workflows' / 'rundgang.yml').read_text(encoding='utf-8')
+    assert '--readme rundgang-bilder/readme' in workflow
