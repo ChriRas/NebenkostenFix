@@ -297,6 +297,8 @@ def test_konzept_d_kopf_bricht_erst_unter_1100_pixel_um():
     assert 'flex: 0 1 640px;' in knopf and 'min-width: 0;' in knopf
     assert 'flex-wrap' not in _regel('.top-header')
     assert re.search(r'\.top-header \{\s*flex-wrap: wrap;', _media('(max-width: 1100px)'))
+    # Mit Kontomenü passt der Kopf bis 721 px in eine Zeile (Sichtprüfung 2026-10-14).
+    assert re.search(r'\.befehl-knopf \{\s*flex: 1 1 160px;', _media('(max-width: 1100px)'))
     # Nicht schrumpfende Aktionen nur auf breiten Fenstern: sonst 136 px Überlauf am Handy.
     assert re.search(r'\.top-header > \.kopf-aktionen \{\s*flex-shrink: 0;', _media('(min-width: 1101px)'))
 
@@ -362,3 +364,32 @@ def test_konzept_d_kontomenue_im_kopf_auf_jeder_breite():
     menue = menue[:menue.index('}')]
     assert 'display: none;' in menue and 'position: absolute;' in menue
     assert re.search(r'\.top-header > \.kopf-aktionen\.mit-menue\.offen \{\s*display: flex;', STIL)
+
+
+# --- Konzept D: Beleg-Eingang ------------------------------------------------
+
+def test_konzept_d_eingang_liste_vorschau_formular():
+    eingang = SEITE[SEITE.index('id="kosten-eingang"'):SEITE.index('id="kosten-rechnungen"')]
+    # Rechnung in der Mitte: Belegliste, Vorschau, Formular in dieser Reihenfolge.
+    reihe = [eingang.index(f'id="{i}"') for i in ('documents-container', 'eingang-vorschau', 'eingang-formular')]
+    assert reihe == sorted(reihe)
+    assert 'grid-template-columns: 280px minmax(0, 1fr) 400px;' in STIL
+
+
+def test_konzept_d_formular_wird_spalte_und_kehrt_zurueck():
+    js = SKRIPT[SKRIPT.index('async function openAddInvoiceModal'):]
+    js = js[:js.index('\n}\n')]
+    # Dasselbe #invoice-modal dient als Spalte; ohne Spalte zieht es zurück in den body.
+    assert 'const ziel = spalte || document.body;' in js
+    assert "dialog.classList.toggle('als-spalte', !!spalte);" in js
+    assert "if (!spalte) dialog.classList.add('active');" in js
+    # „Übernehmen“ steht am Fuß der Spalte, Schließen gibt es dort nicht.
+    fuss = STIL[STIL.index('.als-spalte .modal-footer {'):]
+    assert re.match(r'\.als-spalte \.modal-footer \{\s*position: sticky;\s*bottom: 0;', fuss)
+    assert re.search(r'\.als-spalte \.modal-footer \.btn-secondary \{\s*display: none;', STIL)
+
+
+def test_konzept_d_leerer_eingang_blendet_formular_aus():
+    # #invoice-modal bleibt in der Spalte, :empty greift dann nicht (Sichtprüfung 2026-10-14).
+    assert re.search(r'\.eingang-leer \.eingang-formular \{\s*display: none;', STIL)
+    assert "eingang.classList.toggle('eingang-leer', !eingangBeleg);" in SKRIPT

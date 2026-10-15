@@ -507,6 +507,9 @@ function initTabs() {
                     ladeUpdateEinstellung();
                 }
                 if (item.dataset.tab === 'reports') fetchAnalytics();
+                if (item.dataset.tab === 'invoices') {
+                    zeigeKostenAnsicht(kostenAnsicht || (currentDocuments.some(belegOffen) ? 'eingang' : 'rechnungen'));
+                }
             }
         });
     });
@@ -590,8 +593,8 @@ function wechsleZuTab(tabName) {
 
 // --- Heute (Konzept D) --------------------------------------------------------
 // Was jetzt zu tun ist, abgelesen aus den geladenen Daten: Zähler ohne Stand
-// im laufenden Jahr und fällige Abrechnungen. Zahlungen und Belege haben
-// keinen Status, an dem sich „offen“ ablesen ließe; sie fehlen darum hier.
+// im laufenden Jahr, Belege ohne Rechnung und fällige Abrechnungen. Zahlungen
+// haben keinen Status, an dem sich „offen“ ablesen ließe; sie fehlen darum hier.
 
 let abrechnungsVorschlaege = [];
 
@@ -608,6 +611,17 @@ function heuteAufgaben() {
             chip: 'fehlt', art: 'warn', aktion: 'Stand eintragen',
             los: () => openAddReadingModal(m.id),
         })) },
+        { name: 'Belege', aufgaben: currentDocuments
+            .filter(d => echt.properties.some(p => p.id === d.property_id) && belegOffen(d)).map(d => ({
+                titel: d.description || d.filename,
+                info: `${d.property_name} · hochgeladen am ${new Date(d.upload_date).toLocaleDateString('de-DE')}`,
+                chip: 'offen', art: 'rot', aktion: 'Rechnung übernehmen',
+                los: () => {
+                    eingangBeleg = { id: d.id, offen: true };
+                    wechsleZuTab('invoices');
+                    zeigeKostenAnsicht('eingang');
+                },
+            })) },
         { name: 'Abrechnen', aufgaben: abrechnungsVorschlaege
             .filter(v => !beispielMieter.has(v.tenant_id)).map(v => ({
                 titel: `${v.tenant_name} (${v.apartment_name})`,
@@ -1243,6 +1257,8 @@ function initModalBedienung() {
                 overlay.dataset.geaendert = '';
                 const zurueck = dialogAusloeser.get(overlay);
                 if (zurueck && document.contains(zurueck) && zurueck.focus) zurueck.focus();
+                // Lag das Rechnungsformular als Overlay über dem Eingang, kehrt es danach in die Spalte zurück.
+                if (overlay.id === 'invoice-modal') setTimeout(renderDocuments, 250);
             }
         }).observe(overlay, { attributes: true, attributeFilter: ['class'] });
     });
@@ -2646,6 +2662,7 @@ async function fetchInvoices() {
         const res = await fetch('/api/invoices');
         invoices = await res.json();
         renderInvoices();
+        renderDocuments();
         zeigeErsteSchritte();
     } catch(e) { console.error(e); }
 }
@@ -4087,7 +4104,15 @@ function toggleInvoiceHeizkosten() {
     document.getElementById('gruppe-invoice-co2').style.display = anlageWahl ? 'block' : 'none';
 }
 
-async function openAddInvoiceModal(editInvoiceId = null) {
+async function openAddInvoiceModal(editInvoiceId = null, spalte = null) {
+    // Konzept D: im Eingang steht der Dialog als Spalte neben der Vorschau,
+    // sonst wie bisher als Overlay. Speichern und Prüfen bleiben dieselben.
+    const dialog = document.getElementById('invoice-modal');
+    const ziel = spalte || document.body;
+    if (dialog.parentElement !== ziel) ziel.append(dialog);
+    dialog.classList.toggle('als-spalte', !!spalte);
+    dialog.querySelector('.modal').setAttribute('aria-modal', String(!spalte));
+    document.getElementById('btn-save-invoice').textContent = spalte ? 'Rechnung übernehmen' : 'Rechnung speichern';
     const catSelect = document.getElementById('invoice-category');
     catSelect.replaceChildren();
     categories.forEach(c => {
@@ -4197,7 +4222,7 @@ async function openAddInvoiceModal(editInvoiceId = null) {
     toggleInvoiceDescription();
     toggleInvoiceFileUpload();
     
-    document.getElementById('invoice-modal').classList.add('active');
+    if (!spalte) dialog.classList.add('active');
 }
 
 function toggleInvoiceFileUpload() {
@@ -4211,75 +4236,123 @@ function toggleInvoiceFileUpload() {
     }
 }
 
-function openAddInvoiceForDoc(docId) {
-    openAddInvoiceModal();
-    const docSelect = document.getElementById('invoice-document-id');
-    if (docSelect.querySelector(`option[value="${docId}"]`)) {
-        docSelect.value = docId;
-    }
-    toggleInvoiceFileUpload();
-}
-
-// --- Document Manager Logic ---
+// --- Eingang (Konzept D) -----------------------------------------------------
+// Offen ist ein Beleg, an dem noch keine Rechnung hängt. Links die Belege,
+// in der Mitte die Vorschau, rechts das Rechnungsformular als Spalte.
 let currentDocuments = [];
+let kostenAnsicht = null;   // bis zum ersten Besuch: Eingang, wenn etwas offen ist
+let eingangBeleg = null;    // { id, offen }: der gewählte Beleg und ob er offen war
 
 async function fetchDocuments() {
     try {
         const res = await fetch('/api/invoice_documents');
         currentDocuments = await res.json();
         renderDocuments();
+        zeigeHeute();
     } catch(e) { console.error('Belegabruf fehlgeschlagen', e); }
 }
 
+function belegOffen(d) {
+    return !invoices.some(i => i.invoice_document_id === d.id);
+}
+
+function zeigeKostenAnsicht(ansicht) {
+    kostenAnsicht = ansicht;
+    const eingang = ansicht === 'eingang';
+    document.getElementById('kosten-eingang').hidden = !eingang;
+    document.getElementById('kosten-rechnungen').hidden = eingang;
+    document.getElementById('pill-eingang').classList.toggle('active', eingang);
+    document.getElementById('pill-rechnungen').classList.toggle('active', !eingang);
+    renderDocuments();
+}
+
 function renderDocuments() {
-    const container = document.getElementById('documents-container');
-    if (!container) return;
-    
-    if (currentDocuments.length === 0) {
-        container.innerHTML = leerzustand({
-            icon: 'ph-file-pdf',
-            titel: 'Noch keine Belege hochgeladen',
-            text: 'Hier gehört der Beleg des Anbieters hinein — zum Beispiel die Jahresabrechnung der Stadtwerke.',
-            aktion: { label: 'Beleg hochladen', fn: 'openAddDocumentModal()', icon: 'ph-upload-simple' },
-        });
+    const liste = document.getElementById('documents-container');
+    if (!liste) return;
+    const offen = currentDocuments.filter(belegOffen);
+    const zahl = document.getElementById('eingang-zahl');
+    zahl.textContent = offen.length;
+    zahl.hidden = !offen.length;
+    const eingang = document.getElementById('kosten-eingang');
+    if (eingang.hidden) return;
+
+    // Nach dem Übernehmen rückt der nächste offene Beleg nach.
+    const gewaehlt = eingangBeleg && currentDocuments.find(d => d.id === eingangBeleg.id);
+    if (!gewaehlt || (eingangBeleg.offen && !belegOffen(gewaehlt))) {
+        eingangBeleg = offen.length ? { id: offen[0].id, offen: true } : null;
+    }
+    const sortiert = [...offen, ...currentDocuments.filter(d => !belegOffen(d))];
+    liste.innerHTML = sortiert.map(d => {
+        const anzahl = invoices.filter(i => i.invoice_document_id === d.id).length;
+        const info = `${d.property_name} · ${new Date(d.upload_date).toLocaleDateString('de-DE')}` +
+            (anzahl ? ` · ${anzahl === 1 ? '1 Rechnung' : `${anzahl} Rechnungen`}` : '');
+        const zeileHtml = `<span class="beleg-text"><span class="beleg-name">${escapeHtml(d.description || d.filename)}</span>` +
+            `<span class="beleg-info">${escapeHtml(info)}</span></span>` +
+            (anzahl ? '' : '<span class="chip chip-rot">offen</span>');
+        return `<button type="button" class="beleg-zeile" data-beleg="${d.id}" aria-pressed="${eingangBeleg && eingangBeleg.id === d.id ? 'true' : 'false'}">${zeileHtml}</button>`;
+    }).join('');
+    liste.querySelectorAll('.beleg-zeile').forEach(zeile => zeile.addEventListener('click', async () => {
+        const id = Number(zeile.dataset.beleg);
+        if (eingangBeleg && eingangBeleg.id === id) return;
+        if (!(await darfDialogSchliessen(document.getElementById('invoice-modal')))) return;
+        eingangBeleg = { id, offen: belegOffen(currentDocuments.find(d => d.id === id)) };
+        renderDocuments();
+    }));
+
+    const vorschau = document.getElementById('eingang-vorschau');
+    eingang.classList.toggle('eingang-leer', !eingangBeleg);
+    if (!eingangBeleg) {
+        delete vorschau.dataset.beleg;
+        vorschau.innerHTML = currentDocuments.length
+            ? leerzustand({
+                icon: 'ph-check-circle',
+                titel: 'Alles übernommen',
+                text: 'An jedem Beleg hängt eine Rechnung. Neue Belege erscheinen hier.',
+                aktion: { label: 'Rechnungen ansehen', fn: "zeigeKostenAnsicht('rechnungen')", icon: 'ph-list' },
+            })
+            : leerzustand({
+                icon: 'ph-file-pdf',
+                titel: 'Noch keine Belege hochgeladen',
+                text: 'Hier gehört der Beleg des Anbieters hinein — zum Beispiel die Jahresabrechnung der Stadtwerke.',
+                aktion: { label: 'Beleg hochladen', fn: 'openAddDocumentModal()', icon: 'ph-upload-simple' },
+            });
         return;
     }
-    
-    let html = `<table style="width: 100%; border-collapse: collapse; text-align: left;">
-        <thead>
-            <tr style="border-bottom: 1px solid var(--border-color);">
-                <th style="padding: 12px;">Immobilie</th>
-                <th style="padding: 12px;">Beschreibung</th>
-                <th style="padding: 12px;">Upload-Datum</th>
-                <th style="padding: 12px; text-align: right;">Aktionen</th>
-            </tr>
-        </thead>
-        <tbody>`;
-        
-    currentDocuments.forEach(d => {
-        const imgUrl = dateiAdresse('dokument', d.id);
-        html += `
-            <tr style="border-bottom: 1px solid var(--border-color);">
-                <td style="padding: 12px;">${escapeHtml(d.property_name)}</td>
-                <td style="padding: 12px;">
-                    <a href="${imgUrl}" target="_blank" style="color: var(--primary-color); text-decoration: none; font-weight: 600;">
-                        <i class="ph ph-file-pdf"></i> ${escapeHtml(d.description)}
-                    </a>
-                </td>
-                <td style="padding: 12px;">${new Date(d.upload_date).toLocaleDateString('de-DE')}</td>
-                <td style="padding: 12px; text-align: right;">
-                    <button class="btn-secondary btn-klein" style="margin-right: 8px;" onclick="openAddInvoiceForDoc(${d.id})">
-                        <i class="ph ph-plus"></i> Rechnung erfassen
-                    </button>
-                    <button class="btn-icon" title="Beleg bearbeiten" onclick="openAddDocumentModal(${d.id})" style="margin-right: 4px;"><i class="ph ph-pencil-simple"></i></button>
-                    <button class="btn-icon" title="Beleg löschen" onclick="deleteDocument(${d.id})"><i class="ph ph-trash"></i></button>
-                </td>
-            </tr>
-        `;
-    });
-    
-    html += `</tbody></table>`;
-    container.innerHTML = `<div class="glass-panel" style="padding: 24px;">${html}</div>`;
+    const formular = document.getElementById('eingang-formular');
+    if (vorschau.dataset.beleg !== String(eingangBeleg.id) || !formular.contains(document.getElementById('invoice-modal'))) {
+        zeigeBeleg(currentDocuments.find(d => d.id === eingangBeleg.id));
+    }
+}
+
+async function zeigeBeleg(d) {
+    const vorschau = document.getElementById('eingang-vorschau');
+    vorschau.dataset.beleg = d.id;
+    const datei = d.filename || d.document_path || '';
+    // PDF darf im Rahmen derselben Herkunft stehen (CSP frame-ancestors 'self').
+    const blattHtml = /\.pdf$/i.test(datei)
+        ? `<iframe class="beleg-blatt" src="${dateiAdresse('dokument', d.id)}" title="${escapeHtml(`Vorschau: ${d.description || datei}`)}"></iframe>`
+        : /\.(png|jpe?g|webp|gif)$/i.test(datei)
+            ? `<img class="beleg-bild" src="${dateiAdresse('dokument', d.id)}" alt="${escapeHtml(d.description || datei)}">`
+            : `<p class="beleg-ohne">${escapeHtml('Für diese Datei gibt es keine Vorschau. Öffnen Sie sie in einem neuen Tab.')}</p>`;
+    vorschau.innerHTML = `<div class="vorschau-kopf"><div class="vorschau-titel">` +
+        `<h3>${escapeHtml(d.description || datei)}</h3>` +
+        `<span class="beleg-info">${escapeHtml(`${d.property_name} · hochgeladen am ${new Date(d.upload_date).toLocaleDateString('de-DE')}`)}</span></div>` +
+        `<a class="btn-icon" href="${dateiAdresse('dokument', d.id)}" target="_blank" rel="noopener" title="In neuem Tab öffnen" aria-label="In neuem Tab öffnen"><i class="ph ph-arrow-square-out" aria-hidden="true"></i></a>` +
+        `<button type="button" class="btn-icon" title="Beleg bearbeiten" onclick="openAddDocumentModal(${d.id})"><i class="ph ph-pencil-simple"></i></button>` +
+        `<button type="button" class="btn-icon" title="Beleg löschen" onclick="deleteDocument(${d.id})"><i class="ph ph-trash"></i></button>` +
+        `</div><div class="vorschau-blatt">${blattHtml}</div>`;
+
+    await openAddInvoiceModal(null, document.getElementById('eingang-formular'));
+    if (vorschau.dataset.beleg !== String(d.id)) return;   // inzwischen ein anderer Beleg gewählt
+    document.getElementById('invoice-document-id').value = d.id;
+    toggleInvoiceFileUpload();
+    const haus = document.getElementById('invoice-property');
+    if (haus.value !== String(d.property_id)) {
+        haus.value = d.property_id;
+        await haus.onchange();
+    }
+    document.querySelector('#invoice-modal h2').textContent = 'Als Rechnung übernehmen';
+    document.getElementById('invoice-modal').dataset.geaendert = '';
 }
 
 function openAddDocumentModal(editDocId = null) {
@@ -4357,7 +4430,12 @@ async function saveDocument() {
     }
 }
 
-function closeAddInvoiceModal() { document.getElementById('invoice-modal').classList.remove('active'); }
+function closeAddInvoiceModal() {
+    const dialog = document.getElementById('invoice-modal');
+    dialog.classList.remove('active');
+    // Im Eingang lädt die Spalte nach dem Speichern neu: nächster Beleg oder leeres Formular.
+    if (dialog.classList.contains('als-spalte')) delete document.getElementById('eingang-vorschau').dataset.beleg;
+}
 
 // NK-113: Die Bezeichnung gehört zu Nr. 17 (sonstige Betriebskosten) — erkannt
 // an der Katalognummer, nicht am Namen. Der alte Namensvergleich auf
@@ -4476,7 +4554,7 @@ async function saveInvoice() {
     } catch(e) { showError(meldungZu(e, 'Fehler beim Speichern.')); }
     finally {
         btn.disabled = false;
-        btn.textContent = 'Rechnung speichern';
+        btn.textContent = btn.closest('.als-spalte') ? 'Rechnung übernehmen' : 'Rechnung speichern';
     }
 }
 

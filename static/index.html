@@ -192,15 +192,31 @@
             <!-- TAB: INVOICES -->
             <section class="content-section tab-content" id="tab-invoices">
                 <div class="section-header">
-                    <h2>Belege &amp; Sammelrechnungen <button type="button" class="begriff-hilfe" aria-label="Begriff erklären" data-begriff="sammelrechnung"><i class="ph ph-question" aria-hidden="true"></i></button></h2>
-                    <button class="btn-primary" onclick="openAddDocumentModal()"><i class="ph ph-upload-simple"></i>
-                        Beleg hochladen</button>
-                </div>
-                <div id="documents-container" style="margin-bottom: 48px;">
-                    <!-- Document table -->
+                    <h2>Rechnungen &amp; Belege <button type="button" class="begriff-hilfe" aria-label="Begriff erklären" data-begriff="sammelrechnung"><i class="ph ph-question" aria-hidden="true"></i></button></h2>
+                    <!-- Konzept D: zwei Ansichten einer Seite. Im Eingang stehen die
+                         Belege; die Rechnung wird neben der Vorschau erfasst. -->
+                    <div class="zeile-eng" role="group" aria-label="Ansicht">
+                        <button class="filter-pill" id="pill-eingang"
+                            onclick="zeigeKostenAnsicht('eingang')">Eingang <span class="pill-zahl" id="eingang-zahl" hidden></span></button>
+                        <button class="filter-pill active" id="pill-rechnungen"
+                            onclick="zeigeKostenAnsicht('rechnungen')">Rechnungen</button>
+                    </div>
+                    <div class="kopf-aktionen">
+                        <button class="btn-secondary" onclick="openAddDocumentModal()"><i class="ph ph-upload-simple" aria-hidden="true"></i>
+                            Beleg hochladen</button>
+                    </div>
                 </div>
 
-                <div class="section-header section-header-getrennt">
+                <!-- Eingang: Belegliste, Vorschau in der Mitte, Rechnung rechts.
+                     Das Rechnungsformular ist #invoice-modal, als Spalte eingehängt. -->
+                <div class="eingang" id="kosten-eingang" hidden>
+                    <div class="eingang-liste" id="documents-container"></div>
+                    <div class="eingang-vorschau" id="eingang-vorschau"></div>
+                    <div class="eingang-formular" id="eingang-formular"></div>
+                </div>
+
+                <div id="kosten-rechnungen">
+                <div class="section-header">
                     <h2>Alle Rechnungen</h2>
                     <!-- Zeitleiste (NK-144): chronologisch nach Ausstellungsdatum,
                          statt die Auffistung nach Erfassung. Auswahl-Pille wie in
@@ -238,6 +254,7 @@
                 </div>
                 <div id="invoices-zeitleiste" style="display: none;">
                     <!-- NK-144: per JS gefuellt (renderInvoiceZeitleiste) -->
+                </div>
                 </div>
             </section>
 

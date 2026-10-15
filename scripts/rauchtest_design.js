@@ -334,10 +334,10 @@ pruefe('Gefahrenzone traegt die Klasse statt Inline-Farben',
     html.includes('dashboard-card glass-panel gefahrenzone'));
 pruefe('Datenbank-Knopf ist .btn-gefahr', html.includes('class="btn-gefahr"'));
 pruefe('Detailliertes PDF ist .btn-tint', html.includes('btn-secondary btn-tint'));
-// Zwölf Pillen: Rechnungen (Liste/Zeitleiste), Einstellungen (fünf Gruppen),
-// Statistik (fünf Filter); dieselbe Zahl sichert test_ui_konsistenz.py.
-pruefe('Zwölf Auswahlpillen, keine mit Inline-Stil',
-    (html.match(/class="filter-pill/g) || []).length === 12
+// Vierzehn Pillen: Rechnungen (Eingang/Rechnungen, Liste/Zeitleiste), Einstellungen
+// (fünf Gruppen), Statistik (fünf Filter); dieselbe Zahl sichert test_ui_konsistenz.py.
+pruefe('Vierzehn Auswahlpillen, keine mit Inline-Stil',
+    (html.match(/class="filter-pill/g) || []).length === 14
     && !/class="filter-pill[^"]*"[^>]*style=/.test(html));
 pruefe('Cache-Buster erhoeht (style.css)', /style\.css\?v=\d+/.test(html));
 pruefe('Cache-Buster erhoeht (app.js)', /app\.js\?v=\d+/.test(html));
@@ -372,8 +372,9 @@ pruefe('K2: „Immobilie anlegen“ genau einmal in der Seite',
     (ui.match(/Immobilie anlegen/g) || []).length === 1);
 pruefe('K1: Immobilien-Seitenkopf trägt den Primärknopf',
     ui.indexOf('Immobilie anlegen') > ui.indexOf('id="tab-properties"'));
-pruefe('K1: .kopf-aktionen in allen acht Köpfen mit Knöpfen (global + sieben Bereiche)',
-    (ui.match(/class="kopf-aktionen"/g) || []).length === 8
+// Konzept D: „Rechnungen & Belege“ trägt Seitenkopf (Beleg hochladen) und Ansichtskopf (Rechnungen).
+pruefe('K1: .kopf-aktionen in allen neun Köpfen mit Knöpfen (global + acht Bereiche)',
+    (ui.match(/class="kopf-aktionen"/g) || []).length === 9
     && css.includes('.kopf-aktionen {'));
 pruefe('K1: .section-untertitel statt Inline-Stil (sechs Köpfe, Heute eingeschlossen)',
     (ui.match(/class="section-untertitel"/g) || []).length === 6
@@ -1102,23 +1103,28 @@ pruefe('NK-224: der Gruß steht im Kopf von „Heute“ und nirgends sonst',
         markiert === '<mark>Strom</mark> &lt;b&gt;2. <mark>OG</mark>');
 }
 
-// Konzept D: „Heute“ nennt Zähler ohne Stand im laufenden Jahr und fällige
-// Abrechnungen; Beispielmieter erzeugen keine Aufgabe.
+// Konzept D: „Heute“ nennt Zähler ohne Stand im laufenden Jahr, Belege ohne
+// Rechnung und fällige Abrechnungen; Beispieldaten erzeugen keine Aufgabe.
 {
     const quelle = (appQuelle.match(/function heuteAufgaben\(\)[\s\S]*?\n\}/) || [''])[0];
     const jahr = String(new Date().getFullYear());
     const gruppen = quelle && new Function('echterBestand', 'tenants', 'abrechnungsVorschlaege',
         'zaehlerArtName', 'datumText', 'openAddReadingModal', 'openBillingSelectionModal',
+        'currentDocuments', 'belegOffen', 'wechsleZuTab', 'zeigeKostenAnsicht',
         quelle + '; return heuteAufgaben();')(
-        () => ({ meters: [{ id: 1, category_name: 'Strom', meter_number: 'A1', property_name: 'Haus' },
+        () => ({ properties: [{ id: 1 }], meters: [{ id: 1, category_name: 'Strom', meter_number: 'A1', property_name: 'Haus' },
             { id: 2, category_name: 'Strom', meter_number: 'B2', property_name: 'Haus' }],
         readings: [{ meter_id: 1, reading_date: jahr + '-03-01' }] }),
         [{ id: 7, ist_beispiel: true }],
         [{ tenant_id: 7, tenant_name: 'Beispiel' }, { tenant_id: 8, tenant_name: 'Echt', apartment_name: 'EG' }],
-        art => art, d => d, () => {}, () => {});
+        art => art, d => d, () => {}, () => {},
+        [{ id: 5, property_id: 1, description: 'Stadtwerke', property_name: 'Haus', upload_date: '2026-02-01T10:00:00' },
+            { id: 6, property_id: 1, description: 'Erledigt', property_name: 'Haus', upload_date: '2026-02-01T10:00:00' },
+            { id: 7, property_id: 9, description: 'Beispiel', property_name: 'Beispielhaus', upload_date: '2026-02-01T10:00:00' }],
+        d => d.id !== 6, () => {}, () => {});
     const stand = (gruppen || []).map(g => g.name + ':' + g.aufgaben.map(a => a.titel + '/' + a.chip).join(',')).join('|');
-    pruefe('Konzept D: Heute zeigt nur Zähler ohne Stand und echte fällige Abrechnungen',
-        stand === 'Erfassen:Strom B2/fehlt|Abrechnen:Echt (EG)/fällig');
+    pruefe('Konzept D: Heute zeigt nur Zähler ohne Stand, offene Belege und echte fällige Abrechnungen',
+        stand === 'Erfassen:Strom B2/fehlt|Belege:Stadtwerke/offen|Abrechnen:Echt (EG)/fällig');
 }
 
 // --- NK-225: „0 von 5“ trotz Beispielhaus wird erklärt -----------------
@@ -1529,7 +1535,8 @@ async function ablesenPruefen() {
         const css = fs.readFileSync(path.join(__dirname, '..', 'static', 'style.css'), 'utf8');
         pruefe('NK-260: Hover der klickbaren Kacheln steht im Stylesheet',
             /\.kpi-clickable:hover\s*\{[^}]*background: var\(--surface-alt\)/.test(css)
-            && !/translateY/.test(css)
+            // Konzept D: Aufsteigen nur in @keyframes, kein Anheben beim Hover
+            && !/translateY/.test(css.replace(/@keyframes[^{]*\{(?:[^{}]*\{[^}]*\})*\s*\}/g, ''))
             && /\.kpi-karte\s*\{[^}]*border-left:\s*4px solid var\(--kpi-farbe/.test(css));
     }
 }

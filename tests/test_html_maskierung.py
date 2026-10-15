@@ -27,7 +27,6 @@ AUSNAHMEN = {
     # Im Code gebautes HTML, Nutzertext darin ist schon maskiert
     'beleg': 'Symbol-HTML aus festen Zeichenketten',
     'klasse': 'Phosphor-Klasse aus festen Zeichenketten (getCategoryIcon, NK-156)',
-    'html': 'Tabelle, deren Zellen einzeln maskiert werden',
     'rows': 'Zeilen, deren Zellen einzeln maskiert werden',
     'tableRows': 'Zeilen, deren Zellen einzeln maskiert werden',
     'liste': 'Liste aus maskierten Eintraegen (Versionen)',

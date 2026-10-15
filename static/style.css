@@ -369,6 +369,11 @@ a:hover {
     .top-header {
         flex-wrap: wrap;
     }
+
+    /* Kleine Basis, damit Suche, Hauswahl und Kontomenü bis 721 px in einer Zeile bleiben. */
+    .befehl-knopf {
+        flex: 1 1 160px;
+    }
 }
 
 .befehl-knopf:hover {
@@ -3209,6 +3214,235 @@ td .btn-icon,
     .konto-knopf .angemeldeter-benutzer,
     .konto-knopf .ph-caret-down {
         display: none;
+    }
+}
+
+/* Eingang (Konzept D): links die Belege, in der Mitte das Blatt, rechts das
+   Rechnungsformular als Spalte mit „Rechnung übernehmen“ am Fuß. */
+.pill-zahl {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 20px;
+    margin-left: var(--space-1);
+    padding: 0 var(--space-1);
+    border-radius: var(--radius-chip);
+    background: var(--primary);
+    color: var(--on-primary);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.eingang {
+    display: grid;
+    grid-template-columns: 280px minmax(0, 1fr) 400px;
+    gap: var(--space-5);
+    align-items: start;
+}
+
+.eingang-liste {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+
+.eingang-liste:empty + .eingang-vorschau,
+.eingang-leer .eingang-vorschau {
+    grid-column: 2 / -1;
+}
+
+.eingang-liste:empty + .eingang-vorschau {
+    grid-column: 1 / -1;
+}
+
+/* Das Formular bleibt als Kind stehen, darum zählt auch der leere Eingang. */
+.eingang-formular:empty,
+.eingang-leer .eingang-formular {
+    display: none;
+}
+
+.beleg-zeile {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    width: 100%;
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--surface);
+    color: var(--text-main);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: background-color var(--dauer-kurz) var(--kurve), border-color var(--dauer-kurz) var(--kurve);
+}
+
+.beleg-zeile:hover {
+    background: var(--bg-hover);
+}
+
+.beleg-zeile[aria-pressed="true"] {
+    background: var(--primary-tint);
+    border-color: var(--primary);
+    box-shadow: inset 3px 0 0 var(--primary);
+}
+
+.beleg-text {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    min-width: 0;
+}
+
+.beleg-name {
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.beleg-info {
+    color: var(--text-muted);
+    font-size: 13px;
+}
+
+.eingang-vorschau {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    min-width: 0;
+    animation: auftauchen var(--dauer-mittel) var(--kurve) backwards;
+}
+
+.vorschau-kopf {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.vorschau-titel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    flex: 1;
+    min-width: 0;
+}
+
+.vorschau-titel h3 {
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+/* Das Blatt liegt auf grauem Grund wie auf dem Schreibtisch; Tiefe über Rand, nicht Schatten. */
+.vorschau-blatt {
+    display: flex;
+    justify-content: center;
+    padding: var(--space-5);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    background: var(--surface-alt);
+}
+
+.beleg-blatt,
+.beleg-bild {
+    width: 100%;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    background: var(--vorschau);
+}
+
+.beleg-blatt {
+    height: calc(100vh - 390px);
+    min-height: 480px;
+}
+
+.beleg-bild {
+    height: auto;
+    max-width: 100%;
+    object-fit: contain;
+}
+
+.beleg-ohne {
+    margin: 0;
+    padding: var(--space-6) 0;
+    color: var(--text-muted);
+}
+
+/* Formular als Spalte: dasselbe #invoice-modal, ohne Überlagerung. */
+.modal-overlay.als-spalte {
+    position: sticky;
+    top: var(--space-4);
+    display: block;
+    padding: 0;
+    background: none;
+    opacity: 1;
+    pointer-events: auto;
+    z-index: auto;
+}
+
+.als-spalte .modal {
+    max-width: none;
+    max-height: calc(100vh - 260px);
+    padding-bottom: 0;
+    animation: auftauchen var(--dauer-mittel) var(--kurve) backwards;
+}
+
+/* Schließen gibt es in der Spalte nicht: wer nicht übernehmen will, wählt einen anderen Beleg. */
+.als-spalte .modal-header .btn-icon,
+.als-spalte .modal-footer .btn-secondary {
+    display: none;
+}
+
+.als-spalte .modal-footer {
+    position: sticky;
+    bottom: 0;
+    padding-bottom: var(--space-5);
+    background: var(--surface);
+}
+
+.als-spalte .modal-footer .btn-primary {
+    flex: 1;
+}
+
+@media (max-width: 1100px) {
+    .eingang {
+        grid-template-columns: 240px minmax(0, 1fr);
+    }
+
+    .eingang-formular {
+        grid-column: 2;
+    }
+
+    .modal-overlay.als-spalte {
+        position: static;
+    }
+
+    .als-spalte .modal {
+        max-height: none;
+    }
+}
+
+@media (max-width: 720px) {
+    .eingang {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .eingang-formular,
+    .eingang-leer .eingang-vorschau,
+    .eingang-liste:empty + .eingang-vorschau {
+        grid-column: auto;
+    }
+
+    .beleg-blatt {
+        height: 70vh;
+        min-height: 360px;
+    }
+
+    .vorschau-blatt {
+        padding: var(--space-3);
     }
 }
 
