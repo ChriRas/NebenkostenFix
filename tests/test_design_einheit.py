@@ -622,7 +622,7 @@ def test_runde3_pdf_ohne_browser_viewer():
     assert '<iframe' in zeichnen                   # Rückfall
     assert SKRIPT.count("zeichnePdf(vorschau.querySelector('.beleg-pdf')") == 2
     regel = _regel('.vorschau-blatt.beleg-pdf')
-    assert 'overflow-y: auto' in regel and 'position: relative' in regel
+    assert 'overflow: auto' in regel and 'position: relative' in regel
     assert 'justify-content: flex-start' in regel   # Seite 1 bleibt erreichbar
     assert 'border:' not in _regel('.pdf-seite')   # kein zweiter Rahmen
 
@@ -827,3 +827,41 @@ def test_runde4_dunkelmodus():
     assert 'achse.grid.color = Chart.defaults.borderColor' in anzeigen
     assert 'achse.ticks.color = Chart.defaults.color' in anzeigen
     assert 'diagramm.data.datasets.forEach' in anzeigen and 'map(tausch)' in anzeigen
+
+
+def test_runde5_pdf_viewer_mit_zoom_und_seitenzahl():
+    """Vorher fehlten Zoom und Seitenzahl, und das PDF
+    füllte die Spaltenbreite, wirkte also stark herangezoomt. Die Leiste
+    bringt beides zurück, Standard ist „Ganze Seite“."""
+    zeichnen = SKRIPT[SKRIPT.index('async function zeichnePdf('):]
+    zeichnen = zeichnen[:zeichnen.index('\n}\n')]
+    for name in ('Vorherige Seite zeigen', 'Nächste Seite zeigen', 'Verkleinern',
+                 'Vergrößern', 'Ganze Seite anzeigen', 'Seitenbreite anzeigen'):
+        assert f'aria-label="{name}"' in SKRIPT, name
+    assert 'class="pdf-seitenzahl"' in SKRIPT and 'class="pdf-prozent"' in SKRIPT
+    assert '`Seite ${' in zeichnen and 'von ${' in zeichnen
+    assert "let modus = 'seite'" in zeichnen          # Standard: ganze Seite
+    assert "addEventListener('scroll'" in zeichnen    # Seitenzahl folgt dem Rollen
+    assert 'pdfOffen = pdf' in zeichnen               # Dokument bleibt für den Zoom offen
+    assert 'width: 100%' not in _regel('.pdf-seite')  # Größe kommt vom Zoom
+    assert 'margin-inline: auto' in _regel('.pdf-seite')  # links bleibt erreichbar
+    # Browserprüfung: verstecktes Blatt ergab „-6 %“ und leere Seiten,
+    # die nackten Icon-Knöpfe waren nur 20 px groß.
+    assert 'breite <= 0 || hoehe <= 0' in zeichnen
+    assert 'height: 32px' in _regel('.pdf-leiste .btn-icon')
+
+
+def test_runde5_pdfs_tragen_die_farben_der_app():
+    # PDFs gleichen der App: jede Farbe im PDF ist ein Token aus
+    # style.css, Tabellen ohne Vollgitter, Abschnittskopf Indigo.
+    pdf = {name: (WURZEL / 'nebenkostenfix' / name).read_text(encoding='utf-8')
+           for name in ('pdf_generator.py', 'pdf_cover_page.py')}
+    app_farben = {h.lower() for h in re.findall(r'#[0-9a-fA-F]{6}\b', STIL)}
+    for name, text in pdf.items():
+        fremd = {h for h in re.findall(r'#[0-9a-fA-F]{6}\b', text)
+                 if h.lower() not in app_farben}
+        assert not fremd, f'{name}: Farben ohne App-Token {sorted(fremd)}'
+        assert not re.search(r"colors\.(?:grey|gray|black|red)\b|'red'", text), name
+        assert "'GRID'" not in text, f'{name}: Vollgitter'
+    kopf = pdf['pdf_generator.py'].split('# Section Header', 1)[1][:400]
+    assert "'BACKGROUND', (0, row_idx), (-1, row_idx), colors.HexColor('#4F46E5')" in kopf

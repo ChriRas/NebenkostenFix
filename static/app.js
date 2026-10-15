@@ -5005,10 +5005,28 @@ function vorschauHtml({ titel, info, adresse, datei, knoepfeHtml = '' }) {
 // des Browsers brachte im iframe einen zweiten Rahmen samt Werkzeugleiste mit.
 // Neue Uploads kommen als Datei (fetch auf blob: sperrt die CSP), sonst lädt
 // fetch die Datei. Scheitert pdf.js, zeigt der iframe wie bisher das PDF.
+// Die Leiste darüber bringt Seitenzahl und Zoom wie im Browser-Viewer zurück
+// (Runde 5); Prozent beziehen sich auf die echte Größe, 1 pt = 96/72 px.
+const PDF_STUFEN = [50, 75, 100, 125, 150, 200, 300];
+const PDF_LEISTE = '<div class="pdf-leiste" role="toolbar" aria-label="PDF-Ansicht">' +
+    '<button type="button" class="btn-icon" data-pdf-aktion="zurueck" title="Vorherige Seite zeigen" aria-label="Vorherige Seite zeigen"><i class="ph ph-caret-up" aria-hidden="true"></i></button>' +
+    '<span class="pdf-seitenzahl" aria-live="polite"></span>' +
+    '<button type="button" class="btn-icon" data-pdf-aktion="vor" title="Nächste Seite zeigen" aria-label="Nächste Seite zeigen"><i class="ph ph-caret-down" aria-hidden="true"></i></button>' +
+    '<span class="pdf-trenner" aria-hidden="true"></span>' +
+    '<button type="button" class="btn-icon" data-pdf-aktion="kleiner" title="Verkleinern" aria-label="Verkleinern"><i class="ph ph-minus" aria-hidden="true"></i></button>' +
+    '<span class="pdf-prozent"></span>' +
+    '<button type="button" class="btn-icon" data-pdf-aktion="groesser" title="Vergrößern" aria-label="Vergrößern"><i class="ph ph-plus" aria-hidden="true"></i></button>' +
+    '<span class="pdf-trenner" aria-hidden="true"></span>' +
+    '<button type="button" class="btn-icon" data-pdf-aktion="seite" title="Ganze Seite anzeigen" aria-label="Ganze Seite anzeigen"><i class="ph ph-frame-corners" aria-hidden="true"></i></button>' +
+    '<button type="button" class="btn-icon" data-pdf-aktion="breite" title="Seitenbreite anzeigen" aria-label="Seitenbreite anzeigen"><i class="ph ph-arrows-out-line-horizontal" aria-hidden="true"></i></button>' +
+    '</div>';
 let pdfjsLaden = null;
+let pdfOffen = null;   // Dokument der Vorschau, bleibt für Zoom offen bis zum nächsten Beleg
 async function zeichnePdf(blatt, datei = null) {
+    if (pdfOffen) { pdfOffen.destroy(); pdfOffen = null; }
     if (!blatt) return;
     const adresse = blatt.dataset.pdf;
+    let pdf = null;
     try {
         pdfjsLaden = pdfjsLaden || import('/static/vendor/pdfjs/pdf.min.js').then(pdfjs => {
             pdfjs.GlobalWorkerOptions.workerSrc = '/static/vendor/pdfjs/pdf.worker.min.js';
@@ -5023,30 +5041,113 @@ async function zeichnePdf(blatt, datei = null) {
             if (!antwort.ok) throw await serverFehler(antwort);
             daten = await antwort.arrayBuffer();
         }
-        const pdf = await pdfjs.getDocument({ data: daten, isEvalSupported: false }).promise;
-        try {
-            const zielSeite = Number((adresse.match(/#page=(\d+)/) || [])[1]) || 1;
-            blatt.innerHTML = '';
-            for (let nr = 1; nr <= pdf.numPages && blatt.isConnected; nr++) {
-                const seite = await pdf.getPage(nr);
-                const leinwand = document.createElement('canvas');
-                leinwand.className = 'pdf-seite';
-                leinwand.setAttribute('role', 'img');
-                leinwand.setAttribute('aria-label', `Seite ${nr} von ${pdf.numPages}`);
-                blatt.append(leinwand);
-                const massstab = leinwand.clientWidth * (window.devicePixelRatio || 1) / seite.getViewport({ scale: 1 }).width;
-                const ansicht = seite.getViewport({ scale: massstab });
-                leinwand.width = Math.floor(ansicht.width);
-                leinwand.height = Math.floor(ansicht.height);
-                await seite.render({ canvasContext: leinwand.getContext('2d'), viewport: ansicht }).promise;
-                if (nr === zielSeite) blatt.scrollTop = leinwand.offsetTop - blatt.firstElementChild.offsetTop;
+        pdf = await pdfjs.getDocument({ data: daten, isEvalSupported: false }).promise;
+        if (!blatt.isConnected) { pdf.destroy(); return; }   // inzwischen ein anderer Beleg
+        if (pdfOffen) pdfOffen.destroy();
+        pdfOffen = pdf;
+        const seiten = [];
+        for (let nr = 1; nr <= pdf.numPages; nr++) seiten.push(await pdf.getPage(nr));
+        blatt.innerHTML = '';
+        blatt.insertAdjacentHTML('beforebegin', PDF_LEISTE);
+        const leiste = blatt.previousElementSibling;
+        const leinwaende = seiten.map((_, i) => {
+            const leinwand = document.createElement('canvas');
+            leinwand.className = 'pdf-seite';
+            leinwand.setAttribute('role', 'img');
+            leinwand.setAttribute('aria-label', `Seite ${i + 1} von ${seiten.length}`);
+            blatt.append(leinwand);
+            return leinwand;
+        });
+
+        let modus = 'seite';   // 'seite', 'breite' oder Prozent
+        let lauf = 0;
+        let aufgabe = null;
+        const prozentJetzt = () => {
+            if (typeof modus === 'number') return modus;
+            const stil = getComputedStyle(blatt);
+            const breite = blatt.clientWidth - parseFloat(stil.paddingLeft) - parseFloat(stil.paddingRight);
+            const hoehe = blatt.clientHeight - parseFloat(stil.paddingTop) - parseFloat(stil.paddingBottom);
+            const echt = seiten[0].getViewport({ scale: 96 / 72 });
+            if (breite <= 0 || hoehe <= 0) return 100;   // verstecktes Blatt hat keine Fläche
+            return 100 * (modus === 'breite' ? breite / echt.width : Math.min(breite / echt.width, hoehe / echt.height));
+        };
+        const seiteJetzt = () => {
+            if (blatt.scrollTop + blatt.clientHeight >= blatt.scrollHeight - 2) return seiten.length;
+            const marke = blatt.scrollTop + blatt.clientHeight / 3;
+            return Math.max(1, leinwaende.filter(l => l.offsetTop <= marke).length);
+        };
+        const anzeigen = () => {
+            const nr = seiteJetzt();
+            leiste.querySelector('.pdf-seitenzahl').textContent = `Seite ${nr} von ${seiten.length}`;
+            leiste.querySelector('[data-pdf-aktion="zurueck"]').disabled = nr <= 1;
+            leiste.querySelector('[data-pdf-aktion="vor"]').disabled = nr >= seiten.length;
+        };
+        const springe = nr => {
+            blatt.scrollTop = leinwaende[nr - 1].offsetTop - leinwaende[0].offsetTop;
+        };
+        const zeichnen = async () => {
+            const meinLauf = ++lauf;
+            if (aufgabe) aufgabe.cancel();
+            const prozent = prozentJetzt();
+            leiste.querySelector('.pdf-prozent').textContent = `${Math.round(prozent)} %`;
+            for (const knopf of leiste.querySelectorAll('[data-pdf-aktion="seite"], [data-pdf-aktion="breite"]')) {
+                knopf.setAttribute('aria-pressed', String(knopf.dataset.pdfAktion === modus));
             }
-        } finally {
-            pdf.destroy();
-        }
+            // Erst alle Größen setzen, damit Rollen und Seitenzahl sofort stimmen.
+            const anteil = blatt.scrollTop / (blatt.scrollHeight || 1);
+            const ansichten = seiten.map(s => s.getViewport({ scale: prozent / 100 * 96 / 72 }));
+            leinwaende.forEach((l, i) => {
+                l.style.width = `${ansichten[i].width}px`;
+                l.style.height = `${ansichten[i].height}px`;
+            });
+            blatt.scrollTop = anteil * blatt.scrollHeight;
+            anzeigen();
+            for (let i = 0; i < seiten.length; i++) {
+                if (meinLauf !== lauf || !blatt.isConnected) return;
+                // shortcut: höchstens 16 Mio. Bildpunkte je Seite, bei 300 % auf HiDPI sonst zu viel Speicher
+                const dichte = Math.min(window.devicePixelRatio || 1,
+                    Math.sqrt(16e6 / (ansichten[i].width * ansichten[i].height)));
+                const scharf = seiten[i].getViewport({ scale: ansichten[i].scale * dichte });
+                leinwaende[i].width = Math.floor(scharf.width);
+                leinwaende[i].height = Math.floor(scharf.height);
+                aufgabe = seiten[i].render({ canvasContext: leinwaende[i].getContext('2d'), viewport: scharf });
+                try {
+                    await aufgabe.promise;
+                } catch (fehler) {
+                    if (meinLauf !== lauf || !blatt.isConnected) return;   // abgelöst von neuerem Zoom
+                    throw fehler;
+                }
+            }
+        };
+
+        blatt.addEventListener('scroll', anzeigen, { passive: true });
+        leiste.addEventListener('click', ereignis => {
+            const knopf = ereignis.target.closest('[data-pdf-aktion]');
+            if (!knopf) return;
+            const aktion = knopf.dataset.pdfAktion;
+            if (aktion === 'zurueck' || aktion === 'vor') {
+                springe(Math.min(seiten.length, Math.max(1, seiteJetzt() + (aktion === 'vor' ? 1 : -1))));
+                return;
+            }
+            const prozent = prozentJetzt();
+            if (aktion === 'kleiner') modus = [...PDF_STUFEN].reverse().find(s => s < prozent - 1) || PDF_STUFEN[0];
+            else if (aktion === 'groesser') modus = PDF_STUFEN.find(s => s > prozent + 1) || PDF_STUFEN[PDF_STUFEN.length - 1];
+            else modus = aktion;
+            zeichnen().catch(fehler => console.warn('PDF-Zoom gescheitert', fehler));
+        });
+
+        const zielSeite = Number((adresse.match(/#page=(\d+)/) || [])[1]) || 1;
+        const fertig = zeichnen();
+        springe(Math.min(zielSeite, seiten.length));
+        anzeigen();
+        await fertig;
     } catch (fehler) {
         console.warn('pdf.js-Vorschau gescheitert, zeige den Browser-Viewer', fehler);
+        if (pdf && pdfOffen === pdf) { pdf.destroy(); pdfOffen = null; }
         if (!blatt.isConnected) return;
+        if (blatt.previousElementSibling && blatt.previousElementSibling.classList.contains('pdf-leiste')) {
+            blatt.previousElementSibling.remove();
+        }
         blatt.classList.remove('beleg-pdf');
         blatt.innerHTML = `<iframe class="beleg-blatt" src="${escapeHtml(adresse)}" title="${escapeHtml(`Vorschau: ${blatt.dataset.titel}`)}"></iframe>`;
     }

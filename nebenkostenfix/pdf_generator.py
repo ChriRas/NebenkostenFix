@@ -94,7 +94,7 @@ def _fuss_zeichnen(canvas, doc):
     canvas.drawRightString(rechts, oben, marke.PRODUKT)
 
     canvas.setFont('Helvetica', 8)
-    canvas.setFillColor(colors.grey)
+    canvas.setFillColor(colors.HexColor('#5B5D72'))
     breite = canvas.stringWidth(text + projektseite, 'Helvetica', 8)
     links = (A4[0] - breite) / 2
     canvas.drawString(links, 30, text + projektseite)
@@ -128,13 +128,13 @@ class PDFGenerator:
         # NK-250: kein wordWrap='CJK' -- es brach Wörter an beliebiger Stelle.
         self.styles.add(ParagraphStyle(name='TableCell', fontName='Helvetica', fontSize=9, leading=12))
         self.styles.add(ParagraphStyle(name='TableCellRight', fontName='Helvetica', fontSize=9, leading=12, alignment=2))
-        self.styles.add(ParagraphStyle(name='SubTableCell', fontName='Helvetica', fontSize=8, leading=11, leftIndent=10, textColor=colors.HexColor('#4b5563')))
+        self.styles.add(ParagraphStyle(name='SubTableCell', fontName='Helvetica', fontSize=8, leading=11, leftIndent=10, textColor=colors.HexColor('#5B5D72')))
         self.styles.add(ParagraphStyle(name='SectionHeader', fontName='Helvetica-Bold', fontSize=10, leading=14, textColor=colors.white))
         self.styles.add(ParagraphStyle(name='TotalCell', fontName='Helvetica-Bold', fontSize=10, leading=14))
         self.styles.add(ParagraphStyle(name='TotalCellRight', fontName='Helvetica-Bold', fontSize=10, leading=14, alignment=2))
         self.styles.add(ParagraphStyle(name='GrandTotalCell', fontName='Helvetica-Bold', fontSize=12, leading=16))
         self.styles.add(ParagraphStyle(name='GrandTotalCellRight', fontName='Helvetica-Bold', fontSize=12, leading=16, alignment=2))
-        self.styles.add(ParagraphStyle(name='Fussnote', fontName='Helvetica', fontSize=8, leading=11, textColor=colors.HexColor('#4b5563')))
+        self.styles.add(ParagraphStyle(name='Fussnote', fontName='Helvetica', fontSize=8, leading=11, textColor=colors.HexColor('#5B5D72')))
         self.styles.add(ParagraphStyle(name='MeterHeader', fontName='Helvetica-Bold', fontSize=12, leading=16, textColor=colors.white))
         self.styles.add(ParagraphStyle(name='MeterText', fontName='Helvetica', fontSize=9, leading=14))
         self.styles.add(ParagraphStyle(name='MeterTextBold', fontName='Helvetica-Bold', fontSize=9, leading=14))
@@ -257,9 +257,9 @@ class PDFGenerator:
         breiten = [105, 78, 74, 73, 89, 62] if mit_betraegen else [110, 90, 80, 100]
         tabelle = Table(data, colWidths=breiten, repeatRows=1)
         tabelle.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#f3f4f6')),
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#F4F4F8')),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#d1d5db')),
+            ('LINEBELOW', (0, 0), (-1, -1), 0.5, colors.HexColor('#ECEDF2')),
             ('TOPPADDING', (0, 0), (-1, -1), 6),
             ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
         ]))
@@ -447,8 +447,8 @@ class PDFGenerator:
                                     self.styles['TotalCellRight'])])
             tabelle = Table(daten, colWidths=[380, 100])
             tabelle.setStyle(TableStyle([
-                ('LINEBELOW', (0, 0), (-1, 0), 0.5, colors.HexColor('#9ca3af')),
-                ('LINEABOVE', (0, -1), (-1, -1), 0.5, colors.HexColor('#9ca3af')),
+                ('LINEBELOW', (0, 0), (-1, 0), 0.5, colors.HexColor('#ECEDF2')),
+                ('LINEABOVE', (0, -1), (-1, -1), 0.5, colors.HexColor('#17182B')),
                 ('VALIGN', (0, 0), (-1, -1), 'TOP'),
             ]))
             elemente += [tabelle, Spacer(1, 8)]
@@ -538,11 +538,11 @@ class PDFGenerator:
         ]
         
         table_style = [
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#f3f4f6')),
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#F4F4F8')),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
             ('TOPPADDING', (0, 0), (-1, 0), 8),
             ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
-            ('LINEBELOW', (0, 0), (-1, 0), 1, colors.HexColor('#d1d5db')),
+            ('LINEBELOW', (0, 0), (-1, 0), 1, colors.HexColor('#ECEDF2')),
         ]
         
         row_idx = 1
@@ -556,7 +556,7 @@ class PDFGenerator:
             data.append([Paragraph(f"{section_name}", self.styles['SectionHeader']), '', '', ''])
             table_style.extend([
                 ('SPAN', (0, row_idx), (-1, row_idx)),
-                ('BACKGROUND', (0, row_idx), (-1, row_idx), colors.HexColor('#4b5563')),
+                ('BACKGROUND', (0, row_idx), (-1, row_idx), colors.HexColor('#4F46E5')),
                 ('TOPPADDING', (0, row_idx), (-1, row_idx), 6),
                 ('BOTTOMPADDING', (0, row_idx), (-1, row_idx), 6),
             ])
@@ -602,7 +602,7 @@ class PDFGenerator:
                 ]
                 has_sub = bool(folgeposten) or bool(schritte)
                 
-                bg_color = colors.HexColor('#ffffff') if stripe_counter % 2 == 0 else colors.HexColor('#f9fafb')
+                bg_color = colors.HexColor('#ffffff') if stripe_counter % 2 == 0 else colors.HexColor('#FAFAFB')
                 
                 # Main row
                 main_details = "" if has_sub else details
@@ -620,7 +620,7 @@ class PDFGenerator:
                 ])
                 
                 if not has_sub:
-                    table_style.append(('LINEBELOW', (0, row_idx), (-1, row_idx), 0.5, colors.HexColor('#e5e7eb')))
+                    table_style.append(('LINEBELOW', (0, row_idx), (-1, row_idx), 0.5, colors.HexColor('#ECEDF2')))
                 
                 row_idx += 1
 
@@ -645,7 +645,7 @@ class PDFGenerator:
                     ])
 
                     if schliesst_ab:
-                        table_style.append(('LINEBELOW', (0, row_idx), (-1, row_idx), 0.5, colors.HexColor('#e5e7eb')))
+                        table_style.append(('LINEBELOW', (0, row_idx), (-1, row_idx), 0.5, colors.HexColor('#ECEDF2')))
 
                     row_idx += 1
 
@@ -667,7 +667,7 @@ class PDFGenerator:
                         ])
                         
                         if is_last:
-                            table_style.append(('LINEBELOW', (0, row_idx), (-1, row_idx), 0.5, colors.HexColor('#e5e7eb')))
+                            table_style.append(('LINEBELOW', (0, row_idx), (-1, row_idx), 0.5, colors.HexColor('#ECEDF2')))
                         
                         row_idx += 1
                 
@@ -683,8 +683,8 @@ class PDFGenerator:
             table_style.extend([
                 ('TOPPADDING', (0, row_idx), (-1, row_idx), 8),
                 ('BOTTOMPADDING', (0, row_idx), (-1, row_idx), 8),
-                ('LINEABOVE', (0, row_idx), (-1, row_idx), 1, colors.HexColor('#9ca3af')),
-                ('LINEBELOW', (0, row_idx), (-1, row_idx), 1, colors.HexColor('#e5e7eb')),
+                ('LINEABOVE', (0, row_idx), (-1, row_idx), 0.5, colors.HexColor('#5B5D72')),
+                ('LINEBELOW', (0, row_idx), (-1, row_idx), 1, colors.HexColor('#ECEDF2')),
             ])
             row_idx += 1
             
@@ -717,14 +717,14 @@ class PDFGenerator:
         table_style.extend([
             ('TOPPADDING', (0, row_idx), (-1, row_idx), 10),
             ('BOTTOMPADDING', (0, row_idx), (-1, row_idx), 10),
-            ('LINEABOVE', (0, row_idx), (-1, row_idx), 2, colors.black),
+            ('LINEABOVE', (0, row_idx), (-1, row_idx), 1, colors.HexColor('#17182B')),
             ('TOPPADDING', (0, row_idx+1), (-1, row_idx+1), 5),
             ('BOTTOMPADDING', (0, row_idx+1), (-1, row_idx+1), 10),
-            ('LINEBELOW', (0, row_idx+1), (-1, row_idx+1), 1, colors.HexColor('#9ca3af')),
+            ('LINEBELOW', (0, row_idx+1), (-1, row_idx+1), 0.5, colors.HexColor('#ECEDF2')),
             ('TOPPADDING', (0, row_idx+2), (-1, row_idx+2), 14),
             ('BOTTOMPADDING', (0, row_idx+2), (-1, row_idx+2), 14),
-            ('LINEBELOW', (0, row_idx+2), (-1, row_idx+2), 2, colors.black),
-            ('BACKGROUND', (0, row_idx+2), (-1, row_idx+2), colors.HexColor('#f9fafb')),
+            ('LINEBELOW', (0, row_idx+2), (-1, row_idx+2), 1, colors.HexColor('#17182B')),
+            ('BACKGROUND', (0, row_idx+2), (-1, row_idx+2), colors.HexColor('#FAFAFB')),
         ])
         
         # Adjust column widths: category (110), period (130), details (170), amount (70) = 480
@@ -818,7 +818,7 @@ class PDFGenerator:
                 box_data.append([Paragraph(f"{cat_name} — {meter_num_str} ({self.apartment_name})", self.styles['MeterHeader']), ''])
             
                 box_style = [
-                    ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4f46e5')),
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4F46E5')),
                     ('SPAN', (0, 0), (-1, 0)),
                     ('TOPPADDING', (0, 0), (-1, 0), 6),
                     ('BOTTOMPADDING', (0, 0), (-1, 0), 6),
@@ -844,7 +844,7 @@ class PDFGenerator:
                     # Tage)“; das Warnzeichen davor kannte die Schrift nicht.
                     if offset <= 7:
                         return ""
-                    farbe = 'red' if offset > 14 else '#d97706'
+                    farbe = '#A3312A' if offset > 14 else '#8A5300'
                     am = f" {format_date(stichtag)}" if stichtag else ""
                     return (f"<font color='{farbe}'>Zum Stichtag{am} liegt die nächste Ablesung "
                             f"{offset} Tage entfernt. Der Verbrauch dieser {offset} Tage ist geschätzt.</font>")
@@ -914,7 +914,7 @@ class PDFGenerator:
                             row_idx += 1
                         
                     box_style.extend([
-                        ('LINEBELOW', (0, row_idx+2), (-1, row_idx+2), 0.5, colors.HexColor('#d1d5db')),
+                        ('LINEBELOW', (0, row_idx+2), (-1, row_idx+2), 0.5, colors.HexColor('#ECEDF2')),
                         ('BOTTOMPADDING', (0, row_idx+2), (-1, row_idx+2), 8),
                     ])
                     row_idx += 3
@@ -957,7 +957,7 @@ class PDFGenerator:
                             row_idx += 1
                         
                     box_style.extend([
-                        ('LINEBELOW', (0, row_idx+zeilen-1), (-1, row_idx+zeilen-1), 0.5, colors.HexColor('#d1d5db')),
+                        ('LINEBELOW', (0, row_idx+zeilen-1), (-1, row_idx+zeilen-1), 0.5, colors.HexColor('#ECEDF2')),
                         ('BOTTOMPADDING', (0, row_idx+zeilen-1), (-1, row_idx+zeilen-1), 8),
                     ])
                     row_idx += zeilen
@@ -974,8 +974,8 @@ class PDFGenerator:
                 box_data.append([Paragraph(f"GESAMT {cat_name}:", self.styles['MeterTextBold']), Paragraph(f"{item['tenant_cost']:.2f} €".replace('.', ','), self.styles['MeterTextBold'])])
             
                 box_style.extend([
-                    ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#f9fafb')),
-                    ('BOX', (0, 0), (-1, -1), 1, colors.HexColor('#d1d5db')),
+                    ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#FAFAFB')),
+                    ('BOX', (0, 0), (-1, -1), 1, colors.HexColor('#ECEDF2')),
                     ('TOPPADDING', (0, 1), (-1, -1), 4),
                     ('BOTTOMPADDING', (0, 1), (-1, -1), 4),
                 ])

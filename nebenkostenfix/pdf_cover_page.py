@@ -23,13 +23,13 @@ from xml.sax.saxutils import escape  # nosec B406
 
 
 # --- Color Palette ---
-COLOR_GREEN = colors.HexColor('#059669')    # Guthaben (credit)
-COLOR_RED = colors.HexColor('#DC2626')      # Nachzahlung (payment due)
-COLOR_DARK = colors.HexColor('#1f2937')     # Primary text
-COLOR_MUTED = colors.HexColor('#6b7280')    # Secondary text
-COLOR_LIGHT_BG = colors.HexColor('#f8fafc') # Card backgrounds
-COLOR_ACCENT = colors.HexColor('#4f46e5')   # Accent line (indigo)
-COLOR_BORDER = colors.HexColor('#e2e8f0')   # Subtle borders
+COLOR_GREEN = colors.HexColor('#2F7D5B')    # Guthaben (credit)
+COLOR_RED = colors.HexColor('#A3312A')      # Nachzahlung (payment due)
+COLOR_DARK = colors.HexColor('#17182B')     # Primary text
+COLOR_MUTED = colors.HexColor('#5B5D72')    # Secondary text
+COLOR_LIGHT_BG = colors.HexColor('#FAFAFB') # Card backgrounds
+COLOR_ACCENT = colors.HexColor('#4F46E5')   # Accent line (indigo)
+COLOR_BORDER = colors.HexColor('#ECEDF2')   # Subtle borders
 
 
 def _create_styles():
