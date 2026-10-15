@@ -37,7 +37,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/bilder/uebersicht.png" width="880" alt="„Heute“ in NebenkostenFix mit den offenen Aufgaben der Beispielimmobilie">
+  <img src="docs/bilder/uebersicht.png" width="880" alt="„Heute“ in NebenkostenFix mit den ersten Schritten bis zur ersten Abrechnung">
 </p>
 
 Immobilien, Wohnungen, Mieter, Zählerstände und Rechnungen liegen an einer Stelle. Am Ende
@@ -75,7 +75,7 @@ Kurze Antworten stehen in den [häufigen Fragen](docs/handbuch/faq.md).
 <table>
   <tr>
     <td width="50%"><img src="docs/bilder/abrechnung.png" alt="Abrechnungen mit Historie"></td>
-    <td width="50%"><img src="docs/bilder/hilfe.png" alt="Hilfe mit Begriffen von A bis Z und Über NebenkostenFix"></td>
+    <td width="50%"><img src="docs/bilder/hilfe.png" alt="Hilfe mit Grundlagen und der Liste „Was Sie vorher sammeln“"></td>
   </tr>
   <tr>
     <td align="center"><sub>Abrechnung: jede Kostenart, jeder Schlüssel, nachvollziehbar</sub></td>
