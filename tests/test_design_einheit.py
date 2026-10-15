@@ -440,10 +440,11 @@ def test_beleg_hochladen_links_und_blaettern():
     assert 'URL.revokeObjectURL(neueDateiAdresse)' in SKRIPT
     # Die Datei landet im Dateifeld des Formulars, Speichern lädt sie mit hoch.
     assert "document.getElementById('invoice-file').files = uebergabe.files;" in SKRIPT
-    tasten = SKRIPT[SKRIPT.index('// J/K blättern'):]
+    tasten = SKRIPT[SKRIPT.index('// J/K und die Pfeiltasten blättern'):]
     tasten = tasten[:tasten.index('\n});\n')]
-    # Nicht in Eingabefeldern und nicht, solange ein Dialog offen ist.
-    assert "closest('input, textarea, select, [contenteditable]')" in tasten
+    # Nur mit Fokus in der Liste (WCAG 2.1.4) und nicht, solange ein Dialog offen ist.
+    assert 'if (!liste.contains(e.target)) return;' in tasten
+    assert "startsWith('Arrow')" not in tasten
     assert "document.querySelector('.modal-overlay.active')" in tasten
     # Enter speichert: der Hinweis kommt aus CSS, der Knopftext bleibt prüfbar.
     assert re.search(r'\.als-spalte #btn-save-invoice::after \{\s*content: "Enter" / "";', STIL)
@@ -708,7 +709,7 @@ def test_tabellen_sortieren_und_summieren_wie_excel():
     assert zahlungen.count('onclick="tabelleSortieren(this)"') == 3
     assert 'id="payment-details-summe"' in zahlungen
     details = SKRIPT[SKRIPT.index('function openPaymentDetailsModal('):][:3500]
-    assert '.filter(p => new Date(p.payment_date) <= heute)' in details
+    assert '.filter(p => p.payment_date && !nachHeute(p.payment_date))' in details
     assert 'data-wert="${Number(p.amount)}"' in details
     assert '.summenzeile td' in STIL and '.sortier-knopf' in STIL
 
@@ -865,7 +866,7 @@ def test_pdfs_tragen_die_farben_der_app():
         assert not re.search(r"colors\.(?:grey|gray|black|red)\b|'red'", text), name
         assert "'GRID'" not in text, f'{name}: Vollgitter'
     kopf = pdf['pdf_generator.py'].split('# Section Header', 1)[1][:400]
-    assert "'BACKGROUND', (0, row_idx), (-1, row_idx), colors.HexColor('#4F46E5')" in kopf
+    assert "'BACKGROUND', (0, row_idx), (-1, row_idx), COLOR_ACCENT)" in kopf
 
 
 def test_geoeffnete_auswahllisten_im_design():

@@ -35,15 +35,24 @@ document.addEventListener('invalid', (e) => deutschPruefen(e.target), true);
 // Swoosh nach der Anmeldung: Indigo wischt über die Seite, dann
 // geht das Formular ab. Der Zeitstempel sagt der App, dass sie die Fläche
 // wieder wegziehen soll (index.html). Ohne Bewegungswunsch geht es sofort ab.
+let swooshWischt = false;
 document.addEventListener('submit', (e) => {
     const form = e.target;
     if (e.defaultPrevented || !form.classList.contains('anmelde-karte')) return;
+    // Zweiter Klick während des Wischens: das Formular geht gleich ohnehin ab.
+    if (swooshWischt) { e.preventDefault(); return; }
     try { sessionStorage.setItem('nk-einflug', String(Date.now())); } catch (err) { /* ohne Speicher kein Einflug */ }
     if (document.body.classList.contains('swoosh') || !form.requestSubmit
         || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     e.preventDefault();
     document.body.classList.add('swoosh');
-    setTimeout(() => form.requestSubmit(e.submitter), 360);
+    swooshWischt = true;
+    setTimeout(() => { swooshWischt = false; form.requestSubmit(e.submitter); }, 360);
 });
-// Zurück auf die Anmeldeseite (Seiten-Cache des Browsers): Fläche entfernen.
-window.addEventListener('pageshow', () => document.body.classList.remove('swoosh'));
+// Wieder auf der Anmeldeseite (Fehlschlag oder Seiten-Cache des Browsers):
+// Fläche entfernen und keinen Einflug in die App vormerken.
+window.addEventListener('pageshow', () => {
+    document.body.classList.remove('swoosh');
+    if (!document.querySelector('form.anmelde-karte')) return;
+    try { sessionStorage.removeItem('nk-einflug'); } catch (err) { /* ohne Speicher kein Einflug */ }
+});

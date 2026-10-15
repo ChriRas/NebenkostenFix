@@ -42,9 +42,11 @@
        Fehler. */
     --success-color: #2F7D5B;
     --success-bg: #E3F1EA;
+    --success-border: #B3D9C5;
     --warning-color: #C27A12;
     --warning-text: #8A5300;
     --warning-bg: #FAEED8;
+    --warning-border: #EBCB94;
     --warning-strong: #5E3A00;
     --danger-color: #A3312A;
     --danger-hover: #82261F;
@@ -121,9 +123,11 @@
         --on-primary: #10111F;
         --success-color: #5CC497;
         --success-bg: #15302A;
+        --success-border: #285C46;
         --warning-color: #E0A447;
         --warning-text: #EDB866;
         --warning-bg: #33270F;
+        --warning-border: #63491A;
         --warning-strong: #F5D08A;
         --danger-color: #F08A82;
         --danger-hover: #F6ABA5;

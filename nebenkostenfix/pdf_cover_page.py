@@ -30,6 +30,7 @@ COLOR_MUTED = colors.HexColor('#5B5D72')    # Secondary text
 COLOR_LIGHT_BG = colors.HexColor('#FAFAFB') # Card backgrounds
 COLOR_ACCENT = colors.HexColor('#4F46E5')   # Accent line (indigo)
 COLOR_BORDER = colors.HexColor('#ECEDF2')   # Subtle borders
+COLOR_HEAD_BG = colors.HexColor('#F4F4F8')  # Tabellenköpfe
 
 
 def _create_styles():

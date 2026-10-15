@@ -714,7 +714,7 @@ function gehoertZumHaus(x, f) {
     if (x.apartment_id != null) return f.wohnungen.has(x.apartment_id);
     if (x.meter_id != null) return f.zaehler.has(x.meter_id);
     if (x.tenant_id != null) return f.mieter.has(x.tenant_id);
-    return true;  // keiner Immobilie zugeordnet (z. B. Beleg): immer zeigen
+    return true;  // ohne jeden Bezug zu einer Immobilie: immer zeigen
 }
 
 // merke: hält die Kennungen der Treffer fest, an denen Ablesungen,
@@ -733,8 +733,11 @@ function ladeHausListen() {
         fetchBillingHistory(), fetchPayments()]);
 }
 
+// Zählt jede Auswahl mit: bei schnellem Wechsel gilt nur die jüngste.
+let hausFilterLauf = 0;
+
 async function hausFilterSetzen(id) {
-    hausFilter = null;
+    const lauf = ++hausFilterLauf;
     if (id) {
         try {
             const [wohnungen, zaehler, mieter] = await Promise.all(['/api/apartments', '/api/meters', '/api/tenants']
@@ -743,15 +746,19 @@ async function hausFilterSetzen(id) {
                     if (!res.ok) throw await serverFehler(res);
                     return res.json();
                 }));
+            if (lauf !== hausFilterLauf) return;
             hausFilter = { id, wohnungen: new Set(), zaehler: new Set(), mieter: new Set() };
             // Reihenfolge zählt: Mieter hängen an Wohnungen.
             imHaus(wohnungen, 'wohnungen');
             imHaus(zaehler, 'zaehler');
             imHaus(mieter, 'mieter');
         } catch (e) {
+            if (lauf !== hausFilterLauf) return;
             hausFilter = null;
             showError(meldungZu(e, 'Der Immobilienfilter ließ sich nicht laden. Es werden alle Immobilien gezeigt.'));
         }
+    } else {
+        hausFilter = null;
     }
     try {
         localStorage.setItem('nk-haus-filter', hausFilter ? String(hausFilter.id) : '');
@@ -759,6 +766,7 @@ async function hausFilterSetzen(id) {
         // privates Fenster: der Filter gilt dann nur bis zum Neuladen
     }
     await ladeHausListen();
+    if (lauf !== hausFilterLauf) return;
     // Offene Ansichten der vorigen Auswahl nachziehen.
     if (propertyDetailsView.style.display === 'block') {
         const haus = hausFilter && properties[0];
@@ -1821,7 +1829,9 @@ async function fetchProperties() {
         if (!response.ok) throw await serverFehler(response);
         alleHaeuser = await response.json();
         if (hausFilter && !alleHaeuser.some(p => p.id === hausFilter.id)) {
-            hausFilterSetzen(null);  // gewählte Immobilie gelöscht
+            // Gewählte Immobilie gelöscht: Filter aufheben. Das lädt alle
+            // Listen neu, auch diese; der laufende Durchgang bricht ab.
+            hausFilterSetzen(null);
             return;
         }
         properties = hausFilter ? alleHaeuser.filter(p => p.id === hausFilter.id) : alleHaeuser;
@@ -3490,7 +3500,7 @@ function zeigeZaehlerDetail() {
         const titel = `${fmt.format(z.menge)}${einheit} bis ${datum(z.bis)}`;
         return `<div class="balken" title="${escapeHtml(titel)}">
                 <span class="balken-saeule" style="--anteil: ${escapeHtml(anteil.toFixed(1))}%"></span>
-                <span class="balken-datum">${escapeHtml(new Date(z.bis).toLocaleDateString('de-DE', { month: 'short', year: '2-digit' }))}</span>
+                <span class="balken-datum">${escapeHtml(new Date(`${String(z.bis).slice(0, 10)}T00:00:00`).toLocaleDateString('de-DE', { month: 'short', year: '2-digit' }))}</span>
             </div>`;
     }).join('')}</div>` : '';
 
@@ -3561,8 +3571,8 @@ window.rechnungsfilterZuruecksetzen = rechnungsfilterZuruecksetzen;
 // ob Text oder Zahl; eine Zelle kann ihren Rohwert in data-wert tragen
 // (ISO-Datum, Betrag), sonst zählt der sichtbare Text.
 function sortierKopf(titel, art, rechts = false) {
-    const hinweis = `Nach „${titel}“ sortieren`;
-    return `<th class="zelle${rechts ? ' text-right' : ''}" data-sort="${art}">${titel}`
+    const hinweis = escapeHtml(`Nach „${titel}“ sortieren`);
+    return `<th class="zelle${rechts ? ' text-right' : ''}" data-sort="${art}">${escapeHtml(titel)}`
         + `<button type="button" class="sortier-knopf" onclick="tabelleSortieren(this)" title="${hinweis}" aria-label="${hinweis}"><i class="ph ph-caret-up-down" aria-hidden="true"></i></button></th>`;
 }
 
@@ -3737,10 +3747,9 @@ function renderInvoices() {
                     if (wert !== undefined) td.dataset.wert = wert;
                     return td;
                 };
-                const dateOpts = { day: '2-digit', month: '2-digit', year: 'numeric' };
                 // ISO-Datum als Sortierwert, angezeigt wird das deutsche.
-                const tdDateFrom = zelle(new Date(inv.start_date).toLocaleDateString('de-DE', dateOpts), inv.start_date);
-                const tdDateTo = zelle(new Date(inv.end_date).toLocaleDateString('de-DE', dateOpts), inv.end_date);
+                const tdDateFrom = zelle(datumText(inv.start_date), inv.start_date);
+                const tdDateTo = zelle(datumText(inv.end_date), inv.end_date);
                 const tdNum = zelle(inv.invoice_number || '-');
                 const tdProvider = zelle(inv.provider_name || '-');
                 const tdAmt = zelle(euroText(inv.amount), inv.amount);
@@ -4618,7 +4627,7 @@ async function checkPlausibility() {
             alertBox.style.display = 'block';
             alertBox.style.backgroundColor = 'var(--success-bg)';
             alertBox.style.color = 'var(--success-color)';
-            alertBox.style.border = '1px solid var(--success-bg)';
+            alertBox.style.border = '1px solid var(--success-border)';
             alertBox.innerHTML = `<i class="ph ph-check-circle" style="margin-right: 8px;"></i> ${escapeHtml(data.message)}`;
         } else {
             alertBox.style.display = 'none';
@@ -5060,16 +5069,16 @@ async function zeichnePdf(blatt, datei = null) {
         if (!blatt.isConnected) { pdf.destroy(); return; }   // inzwischen ein anderer Beleg
         if (pdfOffen) pdfOffen.destroy();
         pdfOffen = pdf;
-        const seiten = [];
-        for (let nr = 1; nr <= pdf.numPages; nr++) seiten.push(await pdf.getPage(nr));
+        const anzahl = pdf.numPages;
+        const seiten = [await pdf.getPage(1)];   // die übrigen lädt erst zeichnen(), Seite 1 steht so sofort
         blatt.innerHTML = '';
         blatt.insertAdjacentHTML('beforebegin', PDF_LEISTE);
         const leiste = blatt.previousElementSibling;
-        const leinwaende = seiten.map((_, i) => {
+        const leinwaende = Array.from({ length: anzahl }, (_, i) => {
             const leinwand = document.createElement('canvas');
             leinwand.className = 'pdf-seite';
             leinwand.setAttribute('role', 'img');
-            leinwand.setAttribute('aria-label', `Seite ${i + 1} von ${seiten.length}`);
+            leinwand.setAttribute('aria-label', `Seite ${i + 1} von ${anzahl}`);
             blatt.append(leinwand);
             return leinwand;
         });
@@ -5087,15 +5096,15 @@ async function zeichnePdf(blatt, datei = null) {
             return 100 * (modus === 'breite' ? breite / echt.width : Math.min(breite / echt.width, hoehe / echt.height));
         };
         const seiteJetzt = () => {
-            if (blatt.scrollTop + blatt.clientHeight >= blatt.scrollHeight - 2) return seiten.length;
+            if (blatt.scrollTop + blatt.clientHeight >= blatt.scrollHeight - 2) return anzahl;
             const marke = blatt.scrollTop + blatt.clientHeight / 3;
             return Math.max(1, leinwaende.filter(l => l.offsetTop <= marke).length);
         };
         const anzeigen = () => {
             const nr = seiteJetzt();
-            leiste.querySelector('.pdf-seitenzahl').textContent = `Seite ${nr} von ${seiten.length}`;
+            leiste.querySelector('.pdf-seitenzahl').textContent = `Seite ${nr} von ${anzahl}`;
             leiste.querySelector('[data-pdf-aktion="zurueck"]').disabled = nr <= 1;
-            leiste.querySelector('[data-pdf-aktion="vor"]').disabled = nr >= seiten.length;
+            leiste.querySelector('[data-pdf-aktion="vor"]').disabled = nr >= anzahl;
         };
         const springe = nr => {
             blatt.scrollTop = leinwaende[nr - 1].offsetTop - leinwaende[0].offsetTop;
@@ -5109,24 +5118,31 @@ async function zeichnePdf(blatt, datei = null) {
                 knopf.setAttribute('aria-pressed', String(knopf.dataset.pdfAktion === modus));
             }
             // Erst alle Größen setzen, damit Rollen und Seitenzahl sofort stimmen.
+            // Noch nicht geladene Seiten nehmen das Maß von Seite 1.
+            const massstab = prozent / 100 * 96 / 72;
+            const ansicht = i => (seiten[i] || seiten[0]).getViewport({ scale: massstab });
+            const anpassen = (l, a) => {
+                l.style.width = `${a.width}px`;
+                l.style.height = `${a.height}px`;
+            };
             const anteil = blatt.scrollTop / (blatt.scrollHeight || 1);
-            const ansichten = seiten.map(s => s.getViewport({ scale: prozent / 100 * 96 / 72 }));
-            leinwaende.forEach((l, i) => {
-                l.style.width = `${ansichten[i].width}px`;
-                l.style.height = `${ansichten[i].height}px`;
-            });
+            leinwaende.forEach((l, i) => anpassen(l, ansicht(i)));
             blatt.scrollTop = anteil * blatt.scrollHeight;
             anzeigen();
-            for (let i = 0; i < seiten.length; i++) {
+            for (let i = 0; i < anzahl; i++) {
                 if (meinLauf !== lauf || !blatt.isConnected) return;
-                // shortcut: höchstens 16 Mio. Bildpunkte je Seite, bei 300 % auf HiDPI sonst zu viel Speicher
-                const dichte = Math.min(window.devicePixelRatio || 1,
-                    Math.sqrt(16e6 / (ansichten[i].width * ansichten[i].height)));
-                const scharf = seiten[i].getViewport({ scale: ansichten[i].scale * dichte });
-                leinwaende[i].width = Math.floor(scharf.width);
-                leinwaende[i].height = Math.floor(scharf.height);
-                aufgabe = seiten[i].render({ canvasContext: leinwaende[i].getContext('2d'), viewport: scharf });
                 try {
+                    seiten[i] = seiten[i] || await pdf.getPage(i + 1);
+                    if (meinLauf !== lauf || !blatt.isConnected) return;
+                    const groesse = ansicht(i);
+                    anpassen(leinwaende[i], groesse);
+                    // shortcut: höchstens 16 Mio. Bildpunkte je Seite, bei 300 % auf HiDPI sonst zu viel Speicher
+                    const dichte = Math.min(window.devicePixelRatio || 1,
+                        Math.sqrt(16e6 / (groesse.width * groesse.height)));
+                    const scharf = seiten[i].getViewport({ scale: groesse.scale * dichte });
+                    leinwaende[i].width = Math.floor(scharf.width);
+                    leinwaende[i].height = Math.floor(scharf.height);
+                    aufgabe = seiten[i].render({ canvasContext: leinwaende[i].getContext('2d'), viewport: scharf });
                     await aufgabe.promise;
                 } catch (fehler) {
                     if (meinLauf !== lauf || !blatt.isConnected) return;   // abgelöst von neuerem Zoom
@@ -5141,7 +5157,7 @@ async function zeichnePdf(blatt, datei = null) {
             if (!knopf) return;
             const aktion = knopf.dataset.pdfAktion;
             if (aktion === 'zurueck' || aktion === 'vor') {
-                springe(Math.min(seiten.length, Math.max(1, seiteJetzt() + (aktion === 'vor' ? 1 : -1))));
+                springe(Math.min(anzahl, Math.max(1, seiteJetzt() + (aktion === 'vor' ? 1 : -1))));
                 return;
             }
             const prozent = prozentJetzt();
@@ -5153,7 +5169,7 @@ async function zeichnePdf(blatt, datei = null) {
 
         const zielSeite = Number((adresse.match(/#page=(\d+)/) || [])[1]) || 1;
         const fertig = zeichnen();
-        springe(Math.min(zielSeite, seiten.length));
+        springe(Math.min(zielSeite, anzahl));
         anzeigen();
         await fertig;
     } catch (fehler) {
@@ -5255,13 +5271,13 @@ async function belegGewaehlt(input) {
     zeigeKostenAnsicht('alle');
 }
 
-// J/K blättern durch die Liste, die Pfeiltasten auch, solange sie den Fokus hat.
+// J/K und die Pfeiltasten blättern durch die Liste, nur solange sie den Fokus
+// hat: Einzeltasten-Kürzel stören sonst Screenreader (WCAG 2.1.4).
 document.addEventListener('keydown', e => {
     const richtung = { j: 1, k: -1, ArrowDown: 1, ArrowUp: -1 }[e.key];
     const liste = document.getElementById('documents-container');
     if (!richtung || e.ctrlKey || e.metaKey || e.altKey || !liste || !liste.offsetParent) return;
-    if (e.target.closest && e.target.closest('input, textarea, select, [contenteditable]')) return;
-    if (e.key.startsWith('Arrow') && !liste.contains(e.target)) return;
+    if (!liste.contains(e.target)) return;
     if (document.querySelector('.modal-overlay.active')) return;
     const zeilen = [...liste.querySelectorAll('.beleg-zeile')];
     const jetzt = zeilen.findIndex(z => z.getAttribute('aria-pressed') === 'true');
@@ -5806,7 +5822,7 @@ async function ladeSicherungsStatus() {
         const stufen = {
             rot:    { hintergrund: 'var(--danger-bg)', rand: 'var(--danger-border)' },
             gelb:   { hintergrund: 'var(--warning-bg)', rand: 'var(--warning-color)' },
-            gruen:  { hintergrund: 'var(--success-bg)', rand: 'var(--success-bg)' },
+            gruen:  { hintergrund: 'var(--success-bg)', rand: 'var(--success-border)' },
         };
         const farbe = stufen[status.erinnerung.stufe] || stufen.gruen;
         box.style.background = farbe.hintergrund;
@@ -6707,6 +6723,8 @@ let jahrAktuell = 1;
 let jahrVorschau = {};
 
 const euroText = betrag => Number(betrag || 0).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
+// Ortszeit: new Date('2026-10-15') wäre UTC-Mitternacht, also nach heute 0 Uhr.
+const nachHeute = iso => String(iso || '').slice(0, 10) > new Date().toLocaleDateString('sv-SE');
 const datumText = iso => iso ? new Date(`${String(iso).slice(0, 10)}T00:00:00`).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—';
 
 // Warnungen kompakt (F-116): ohne Kennung vorn, gleiche Meldungen für
@@ -7222,7 +7240,7 @@ async function fetchBillingHistory() {
                     PDF ansehen (detailliert)
                 </a>`;
             } else {
-                pdfButtons += `<button class="btn-secondary" onclick="generateMissingPdf(${r.tenant_id}, '${r.start_date}', '${r.end_date}', true, this)" class="btn-tint" style="border-style: dashed;" title="Detaillierte PDF nachträglich erstellen">
+                pdfButtons += `<button class="btn-secondary btn-tint" onclick="generateMissingPdf(${r.tenant_id}, '${r.start_date}', '${r.end_date}', true, this)" style="border-style: dashed;" title="Detaillierte PDF nachträglich erstellen">
                     PDF erstellen (detailliert)
                 </button>`;
             }
@@ -7972,7 +7990,7 @@ async function generateBillPreview(tenantId, startDate, endDate, categoryIds = n
             let pfIcon = 'ph-check-circle';
             let pfTitle = 'Zählerstände: Ausgezeichnet (Alle Ablesungen innerhalb von 7 Tagen zum Stichtag)';
             let pfBg = 'var(--success-bg)';
-            let pfBorder = 'var(--success-bg)';
+            let pfBorder = 'var(--success-border)';
             
             if (zaehlerStatus === 'warning') {
                 pfColor = 'var(--danger-color)';
@@ -7985,7 +8003,7 @@ async function generateBillPreview(tenantId, startDate, endDate, categoryIds = n
                 pfIcon = 'ph-info';
                 pfTitle = 'Zählerstände: Akzeptabel (Einige Ablesungen bis zu 14 Tage Toleranz)';
                 pfBg = 'var(--warning-bg)';
-                pfBorder = 'var(--warning-bg)';
+                pfBorder = 'var(--warning-border)';
             }
             
             html += `
@@ -8041,7 +8059,7 @@ async function generateBillPreview(tenantId, startDate, endDate, categoryIds = n
         const hinweise = hinweisTexte.concat((data.warnings || []).filter(w =>
             typeof w !== 'string' || (!w.includes('interpoliert') && !hinweisTexte.includes(w))));
         if (hinweise.length > 0) {
-            html += `<div style="background: var(--warning-bg); border: 1px solid var(--warning-bg); border-radius: 8px; padding: 12px; margin-bottom: 24px;">
+            html += `<div style="background: var(--warning-bg); border: 1px solid var(--warning-border); border-radius: 8px; padding: 12px; margin-bottom: 24px;">
                 <div style="font-weight: 600; color: var(--warning-text); margin-bottom: 8px;">Hinweise zur Abrechnung</div>
                 <ul class="jahr-warnungen" style="margin: 0;">${warnungenHtml(hinweise)}</ul>
             </div>`;
@@ -8826,10 +8844,7 @@ function renderDataQuality(data) {
         };
         
         if (m.last_reading_date) {
-            const dateStr = new Date(m.last_reading_date).toLocaleDateString('de-DE', {
-                day: '2-digit', month: '2-digit', year: 'numeric'
-            });
-            addDetail('Letzte Ablesung', dateStr);
+            addDetail('Letzte Ablesung', datumText(m.last_reading_date));
             addDetail('Tage seitdem', `${m.days_since_reading} Tage`);
         } else {
             addDetail('Letzte Ablesung', '—');
@@ -9654,11 +9669,9 @@ function openPaymentDetailsModal(tenantId) {
         th.removeAttribute('aria-sort');
         th.querySelector('.sortier-knopf i').className = 'ph ph-caret-up-down';
     });
-    const heute = new Date();
-    heute.setHours(0, 0, 0, 0);
     document.getElementById('payment-details-fuss').hidden = tenantPayments.length === 0;
     document.getElementById('payment-details-summe').textContent = euroText(tenantPayments
-        .filter(p => new Date(p.payment_date) <= heute)
+        .filter(p => p.payment_date && !nachHeute(p.payment_date))
         .reduce((summe, p) => summe + Number(p.amount || 0), 0));
     document.getElementById('payment-select-all').checked = false;
     toggleDeleteSelectedButton();
@@ -9681,10 +9694,7 @@ function openPaymentDetailsModal(tenantId) {
                 }
             };
 
-            const pDate = new Date(p.payment_date);
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            const isFuture = pDate > today;
+            const isFuture = nachHeute(p.payment_date);
             
             if (isFuture) {
                 tr.style.opacity = '0.6';
