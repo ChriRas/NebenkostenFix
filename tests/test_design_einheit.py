@@ -393,3 +393,50 @@ def test_konzept_d_leerer_eingang_blendet_formular_aus():
     # #invoice-modal bleibt in der Spalte, :empty greift dann nicht (Sichtprüfung 2026-10-14).
     assert re.search(r'\.eingang-leer \.eingang-formular \{\s*display: none;', STIL)
     assert "eingang.classList.toggle('eingang-leer', !eingangBeleg);" in SKRIPT
+
+
+# --- Konzept D: Zähler als Liste plus Detail --------------------------------
+
+def test_konzept_d_zaehler_liste_und_detail():
+    # Das Detail liegt neben, nicht in #meters-container: ERSTER_STAND_JS
+    # (scripts/rundgang.py) erwartet dort nur Zählerzeilen.
+    ansicht = SEITE[SEITE.index('class="zaehler-ansicht"'):]
+    ansicht = ansicht[:ansicht.index('</aside>')]
+    assert '<div class="spalte" id="meters-container"></div>' in ansicht
+    assert 'id="zaehler-detail"' in ansicht
+    assert 'function zeigeZaehlerDetail(' in SKRIPT
+    assert "fuelleAblesungen(detail.querySelector('.ablese-tabelle'), m);" in SKRIPT
+    # Auf der Zählerseite ersetzt das Detail den Verlaufsdialog, im Jahresassistenten nicht.
+    verlauf = SKRIPT[SKRIPT.index('function openHistoryModal('):]
+    verlauf = verlauf[:verlauf.index('\n}\n')]
+    assert 'zeigeZaehler(meterId);' in verlauf
+    assert ".modal-overlay.active:not(.als-spalte)" in verlauf
+
+
+def test_konzept_d_zaehler_auswahl_und_bewegung():
+    assert re.search(r'\.zaehler-tabelle tr\[aria-current="true"\] > td:first-child \{\s*box-shadow: inset 3px 0 0 var\(--primary\);', STIL)
+    assert "tr.setAttribute('aria-current', 'true')" in SKRIPT
+    assert 'animation: auftauchen' in _regel('.zaehler-detail.blendet-ein')
+    # Breit trägt das Detail die Handlungen; schmal bleiben sie in der Zeile (NK-252).
+    assert 'td.zaehler-aktionen' in _media('(min-width: 1101px)')
+
+
+def test_konzept_d_zaehler_aktionen_brechen_bis_1100_um():
+    # Sichtprüfung 1024 px: „Ersten Stand erfassen“ machte die Aktionsspalte 499 px
+    # breit, die Tabelle lief aus dem Behälter. NK-219 hält das inline nowrap.
+    assert 'td.zaehler-aktionen {\n        white-space: normal !important;' in _media('(max-width: 1100px)')
+
+
+def test_konzept_d_zaehler_filter_bricht_um():
+    # Sichtprüfung 390 px: die Pille „Wasserversorgung“ schob die Seite auf 487 px.
+    assert "pillen.className = 'knopf-zeile';" in SKRIPT
+    assert 'flex-wrap: wrap' in _regel('.knopf-zeile')
+
+
+def test_tabellen_zeilen_hover_einheitlich():
+    # Tabellen-Leitfaden (setproduct): Zeilen-Hover hilft beim Lesen über die Zeile.
+    hover = _media('(hover: hover)')
+    assert '.tabelle tbody tr:hover' in hover
+    assert '.zaehler-tabelle tr[data-zaehler]:not([aria-current="true"]):hover' in hover
+    assert 'background: var(--bg-hover);' in hover
+

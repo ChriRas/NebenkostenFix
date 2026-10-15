@@ -2448,11 +2448,6 @@ a.btn-primary:hover {
         font-size: 13px;
         color: var(--text-muted);
     }
-
-    /* Mit dem Wechsel-Knopf (NK-258) passen die Aktionen nicht mehr in eine Zeile. */
-    .zaehler-tabelle td.zaehler-aktionen {
-        white-space: normal !important;
-    }
 }
 
 /* Telefon (Konzept D, E-Mobil): die Leiste wird zur dunklen Leiste am
@@ -3443,6 +3438,197 @@ td .btn-icon,
 
     .vorschau-blatt {
         padding: var(--space-3);
+    }
+}
+
+/* Zähler (Konzept D „Haus“): links die Liste, rechts das Detail des gewählten
+   Zählers mit Kennzahlen, Verbrauchsbalken und Ablesungen. */
+.zaehler-ansicht {
+    display: flex;
+    gap: var(--space-5);
+    align-items: flex-start;
+}
+
+.zaehler-ansicht > #meters-container {
+    flex: 1;
+    min-width: 0;
+}
+
+.zaehler-detail {
+    flex: 0 0 440px;
+    min-width: 0;
+    position: sticky;
+    top: var(--space-4);
+    max-height: calc(100vh - 2 * var(--space-4));
+    overflow-y: auto;
+    padding: var(--space-5);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+}
+
+.zaehler-detail:empty {
+    display: none;
+}
+
+.zaehler-detail.blendet-ein {
+    animation: auftauchen var(--dauer-mittel) var(--kurve);
+}
+
+.zaehler-detail-kopf {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: var(--space-3);
+}
+
+.zaehler-detail-titel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    min-width: 0;
+}
+
+.zaehler-art {
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+}
+
+.zaehler-nummer {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: 22px;
+    overflow-wrap: anywhere;
+}
+
+.zaehler-detail-aktionen {
+    flex-wrap: wrap;
+}
+
+.zaehler-detail-aktionen > button {
+    flex: 1 1 auto;
+    justify-content: center;
+}
+
+.zaehler-kennzahlen {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--space-2);
+}
+
+.kennzahl {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    padding: var(--space-3);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--bg-hover);
+    min-width: 0;
+}
+
+.kennzahl-titel,
+.kennzahl small {
+    font-size: 13px;
+    color: var(--text-muted);
+}
+
+.kennzahl strong {
+    font-size: 16px;
+    overflow-wrap: anywhere;
+}
+
+/* Verbrauch je Ablesezeitraum: die Säulenhöhe setzt app.js als --anteil. */
+.verbrauch-balken {
+    display: flex;
+    align-items: flex-end;
+    gap: var(--space-2);
+    height: 120px;
+    padding-top: var(--space-2);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.balken {
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    align-items: center;
+    gap: var(--space-1);
+}
+
+.balken-saeule {
+    width: 100%;
+    max-width: 32px;
+    height: var(--anteil);
+    min-height: 2px;
+    border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+    background: var(--primary);
+    transform-origin: bottom;
+    animation: marke-wachsen var(--dauer-mittel) var(--kurve) backwards;
+}
+
+.balken-datum {
+    font-size: 13px;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+/* Gewählte Zeile: getönt, links ein Indigo-Akzent wie bei den Belegen. */
+.zaehler-tabelle tr[data-zaehler] {
+    cursor: pointer;
+}
+
+/* Zeilen-Hover führt das Auge über die Zeile; die gewählte Zeile behält ihre Tönung. */
+@media (hover: hover) {
+    .tabelle tbody tr:hover,
+    .zaehler-tabelle tr[data-zaehler]:not([aria-current="true"]):hover {
+        background: var(--bg-hover);
+    }
+}
+
+.zaehler-tabelle tr[aria-current="true"] {
+    background: var(--primary-tint);
+}
+
+.zaehler-tabelle tr[aria-current="true"] > td:first-child {
+    box-shadow: inset 3px 0 0 var(--primary);
+}
+
+.zaehler-tabelle tr[data-zaehler]:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: -2px;
+}
+
+/* Breit trägt das Detail alle Handlungen, die Liste bleibt ruhig. */
+@media (min-width: 1101px) {
+    .zaehler-tabelle .zaehler-kopf th:last-child,
+    .zaehler-tabelle td.zaehler-aktionen {
+        display: none;
+    }
+}
+
+@media (max-width: 1100px) {
+    .zaehler-ansicht {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    /* Mit dem Wechsel-Knopf (NK-258) und „Ersten Stand erfassen“ passen die
+       Aktionen nicht in eine Zeile; das inline nowrap hält NK-219. */
+    .zaehler-tabelle td.zaehler-aktionen {
+        white-space: normal !important;
+    }
+
+    .zaehler-detail {
+        flex: none;
+        position: static;
+        max-height: none;
     }
 }
 

@@ -386,6 +386,14 @@ pruefe('K1: auch „Heute“ beginnt mit einem Seitenkopf',
 
 // --- NK-102: Leerzustand als eine Komponente (K4) ---
 const app = fs.readFileSync(path.join(__dirname, '..', 'static', 'app.js'), 'utf8');
+
+// Konzept D, Zähler-Detail: Verbrauch je Zeitraum, bei Zweitarif HT plus NT.
+const verbrauchQuelle = (app.match(/function zaehlerVerbrauch\([\s\S]*?\n\}\n/) || [''])[0];
+const zaehlerVerbrauch = new Function(verbrauchQuelle + 'return zaehlerVerbrauch;')();
+pruefe('Konzept D: Verbrauch eines Eintarifzählers ist die Differenz',
+    zaehlerVerbrauch({ value: 100 }, { value: 130.5 }) === 30.5);
+pruefe('Konzept D: Verbrauch eines Zweitarifzählers zählt HT und NT',
+    zaehlerVerbrauch({ value: 100, value_nt: 40 }, { value: 130, value_nt: 50 }) === 40);
 pruefe('K4: der Erzeuger leerzustand() existiert genau einmal',
     (app.match(/function leerzustand\(/g) || []).length === 1);
 pruefe('K4: keine handgeschriebene empty-state-Kopie mehr',

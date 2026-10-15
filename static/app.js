@@ -2819,10 +2819,17 @@ function getReadingHtml(r, einheit) {
 }
 
 // --- Render Meters ---
+// Konzept D: links die Liste mit Filterpillen nach Art, rechts das Detail des
+// gewählten Zählers (zeigeZaehlerDetail). Ohne Wahl gilt der erste sichtbare.
+let zaehlerGewaehlt = null;
+let zaehlerArtFilter = null;
+
 function renderMeters() {
     const container = document.getElementById('meters-container');
     if (!container) return;
     container.replaceChildren();
+    const detail = document.getElementById('zaehler-detail');
+    if (detail) detail.replaceChildren();
     
     if (meters.length === 0) {
         container.innerHTML = leerzustand({
@@ -2834,8 +2841,28 @@ function renderMeters() {
         return;
     }
     
+    const arten = [...new Set(meters.map(m => zaehlerArtName(m.category_name)))].sort();
+    if (!arten.includes(zaehlerArtFilter)) zaehlerArtFilter = null;
+    if (arten.length > 1) {
+        const pillen = document.createElement('div');
+        pillen.className = 'knopf-zeile';
+        pillen.setAttribute('role', 'group');
+        pillen.setAttribute('aria-label', 'Zähler nach Art');
+        [null, ...arten].forEach(art => {
+            const knopf = document.createElement('button');
+            knopf.type = 'button';
+            knopf.className = zaehlerArtFilter === art ? 'filter-pill active' : 'filter-pill';
+            knopf.setAttribute('aria-pressed', String(zaehlerArtFilter === art));
+            knopf.textContent = art || 'Alle';
+            knopf.onclick = () => { zaehlerArtFilter = art; renderMeters(); };
+            pillen.appendChild(knopf);
+        });
+        container.appendChild(pillen);
+    }
+    const sichtbar = meters.filter(m => !zaehlerArtFilter || zaehlerArtName(m.category_name) === zaehlerArtFilter);
+
     const grouped = {};
-    meters.forEach(m => {
+    sichtbar.forEach(m => {
         if (!grouped[m.property_name]) grouped[m.property_name] = [];
         grouped[m.property_name].push(m);
     });
@@ -2873,9 +2900,17 @@ function renderMeters() {
             return a.is_official ? -1 : 1;
         }).forEach(m => {
             const tr = document.createElement('tr');
+            tr.dataset.zaehler = m.id;
+            tr.tabIndex = 0;
             tr.style.borderBottom = "1px solid var(--border-color)";
             tr.style.cursor = "pointer";
-            tr.onclick = () => openHistoryModal(m.id);
+            tr.onclick = () => zeigeZaehler(m.id);
+            tr.onkeydown = (e) => {
+                if (e.target === tr && (e.key === 'Enter' || e.key === ' ')) {
+                    e.preventDefault();
+                    zeigeZaehler(m.id);
+                }
+            };
             
             const tdCat = document.createElement('td');
             tdCat.style.padding = "12px 8px";
@@ -2995,6 +3030,105 @@ function renderMeters() {
         box.appendChild(table);
         container.appendChild(box);
     });
+
+    if (!sichtbar.some(m => m.id === zaehlerGewaehlt)) {
+        // Erster sichtbarer Zähler in Listenreihenfolge (Häuser, darin Versorger zuerst).
+        const erste = container.querySelector('tr[data-zaehler]');
+        zaehlerGewaehlt = erste ? Number(erste.dataset.zaehler) : null;
+    }
+    zeigeZaehlerDetail();
+}
+
+// Wählt einen Zähler; in der einspaltigen Ansicht rückt das Detail ins Bild.
+function zeigeZaehler(meterId) {
+    zaehlerGewaehlt = meterId;
+    zeigeZaehlerDetail();
+    const detail = document.getElementById('zaehler-detail');
+    if (detail && window.matchMedia('(max-width: 1100px)').matches) detail.scrollIntoView({ block: 'start' });
+}
+
+// Verbrauch zwischen zwei Ständen; bei Zweitarif zählen HT und NT zusammen.
+function zaehlerVerbrauch(vorher, nachher) {
+    const nt = (nachher.value_nt ?? 0) - (vorher.value_nt ?? 0);
+    return (nachher.value - vorher.value) + nt;
+}
+
+function zeigeZaehlerDetail() {
+    const detail = document.getElementById('zaehler-detail');
+    if (!detail) return;
+    document.querySelectorAll('#meters-container tr[data-zaehler]').forEach(tr =>
+        Number(tr.dataset.zaehler) === zaehlerGewaehlt ? tr.setAttribute('aria-current', 'true') : tr.removeAttribute('aria-current'));
+    const m = meters.find(z => z.id === zaehlerGewaehlt);
+    detail.replaceChildren();
+    if (!m) return;
+
+    const fmt = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 2 });
+    const datum = d => new Date(d).toLocaleDateString('de-DE');
+    const einheit = m.einheit ? ' ' + m.einheit : '';
+    const staende = readings.filter(r => r.meter_id === m.id)
+        .sort((a, b) => new Date(a.reading_date) - new Date(b.reading_date));
+    const letzter = staende[staende.length - 1];
+    const zeitraeume = staende.slice(1).map((r, i) => ({ bis: r.reading_date, menge: zaehlerVerbrauch(staende[i], r) }));
+    const jungster = zeitraeume[zeitraeume.length - 1];
+    const ort = [m.property_name, m.is_main_meter ? 'Allgemein' : m.apartment_name, m.ort].filter(Boolean).join(' · ');
+
+    const kennzahl = (titel, wert, zusatz) => `<div class="kennzahl">
+            <span class="kennzahl-titel">${escapeHtml(titel)}</span>
+            <strong class="tabular-nums">${escapeHtml(wert)}</strong>
+            <small>${escapeHtml(zusatz)}</small>
+        </div>`;
+    const kennzahlenHtml = kennzahl('Letzter Stand',
+            letzter ? fmt.format(letzter.value) + einheit : '–',
+            letzter ? datum(letzter.reading_date) : 'noch kein Stand')
+        + kennzahl('Ablesungen', String(staende.length),
+            staende.length ? 'seit ' + datum(staende[0].reading_date) : 'noch keine')
+        + kennzahl('Verbrauch', jungster ? fmt.format(jungster.menge) + einheit : '–',
+            jungster ? 'bis ' + datum(jungster.bis) : 'ab zwei Ständen');
+
+    const balken = zeitraeume.slice(-8);
+    const hoechster = Math.max(...balken.map(z => z.menge), 0);
+    const balkenHtml = balken.length ? `<div class="verbrauch-balken" role="img" aria-label="Verbrauch je Ablesezeitraum">${balken.map(z => {
+        const anteil = hoechster > 0 ? Math.max(0, z.menge) / hoechster * 100 : 0;
+        const titel = `${fmt.format(z.menge)}${einheit} bis ${datum(z.bis)}`;
+        return `<div class="balken" title="${escapeHtml(titel)}">
+                <span class="balken-saeule" style="--anteil: ${escapeHtml(anteil.toFixed(1))}%"></span>
+                <span class="balken-datum">${escapeHtml(new Date(z.bis).toLocaleDateString('de-DE', { month: 'short', year: '2-digit' }))}</span>
+            </div>`;
+    }).join('')}</div>` : '';
+
+    const markenHtml = (m.is_official
+            ? '<span class="dq-status-badge green" title="Offizieller Zähler des Versorgers"><i class="ph ph-check-circle"></i> Versorger</span>'
+            : '<span class="dq-status-badge none" title="Privater Zwischenzähler">Privat</span>')
+        + (m.ersetzt_durch ? ' <span class="dq-status-badge none">ausgebaut</span>' : '')
+        + (m.eichhinweis ? ` <span class="dq-status-badge yellow"><i class="ph ph-warning" aria-hidden="true"></i> ${escapeHtml(m.eichhinweis)}</span>` : '');
+
+    const wechselHtml = m.ersetzt_durch ? '' : `<button class="btn-secondary" type="button" onclick="openWechselModal(${Number(m.id)})"><i class="ph ph-swap" aria-hidden="true"></i> Zählerwechsel erfassen</button>`;
+
+    detail.innerHTML = `
+        <div class="zaehler-detail-kopf">
+            <div class="zaehler-detail-titel">
+                <span class="zaehler-art">${escapeHtml(zaehlerArtName(m.category_name))}</span>
+                <h3 class="zaehler-nummer">${escapeHtml(m.meter_number)}</h3>
+                <span class="text-muted">${escapeHtml(ort)}</span>
+            </div>
+            <div class="zeile-eng">
+                <button class="btn-icon" type="button" title="Zähler bearbeiten" aria-label="Zähler bearbeiten" onclick="openEditMeterModal(${Number(m.id)})"><i class="ph ph-gear-six" aria-hidden="true"></i></button>
+                <button class="btn-icon" type="button" title="Zähler löschen" aria-label="Zähler löschen" onclick="deleteMeter(${Number(m.id)})"><i class="ph ph-trash" aria-hidden="true"></i></button>
+            </div>
+        </div>
+        <div class="zeile-eng">${markenHtml}</div>
+        <div class="zeile-eng zaehler-detail-aktionen">
+            ${wechselHtml}
+            <button class="btn-primary" type="button" onclick="openAddReadingModal(${Number(m.id)})"><i class="ph ph-plus" aria-hidden="true"></i> Ablesung erfassen</button>
+        </div>
+        <div class="zaehler-kennzahlen">${kennzahlenHtml}</div>
+        ${balkenHtml}
+        <table class="tabelle ablese-tabelle"></table>`;
+    fuelleAblesungen(detail.querySelector('.ablese-tabelle'), m);
+    // Das Detail blendet bei jedem Wechsel neu ein (Konzept D).
+    detail.classList.remove('blendet-ein');
+    void detail.offsetWidth;
+    detail.classList.add('blendet-ein');
 }
 
 // --- Accordion Logic & Invoices ---
@@ -3703,10 +3837,22 @@ async function deleteMeter(id) {
 function openHistoryModal(meterId) {
     const meter = meters.find(m => m.id === meterId);
     if(!meter) return;
+    // Konzept D: auf der Zählerseite steht der Verlauf im Detail. Aus einem
+    // Dialog heraus (Jahresassistent, NK-265) bleibt es beim Verlaufsdialog.
+    if (document.getElementById('tab-meters').classList.contains('active')
+        && !document.querySelector('.modal-overlay.active:not(.als-spalte)')) {
+        zeigeZaehler(meterId);
+        return;
+    }
     
     document.getElementById('history-modal-title').textContent = `Historie: ${meter.meter_number} (${zaehlerArtName(meter.category_name)})`;
-    
-    const table = document.getElementById('history-table');
+    fuelleAblesungen(document.getElementById('history-table'), meter);
+    document.getElementById('history-modal').classList.add('active');
+}
+
+// Ablesungen eines Zählers, neueste zuerst; Verlaufsdialog und Zählerdetail teilen sie.
+function fuelleAblesungen(table, meter) {
+    const meterId = meter.id;
     table.replaceChildren();
     table.innerHTML = `
         <tr style="border-bottom: 1px solid var(--border-color);">
@@ -3754,8 +3900,6 @@ function openHistoryModal(meterId) {
     if (meterReadings.length === 0) {
         table.innerHTML += `<tr><td colspan="2" style="padding: 12px 8px;">Keine Zählerstände vorhanden.</td></tr>`;
     }
-    
-    document.getElementById('history-modal').classList.add('active');
 }
 
 function closeHistoryModal() {
