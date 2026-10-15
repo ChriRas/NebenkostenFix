@@ -41,7 +41,8 @@ jobs:
           python -m pip install -r requirements.txt -r requirements-desktop.txt playwright==1.63.0
           python -m playwright install --with-deps chromium
       - name: Rundgang
-        run: python scripts/rundgang.py --ausgabe rundgang-bilder
+        # readme/: Bilder für docs/bilder und packaging/windows/store/bilder
+        run: python scripts/rundgang.py --ausgabe rundgang-bilder --readme rundgang-bilder/readme
       - name: Aufnahmen ablegen
         if: always()
         uses: actions/upload-artifact@v7
