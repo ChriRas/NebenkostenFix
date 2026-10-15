@@ -463,7 +463,7 @@ def test_konzept_d_zaehler_liste_und_detail():
     # (scripts/rundgang.py) erwartet dort nur Zählerzeilen.
     ansicht = SEITE[SEITE.index('class="zaehler-ansicht"'):]
     ansicht = ansicht[:ansicht.index('</aside>')]
-    assert '<div class="spalte" id="meters-container"></div>' in ansicht
+    assert '<div class="spalte" id="meters-container">' in ansicht
     assert 'id="zaehler-detail"' in ansicht
     assert 'function zeigeZaehlerDetail(' in SKRIPT
     assert "fuelleAblesungen(detail.querySelector('.ablese-tabelle'), m);" in SKRIPT
@@ -625,3 +625,205 @@ def test_runde3_pdf_ohne_browser_viewer():
     assert 'overflow-y: auto' in regel and 'position: relative' in regel
     assert 'justify-content: flex-start' in regel   # Seite 1 bleibt erreichbar
     assert 'border:' not in _regel('.pdf-seite')   # kein zweiter Rahmen
+
+
+def test_runde4_anbieter_direkt_im_rechnungsformular():
+    """Ohne Anbieter ließ sich keine Rechnung speichern, und
+    das Anlegen lag versteckt in den Einstellungen."""
+    formular = SEITE[SEITE.index('id="invoice-form"'):]
+    formular = formular[:formular.index('</form>')]
+    assert 'onclick="anbieterFeldZeigen()"' in formular
+    assert 'id="anbieter-neu-name"' in formular
+    assert 'onclick="anbieterImFormularAnlegen()"' in formular
+    assert 'id="anbieter-leer-hinweis"' in formular
+    for name in ('anbieterFeldZeigen', 'anbieterImFormularAnlegen'):
+        assert f'window.{name} = {name}' in SKRIPT, name
+    # Leere Liste: Hinweis und Eingabefeld zeigen sich von selbst.
+    assert re.search(r'function anbieterHinweisAktualisieren\(\)[\s\S]{0,400}providers\.length === 0', SKRIPT)
+
+
+def test_runde4_vorauszahlung_erklaert_den_begriff():
+    kopf = re.search(r'<h2[^>]*>Vorauszahlungen[\s\S]*?</h2>', SEITE)
+    assert kopf and 'data-begriff="vorauszahlung"' in kopf.group(0)
+
+
+def test_runde4_leere_wohnungsliste_bietet_den_knopf():
+    stelle = SKRIPT[SKRIPT.index('In diesem Haus ist noch keine Wohnung angelegt.'):][:600]
+    assert "openAddApartmentModal()" in stelle
+    assert '.leer-zeile' in STIL
+
+
+def test_runde4_einfuehrung_als_sprechblasen_tour():
+    """Sprechblasen mit Schrittzahl, vor und zurück, ein X
+    schließt jederzeit, und die Blase zeigt auf die Stelle zum Klicken."""
+    blase = SEITE[SEITE.index('id="tour"'):]
+    blase = blase[:blase.index('</div>\n    </div>')]
+    assert 'id="tour-ring"' in SEITE
+    assert 'id="tour-stand"' in blase
+    assert re.search(r'class="tour-zu" onclick="tourBeenden\(\)" aria-label="Einführung schließen"', blase)
+    assert 'onclick="tourSchritt(-1)"' in blase and 'onclick="tourSchritt(1)"' in blase
+    assert SEITE.count('onclick="tourStarten()"') >= 2   # Erste Schritte und Hilfe
+    for name in ('tourStarten', 'tourBeenden', 'tourSchritt'):
+        assert f'window.{name} = {name}' in SKRIPT, name
+    # Jedes Ziel gibt es in der Seite; Schritt 6 zeigt aufs Kontomenü, weil
+    # die Hilfe darin steckt.
+    tour = SKRIPT[SKRIPT.index('const TOUR = ['):SKRIPT.index('let tourIndex')]
+    for onclick in re.findall(r'\[onclick="([^"]+)"\]', tour):
+        assert f'onclick="{onclick}"' in SEITE, onclick
+    assert "ziel: '.konto-knopf'" in tour
+    # Endlospuls nur, wenn Bewegung erlaubt ist.
+    puls = STIL[STIL.index('@media (prefers-reduced-motion: no-preference)', STIL.index('@keyframes tour-puls')):]
+    assert 'animation: tour-puls' in puls[:400]
+
+
+def test_runde4_einfuehrung_weicht_dialogen_und_dem_handymenue():
+    """Browserbefunde: der Update-Dialog ging über der Tour auf und nahm den
+    Fokus; am Handy stecken die Seitenknöpfe im ⋮-Menü."""
+    beobachter = SKRIPT[SKRIPT.index('}).observe(overlay') - 300:SKRIPT.index('}).observe(overlay')]
+    assert 'tourDialogAbgleichen();' in beobachter
+    platzieren = SKRIPT[SKRIPT.index('function tourPlatzieren()'):][:120]
+    assert 'if (!tourSichtbar()) return;' in platzieren
+    zeigen = SKRIPT[SKRIPT.index('function tourZeigen()'):][:900]
+    assert ".closest('.kopf-aktionen.mit-menue')" in zeigen
+    assert ".querySelector('.kopf-menue-knopf')" in zeigen
+    # Von selbst nur einmal, nur in der leeren App und erst nach offenen Dialogen.
+    auto = SKRIPT[SKRIPT.index('function tourAutostart()'):][:700]
+    assert "localStorage.getItem('nk-tour-gesehen')" in auto
+    assert "document.querySelector('.modal-overlay.active')" in auto
+    assert "localStorage.setItem('nk-tour-gesehen', '1')" in SKRIPT
+
+
+def test_runde4_tabellen_sortieren_und_summieren_wie_excel():
+    sortieren = SKRIPT[SKRIPT.index('function tabelleSortieren('):][:1400]
+    assert "kopf.setAttribute('aria-sort'" in sortieren
+    assert "localeCompare(wert(b), 'de', { numeric: true })" in sortieren
+    assert 'window.tabelleSortieren = tabelleSortieren' in SKRIPT
+    rechnungen = SKRIPT[SKRIPT.index('function renderInvoices()'):SKRIPT.index('// --- Tenant Cost Profile Logic ---')]
+    # modern: feine .tabelle-Linien statt Zebra und Inline-Abständen
+    assert 'table-zebra' not in rechnungen and 'table-zebra' not in STIL
+    assert '12px 8px' not in rechnungen
+    assert "sortierKopf('Betrag', 'zahl', true)" in rechnungen
+    assert '<tr class="summenzeile">' in rechnungen
+    assert 'zelle(euroText(inv.amount), inv.amount)' in rechnungen
+    zahlungen = SEITE[SEITE.index('id="payment-details-title"'):SEITE.index('id="payment-details-list"') + 900]
+    assert zahlungen.count('onclick="tabelleSortieren(this)"') == 3
+    assert 'id="payment-details-summe"' in zahlungen
+    details = SKRIPT[SKRIPT.index('function openPaymentDetailsModal('):][:3500]
+    assert '.filter(p => new Date(p.payment_date) <= heute)' in details
+    assert 'data-wert="${Number(p.amount)}"' in details
+    assert '.summenzeile td' in STIL and '.sortier-knopf' in STIL
+
+
+def test_runde4_enter_springt_in_der_ablese_runde_und_schrift_im_kontomenue():
+    enter = SKRIPT[SKRIPT.index('// Runde 4: in der Ablese-Runde springt Enter'):][:700]
+    assert "feld.closest('#ablesen-liste')" in enter
+    assert 'if (!naechstes) return;' in enter
+    assert 'naechstes.focus();' in enter
+    kopf = SEITE[SEITE.index('<header class="top-header">'):SEITE.index('</header>')]
+    assert 'onclick="schriftgroesseWechseln()"' in kopf
+    assert 'window.schriftgroesseWechseln = schriftgroesseWechseln' in SKRIPT
+    zeigen = SKRIPT[SKRIPT.index('function schriftgroesseZeigen()'):][:700]
+    assert "getElementById('kopf-schrift-text')" in zeigen
+    assert 'localStorage' not in zeigen
+
+
+def test_runde4_skelette_balken_und_haken():
+    # Jede Liste zeigt beim Laden graue Platzhalter statt leerer Fläche.
+    for container in ('meters-container', 'documents-container', 'invoices-container', 'properties-grid',
+                      'tenants-container', 'billing-suggestions-container', 'billing-history-container'):
+        start = SEITE.index(f'id="{container}">') + len(f'id="{container}">')
+        assert SEITE[start:].lstrip().startswith('<div class="skelett" role="status"'), container
+    assert 'loading-state' not in SEITE and '.loading-state' not in STIL
+    # Endlos-Bewegung nur ohne Wunsch nach weniger Bewegung, die Ruhefassung bleibt sichtbar.
+    ruhig = STIL[STIL.index('.arbeitet::after {'):STIL.index('@keyframes fortschritt')]
+    assert '@media (prefers-reduced-motion: no-preference)' in ruhig
+    assert 'animation' not in _regel('.arbeitet::after') and 'animation' not in _regel('.skelett span')
+    # Lange Aktionen zeigen den Balken und räumen ihn auch im Fehlerfall weg.
+    for kopf, knopf in (('async function finalizeBill(', 'btn'),
+                        ('async function generateMissingPdf(', 'btnElement'),
+                        ('async function sicherungErstellen(knopf)', 'knopf')):
+        rumpf = SKRIPT[SKRIPT.index(kopf):][:4000]
+        rumpf = rumpf[:rumpf.index('\n}\n')]
+        assert f'zeigeArbeit({knopf}, true);' in rumpf, kopf
+        assert f'}} finally {{\n        zeigeArbeit({knopf}, false);' in rumpf.replace(
+            'if (knopf) knopf.disabled = false;\n        ', ''), kopf
+    assert 'onclick="sicherungErstellen(this)"' in SEITE
+    sicherung = SKRIPT[SKRIPT.index('async function sicherungErstellen(knopf)'):][:2500]
+    assert sicherung.index('knopf.disabled = true') < sicherung.index("fetch('/api/backup/erstellen'")
+    assert '<p class="karten-text arbeitet" aria-busy="true">Die Vorschau wird gerechnet' in SKRIPT
+    # Der Haken ploppt nur bei Erfolg auf; der Text bleibt textContent, kein HTML.
+    meldung = SKRIPT[SKRIPT.index('function zeigeMeldung('):SKRIPT.index('function zeigeArbeit(')]
+    assert "if (art === 'erfolg')" in meldung and "'ph ph-check-circle toast-haken'" in meldung
+    assert 'text.textContent = message;' in meldung and 'innerHTML' not in meldung
+    assert '@keyframes haken-ploppen' in STIL
+
+
+def _kontrast_hex(a: str, b: str) -> float:
+    def lum(hexwert):
+        kanaele = (int(hexwert[i:i + 2], 16) / 255 for i in (1, 3, 5))
+        r, g, b_ = (c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4 for c in kanaele)
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b_
+    hell, dunkel = sorted((lum(a), lum(b)), reverse=True)
+    return (hell + 0.05) / (dunkel + 0.05)
+
+
+def test_runde4_dunkelmodus():
+    # Nur ein dunkler Block, nur auf dem Bildschirm; gedruckt wird immer hell.
+    dunkel_block = _media('screen')
+    assert ':root[data-theme="dark"] {' in dunkel_block and 'color-scheme: dark;' in dunkel_block
+    assert STIL.count('[data-theme="dark"]') == 1
+    hell = dict(re.findall(r'(--[\w-]+):\s*(#[0-9A-Fa-f]{6})', STIL[STIL.index(':root {'):]
+                           .split('\n}\n')[0]))
+    dunkel = dict(re.findall(r'(--[\w-]+):\s*(#[0-9A-Fa-f]{6})', dunkel_block))
+    assert dunkel and set(dunkel) <= set(hell), set(dunkel) - set(hell)
+    farbe = {**hell, **dunkel}
+    # Schrift auf jedem Grund mindestens 4,5 : 1, Feldränder 3 : 1.
+    gruende = ('--bg-color', '--surface', '--surface-alt', '--bg-hover', '--primary-tint')
+    paare = [(text, grund, 4.5) for text in ('--text-main', '--text-muted', '--primary-text')
+             for grund in gruende]
+    paare += [('--link-hover', '--surface', 4.5), ('--warning-text', '--warning-bg', 4.5),
+              ('--success-color', '--success-bg', 4.5), ('--danger-color', '--danger-bg', 4.5),
+              ('--warning-strong', '--warning-bg', 4.5), ('--field-border', '--surface', 3)]
+    paare += [('--on-primary', knopf, 4.5)
+              for knopf in ('--primary', '--primary-hover', '--danger-color', '--danger-hover')]
+    paare += [(text, grund, 4.5) for text in ('--leiste-text', '--leiste-hell')
+              for grund in ('--leiste', '--leiste-hover', '--leiste-aktiv')]
+    for text, grund, soll in paare:
+        assert _kontrast_hex(farbe[text], farbe[grund]) >= soll, (text, grund)
+    # Die weiße Leistenschrift hängt nicht an --on-primary, das im Dunkeln dunkel wird.
+    for selektor in ('.leiste-eintrag:hover', '.leiste-eintrag.active'):
+        assert 'color: var(--leiste-hell)' in _regel(selektor), selektor
+    # Diagramme: jede Kategorienfarbe hält auf der dunklen Fläche 3 : 1.
+    diagramm = dict(re.findall(r"(\w+): '(#[0-9A-Fa-f]{6})'",
+                               SKRIPT[SKRIPT.index('const DIAGRAMM_FARBE = {'):].split('};')[0]))
+    diagramm.update(re.findall(r"(\w+): '(#[0-9A-Fa-f]{6})'",
+                               SKRIPT[SKRIPT.index('const DIAGRAMM_FARBE_DUNKEL = '):].split('};')[0]))
+    for name, wert in diagramm.items():
+        assert _kontrast_hex(wert, dunkel['--surface']) >= 3, name
+    # Das Thema steht fest, bevor Diagramme oder die App etwas zeichnen.
+    kopf = SEITE[:SEITE.index('</head>')]
+    assert kopf.index("localStorage.getItem('nk-thema')") < kopf.index('chart.umd.min.js')
+    assert 'document.documentElement.dataset.theme = t;' in kopf
+    assert SEITE.index('nk-thema') < SEITE.index('/static/app.js')
+    # Sonne/Mond sitzt über den Einstellungen; auf dem Handy im Kopfmenü.
+    leiste = SEITE[SEITE.index('<nav class="leiste"'):SEITE.index('</nav>')]
+    knopf = leiste.index('class="thema-knopf"')
+    assert leiste.index('leiste-luecke') < knopf < leiste.index('data-gruppe="einstellungen"')
+    assert 'aria-label="Dunkelmodus einschalten"' in leiste[knopf:knopf + 200]
+    assert 'id="kopf-thema" onclick="themaWechseln()"' in SEITE
+    assert 'display: none' in _regel('#kopf-thema')
+    handy = _media('(max-width: 560px)')
+    assert '.sidebar .thema-knopf' in handy and '#kopf-thema {\n        display: inline-flex;' in handy
+    # Die Wahl bleibt gespeichert; ohne Wahl folgt die App dem System.
+    assert 'window.themaWechseln = themaWechseln' in SKRIPT
+    wechseln = SKRIPT[SKRIPT.index('function themaWechseln()'):][:400]
+    assert "localStorage.setItem('nk-thema', neu)" in wechseln
+    assert "'Hellen Modus einschalten' : 'Dunkelmodus einschalten'" in SKRIPT
+    assert 'initThema();' in SKRIPT[SKRIPT.index('function initApp'):][:3000]
+    # Gezeichnete Diagramme: Chart.js hält aufgelöste Achsenfarben fest in options.scales,
+    # Datensätze tragen Blau/Rot als Text. Ohne Umsetzen bleibt nach dem Wechsel das alte Thema stehen.
+    anzeigen = SKRIPT[SKRIPT.index('function themaAnzeigen('):SKRIPT.index('function themaWechseln()')]
+    assert 'diagramm.options.scales' in anzeigen
+    assert 'achse.grid.color = Chart.defaults.borderColor' in anzeigen
+    assert 'achse.ticks.color = Chart.defaults.color' in anzeigen
+    assert 'diagramm.data.datasets.forEach' in anzeigen and 'map(tausch)' in anzeigen

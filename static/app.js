@@ -80,19 +80,26 @@ function schriftgroesseWaehlen(wert) {
     } catch (e) {
         // gilt dann nur bis zum Neuladen
     }
+    schriftgroesseZeigen();
 }
 window.schriftgroesseWaehlen = schriftgroesseWaehlen;
 
+// Runde 4: der Knopf im Kontomenü schaltet reihum durch die drei Stufen.
+function schriftgroesseWechseln() {
+    const jetzt = Number(document.documentElement.dataset.schrift || '1');
+    schriftgroesseWaehlen(SCHRIFTGROESSEN[(SCHRIFTGROESSEN.indexOf(jetzt) + 1) % SCHRIFTGROESSEN.length]);
+}
+window.schriftgroesseWechseln = schriftgroesseWechseln;
+
 function schriftgroesseZeigen() {
-    let faktor = 1;
-    try {
-        faktor = Number(localStorage.getItem('nk-schrift') || '1');
-    } catch (e) {
-        faktor = 1;
-    }
+    // Der angewendete Wert, damit es auch ohne Speicher (privater Modus) stimmt.
+    const faktor = Number(document.documentElement.dataset.schrift || '1');
     document.querySelectorAll('input[name="schriftgroesse"]').forEach(feld => {
         feld.checked = Number(feld.value) === faktor;
     });
+    const knopf = document.getElementById('kopf-schrift-text');
+    if (knopf) knopf.textContent = faktor === SCHRIFTGROESSEN[SCHRIFTGROESSEN.length - 1]
+        ? 'Schrift zurücksetzen' : 'Größere Schrift einschalten';
 }
 
 // ---------------------------------------------------------------------------
@@ -110,6 +117,74 @@ const DIAGRAMM_FARBE = {
     rot: '#A3312A',
     grau: '#8C8FA6',
 };
+const DIAGRAMM_FARBE_HELL = { ...DIAGRAMM_FARBE };
+// Blau und Rot halten auf der dunklen Fläche sonst keine 3 : 1.
+const DIAGRAMM_FARBE_DUNKEL = { ...DIAGRAMM_FARBE, blau: '#8E88F8', rot: '#F08A82' };
+
+// ---------------------------------------------------------------------------
+// Runde 4: Dunkelmodus. Das Skript im <head> setzt data-theme vor dem ersten
+// Bild; Sonne/Mond in der Leiste (auf dem Handy im Kopfmenü) wechselt es und
+// merkt die Wahl in nk-thema. Ohne Wahl folgt die App dem System.
+// ---------------------------------------------------------------------------
+function themaAnzeigen(thema) {
+    document.documentElement.dataset.theme = thema;
+    const dunkel = thema === 'dark';
+    const text = dunkel ? 'Hellen Modus einschalten' : 'Dunkelmodus einschalten';
+    const symbol = `ph ${dunkel ? 'ph-sun' : 'ph-moon'}`;
+    document.querySelectorAll('.thema-knopf').forEach(knopf => {
+        knopf.setAttribute('aria-label', text);
+        knopf.title = text;
+    });
+    document.querySelectorAll('.thema-knopf i, #kopf-thema i').forEach(i => { i.className = symbol; });
+    document.querySelectorAll('#kopf-thema .thema-text').forEach(span => { span.textContent = text; });
+    const vorher = { ...DIAGRAMM_FARBE };
+    Object.assign(DIAGRAMM_FARBE, dunkel ? DIAGRAMM_FARBE_DUNKEL : DIAGRAMM_FARBE_HELL);
+    // Gezeichnete Datensätze tragen die Farbe als Text, teils mit Alpha-Anhang ('#F08A8259').
+    const tausch = farbe => {
+        if (typeof farbe !== 'string') return farbe;
+        const k = Object.keys(vorher).find(k => vorher[k] !== DIAGRAMM_FARBE[k] && farbe.startsWith(vorher[k]));
+        return k ? DIAGRAMM_FARBE[k] + farbe.slice(vorher[k].length) : farbe;
+    };
+    // Canvas kennt keine CSS-Variablen: Achsen, Gitter und Tortenränder aus den Tokens.
+    if (typeof Chart === 'undefined') return;
+    const stil = getComputedStyle(document.documentElement);
+    Chart.defaults.color = stil.getPropertyValue('--text-muted').trim();
+    Chart.defaults.borderColor = stil.getPropertyValue('--divider').trim();
+    Chart.defaults.elements.arc.borderColor = stil.getPropertyValue('--surface').trim();
+    // Chart.js schreibt aufgelöste Achsenfarben fest in options.scales; neue Defaults allein greifen dort nicht.
+    Object.values(Chart.instances).forEach(diagramm => {
+        Object.values(diagramm.options.scales || {}).forEach(achse => {
+            if (achse.grid) achse.grid.color = Chart.defaults.borderColor;
+            if (achse.border) achse.border.color = Chart.defaults.borderColor;
+            if (achse.ticks) achse.ticks.color = Chart.defaults.color;
+        });
+        diagramm.data.datasets.forEach(satz => ['backgroundColor', 'borderColor'].forEach(feld => {
+            satz[feld] = Array.isArray(satz[feld]) ? satz[feld].map(tausch) : tausch(satz[feld]);
+        }));
+        diagramm.update();
+    });
+}
+
+function themaWechseln() {
+    const neu = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+    try {
+        localStorage.setItem('nk-thema', neu);
+    } catch (e) {
+        // gilt dann nur bis zum Neuladen
+    }
+    themaAnzeigen(neu);
+}
+window.themaWechseln = themaWechseln;
+
+function initThema() {
+    themaAnzeigen(document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light');
+    if (!window.matchMedia) return;
+    matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+        let gewaehlt = null;
+        try { gewaehlt = localStorage.getItem('nk-thema'); } catch (fehler) { /* ohne Speicher */ }
+        if (!gewaehlt) themaAnzeigen(e.matches ? 'dark' : 'light');
+    });
+}
 
 async function abmelden() {
     try {
@@ -261,6 +336,7 @@ function initApp() {
     initTabs();
     initModalBedienung();
     initBarrierearm();
+    initThema();
     initBefehl();
     initKopfMenues();
     hausFilterSetzen(gemerkterHausFilter());
@@ -1059,6 +1135,188 @@ document.addEventListener('keydown', ereignis => {
 });
 window.addEventListener('scroll', schliesseBegriffBlase, true);
 
+// --- Einführung (Runde 4) -----------------------------------------------------
+// Eine Sprechblasen-Tour: jeder Schritt öffnet seine Seite und zeigt auf die
+// Stelle, an der man dort anfängt. Vor und zurück blättern, X oder Escape
+// beendet sie jederzeit; danach startet sie nicht mehr von selbst.
+const TOUR = [
+    { tab: 'dashboard', ziel: '.leiste-eintrag[data-gruppe="haus"]', titel: 'Alles rund ums Haus',
+      text: 'In dieser Leiste wechseln Sie zwischen den Bereichen. Unter „Haus“ legen Sie Immobilien, Wohnungen, Mieter und Zähler an.' },
+    { tab: 'properties', ziel: '#tab-properties [onclick="openAddPropertyModal()"]', titel: 'Zuerst das Haus',
+      text: 'Legen Sie hier Ihre Immobilie an. Die Wohnungen fügen Sie danach direkt auf der Karte der Immobilie hinzu.' },
+    { tab: 'tenants', ziel: '#tab-tenants [onclick="openAddTenantModal()"]', titel: 'Dann die Mieter',
+      text: 'Hier tragen Sie ein, wer in welcher Wohnung wohnt.' },
+    { tab: 'invoices', ziel: '#pill-eingang', titel: 'Die Rechnungen des Jahres',
+      text: 'Im Eingang laden Sie Belege hoch, etwa die Gas- oder die Müllrechnung. Mit wenigen Angaben wird daraus eine Rechnung.' },
+    { tab: 'billing', ziel: '#tab-billing [onclick="oeffneJahrAssistent()"]', titel: 'Zum Schluss abrechnen',
+      text: 'Am Jahresende führt Sie „Jahr abrechnen“ durch die Abrechnung und zeigt vorher, was noch fehlt.' },
+    { tab: 'dashboard', ziel: '.konto-knopf', titel: 'Hilfe, wenn Sie sie brauchen',
+      text: 'In diesem Menü finden Sie die Hilfe mit Erklärungen zu allen Begriffen. Dort können Sie diese Einführung auch jederzeit neu starten.' },
+];
+let tourIndex = -1;
+let tourZiel = null;
+let tourFokusVorher = null;
+let tourAutoVersucht = false;
+
+function tourOffen() {
+    return tourIndex >= 0;
+}
+
+// Offen und nicht gerade hinter einem Dialog pausiert.
+function tourSichtbar() {
+    return tourOffen() && !document.getElementById('tour').hidden;
+}
+
+// Ein Dialog hat Vorrang: die Tour tritt zurück und kommt danach am selben Schritt wieder.
+function tourDialogAbgleichen() {
+    if (!tourOffen()) return;
+    const dialog = Boolean(document.querySelector('.modal-overlay.active'));
+    const blase = document.getElementById('tour');
+    if (dialog === blase.hidden) return;
+    blase.hidden = dialog;
+    if (dialog) {
+        document.getElementById('tour-ring').hidden = true;
+        return;
+    }
+    tourZeigen();
+    document.getElementById('tour-weiter').focus();
+}
+
+function tourStarten() {
+    schliesseBegriffBlase();
+    tourFokusVorher = document.activeElement;
+    tourIndex = 0;
+    document.getElementById('tour').hidden = false;
+    tourZeigen();
+    document.getElementById('tour-weiter').focus();
+}
+window.tourStarten = tourStarten;
+
+function tourBeenden() {
+    if (!tourOffen()) return;
+    tourIndex = -1;
+    tourZiel = null;
+    document.getElementById('tour').hidden = true;
+    document.getElementById('tour-ring').hidden = true;
+    try {
+        localStorage.setItem('nk-tour-gesehen', '1');
+    } catch (e) { /* ohne Speicher startet sie beim nächsten Mal wieder */ }
+    if (tourFokusVorher && tourFokusVorher.isConnected) tourFokusVorher.focus();
+}
+window.tourBeenden = tourBeenden;
+
+function tourSchritt(richtung) {
+    const neu = tourIndex + richtung;
+    if (neu >= TOUR.length) return tourBeenden();
+    if (neu < 0) return;
+    tourIndex = neu;
+    tourZeigen();
+}
+window.tourSchritt = tourSchritt;
+
+function tourZeigen() {
+    const schritt = TOUR[tourIndex];
+    wechsleZuTab(schritt.tab);
+    const kandidaten = [...document.querySelectorAll(schritt.ziel)];
+    tourZiel = kandidaten.find(el => el.getClientRects().length) || null;
+    // Am Handy steckt der Knopf im eingeklappten Aktionsmenü: dann auf dessen Menüknopf zeigen.
+    const menue = !tourZiel && kandidaten.length && kandidaten[0].closest('.kopf-aktionen.mit-menue');
+    if (menue) tourZiel = menue.parentElement.querySelector('.kopf-menue-knopf');
+    if (tourZiel) tourZiel.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+
+    document.getElementById('tour-stand').textContent = `Schritt ${tourIndex + 1} von ${TOUR.length}`;
+    document.getElementById('tour-titel').textContent = schritt.titel;
+    document.getElementById('tour-text').textContent = schritt.text;
+    const punkte = document.getElementById('tour-punkte');
+    punkte.replaceChildren(...TOUR.map((_, i) => {
+        const punkt = document.createElement('span');
+        if (i === tourIndex) punkt.className = 'aktiv';
+        return punkt;
+    }));
+    document.getElementById('tour-zurueck').disabled = tourIndex === 0;
+    document.getElementById('tour-weiter').textContent = tourIndex === TOUR.length - 1 ? 'Verstanden' : 'Weiter';
+
+    tourPlatzieren();
+    // Die Seite baut sich gestaffelt auf (40 ms je Block); danach steht das Ziel.
+    setTimeout(tourPlatzieren, 400);
+}
+
+function tourPlatzieren() {
+    if (!tourSichtbar()) return;
+    const blase = document.getElementById('tour');
+    const ring = document.getElementById('tour-ring');
+    const rand = 16;
+    const abstand = 20;  // Ring (6 px) plus Pfeil
+    const breite = Math.min(340, window.innerWidth - 2 * rand);
+    blase.style.width = `${breite}px`;
+    const hoehe = blase.offsetHeight;
+    const klemme = (wert, min, max) => Math.max(min, Math.min(wert, max));
+
+    if (!tourZiel || !tourZiel.getClientRects().length) {
+        ring.hidden = true;
+        blase.dataset.seite = 'mitte';
+        blase.style.left = `${(window.innerWidth - breite) / 2}px`;
+        blase.style.top = `${Math.max(rand, (window.innerHeight - hoehe) / 2)}px`;
+        return;
+    }
+    const r = tourZiel.getBoundingClientRect();
+    ring.hidden = false;
+    ring.style.left = `${r.left - 6}px`;
+    ring.style.top = `${r.top - 6}px`;
+    ring.style.width = `${r.width + 12}px`;
+    ring.style.height = `${r.height + 12}px`;
+
+    let seite = 'oben';
+    if (window.innerWidth > 720 && r.left < window.innerWidth / 3 &&
+        r.right + abstand + breite + rand <= window.innerWidth) seite = 'rechts';
+    else if (r.bottom + abstand + hoehe + rand <= window.innerHeight) seite = 'unten';
+    blase.dataset.seite = seite;
+
+    if (seite === 'rechts') {
+        const oben = klemme(r.top + r.height / 2 - 32, rand, window.innerHeight - hoehe - rand);
+        blase.style.left = `${r.right + abstand}px`;
+        blase.style.top = `${oben}px`;
+        blase.style.setProperty('--pfeil', `${klemme(r.top + r.height / 2 - oben, 16, hoehe - 16)}px`);
+        return;
+    }
+    const links = klemme(r.left + r.width / 2 - breite / 2, rand, window.innerWidth - breite - rand);
+    blase.style.left = `${links}px`;
+    blase.style.top = `${seite === 'unten' ? r.bottom + abstand : Math.max(rand, r.top - abstand - hoehe)}px`;
+    blase.style.setProperty('--pfeil', `${klemme(r.left + r.width / 2 - links, 16, breite - 16)}px`);
+}
+
+// Von selbst nur einmal, nur bei leerer App und nur, wenn sie noch nie lief.
+function tourAutostart() {
+    if (tourAutoVersucht) return;
+    tourAutoVersucht = true;
+    try {
+        if (localStorage.getItem('nk-tour-gesehen')) return;
+    } catch (e) { return; }
+    // Beim ersten Anmelden liegt der Haftungshinweis davor: warten, bis kein
+    // Dialog mehr offen ist, und nur starten, wenn noch kein Haus angelegt wurde.
+    const versuch = () => {
+        if (tourOffen() || echterBestand().properties.length > 0) return;
+        if (document.querySelector('.modal-overlay.active')) return setTimeout(versuch, 1000);
+        tourStarten();
+    };
+    setTimeout(versuch, 600);
+}
+
+document.addEventListener('keydown', ereignis => {
+    if (!tourSichtbar()) return;
+    if (ereignis.key === 'Escape') tourBeenden();
+    if (ereignis.target.closest('input, textarea, select')) return;
+    if (ereignis.key === 'ArrowRight') tourSchritt(1);
+    if (ereignis.key === 'ArrowLeft') tourSchritt(-1);
+});
+// Ein echter Klick daneben (auch auf das Ziel) beendet die Tour und wirkt
+// trotzdem; die künstlichen Klicks aus wechsleZuTab zählen nicht.
+document.addEventListener('click', ereignis => {
+    if (tourSichtbar() && ereignis.isTrusted && !document.getElementById('tour').contains(ereignis.target)) tourBeenden();
+}, true);
+window.addEventListener('resize', tourPlatzieren);
+window.addEventListener('scroll', () => requestAnimationFrame(tourPlatzieren), true);
+
 // „Was bedeutet das für den Mieter?“ -- das Ergebnis in einem Satz (NK-158).
 function mieterErklaerung(daten) {
     const euro = betrag => Math.abs(betrag).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
@@ -1111,6 +1369,7 @@ function zeigeErsteSchritte() {
     const offen = schritte.filter(s => !s.erledigt);
     panel.hidden = !offen.some(s => s.pflicht);
     if (panel.hidden) return;
+    if (echt.properties.length === 0 && !beispielDa) tourAutostart();
 
     // K5 (NK-103): Fortschritt „x von 5 erledigt“ mit schmalem Balken —
     // nur die fünf Pflichtschritte zählen, der optionale nicht (B8).
@@ -1340,6 +1599,7 @@ function initModalBedienung() {
                 // Lag das Rechnungsformular als Overlay über dem Eingang, kehrt es danach in die Spalte zurück.
                 if (overlay.id === 'invoice-modal') setTimeout(renderDocuments, 250);
             }
+            tourDialogAbgleichen();
         }).observe(overlay, { attributes: true, attributeFilter: ['class'] });
     });
 }
@@ -1794,8 +2054,15 @@ async function showPropertyDetails(prop) {
         apartmentsList.replaceChildren();
         if (apartments.length === 0) {
             const empty = document.createElement('div');
-            empty.textContent = 'Noch keine Wohnungen angelegt. Legen Sie die erste mit dem Knopf „Wohnung anlegen“ oben an.';
-            empty.style.color = "var(--text-muted)";
+            empty.className = 'leer-zeile';
+            const satz = document.createElement('span');
+            satz.textContent = 'In diesem Haus ist noch keine Wohnung angelegt.';
+            const knopf = document.createElement('button');
+            knopf.type = 'button';
+            knopf.className = 'btn-primary';
+            knopf.textContent = 'Wohnung anlegen';
+            knopf.addEventListener('click', () => openAddApartmentModal());
+            empty.append(satz, knopf);
             apartmentsList.appendChild(empty);
         } else {
             apartments.forEach(apt => {
@@ -2155,7 +2422,6 @@ async function fetchTenants() {
             
             grouped[propName].forEach(t => {
                 const tr = document.createElement('tr');
-                tr.style.borderBottom = "1px solid var(--border-color)";
                 
                 const tdName = document.createElement('td');
                 tdName.style.padding = "12px 8px";
@@ -2703,9 +2969,25 @@ function zeigeMeldung(message, art) {
     const meldung = document.createElement('div');
     meldung.className = 'toast toast-' + art;
     meldung.setAttribute('role', 'alert');
-    meldung.textContent = message;
+    const text = document.createElement('span');
+    text.textContent = message;
+    if (art === 'erfolg') {
+        const haken = document.createElement('i');
+        haken.className = 'ph ph-check-circle toast-haken';
+        haken.setAttribute('aria-hidden', 'true');
+        meldung.append(haken);
+    }
+    meldung.append(text);
     stapel.appendChild(meldung);
     setTimeout(() => meldung.remove(), 6000);
+}
+
+// Runde 4: ein laufender Balken im Knopf, solange eine lange Aktion arbeitet.
+function zeigeArbeit(el, an) {
+    if (!el) return;
+    el.classList.toggle('arbeitet', an);
+    if (an) el.setAttribute('aria-busy', 'true');
+    else el.removeAttribute('aria-busy');
 }
 
 function showError(message) {
@@ -3260,6 +3542,41 @@ function rechnungsfilterZuruecksetzen() {
 }
 window.rechnungsfilterZuruecksetzen = rechnungsfilterZuruecksetzen;
 
+// Runde 4: Spalten per Klick sortieren wie in Excel. Die Kopfzelle sagt,
+// ob Text oder Zahl; eine Zelle kann ihren Rohwert in data-wert tragen
+// (ISO-Datum, Betrag), sonst zählt der sichtbare Text.
+function sortierKopf(titel, art, rechts = false) {
+    const hinweis = `Nach „${titel}“ sortieren`;
+    return `<th class="zelle${rechts ? ' text-right' : ''}" data-sort="${art}">${titel}`
+        + `<button type="button" class="sortier-knopf" onclick="tabelleSortieren(this)" title="${hinweis}" aria-label="${hinweis}"><i class="ph ph-caret-up-down" aria-hidden="true"></i></button></th>`;
+}
+
+function tabelleSortieren(knopf) {
+    const kopf = knopf.closest('th');
+    const tabelle = kopf.closest('table');
+    const spalte = [...kopf.parentElement.children].indexOf(kopf);
+    const aufsteigend = kopf.getAttribute('aria-sort') !== 'ascending';
+    tabelle.querySelectorAll('thead th[aria-sort]').forEach(th => {
+        th.removeAttribute('aria-sort');
+        th.querySelector('.sortier-knopf i').className = 'ph ph-caret-up-down';
+    });
+    kopf.setAttribute('aria-sort', aufsteigend ? 'ascending' : 'descending');
+    knopf.querySelector('i').className = `ph ph-caret-${aufsteigend ? 'up' : 'down'}`;
+    const wert = zeile => {
+        const zelle = zeile.children[spalte];
+        return zelle.dataset.wert ?? zelle.textContent.trim();
+    };
+    const tbody = tabelle.tBodies[0];
+    const zeilen = [...tbody.rows].sort((a, b) => {
+        const d = kopf.dataset.sort === 'zahl'
+            ? Number(wert(a)) - Number(wert(b))
+            : wert(a).localeCompare(wert(b), 'de', { numeric: true });
+        return aufsteigend ? d : -d;
+    });
+    tbody.append(...zeilen);
+}
+window.tabelleSortieren = tabelleSortieren;
+
 function renderInvoices() {
     const container = document.getElementById('invoices-container');
     if (!container) return;
@@ -3369,19 +3686,26 @@ function renderInvoices() {
                     <i class="ph ph-caret-down accordion-chevron"></i>
                 </div>
                 <div class="accordion-content">
-                    <table class="table-zebra" style="width: 100%; border-collapse: collapse; text-align: left;">
+                    <table class="tabelle">
                         <thead>
-                            <tr style="border-bottom: 1px solid var(--border-color);">
-                                <th style="padding: 12px 8px;">Von</th>
-                                <th style="padding: 12px 8px;">Bis</th>
-                                <th style="padding: 12px 8px;">Rechnungsnr.</th>
-                                <th style="padding: 12px 8px;">Anbieter</th>
-                                <th style="padding: 12px 8px;" class="text-right">Betrag</th>
-                                <th style="padding: 12px 8px;">Beleg</th>
-                                <th style="padding: 12px 8px;" class="text-right">Aktionen</th>
+                            <tr>
+                                ${sortierKopf('Von', 'text')}
+                                ${sortierKopf('Bis', 'text')}
+                                ${sortierKopf('Rechnungsnr.', 'text')}
+                                ${sortierKopf('Anbieter', 'text')}
+                                ${sortierKopf('Betrag', 'zahl', true)}
+                                <th class="zelle">Beleg</th>
+                                <th class="zelle text-right">Aktionen</th>
                             </tr>
                         </thead>
                         <tbody id="tbody-${accId}"></tbody>
+                        <tfoot>
+                            <tr class="summenzeile">
+                                <td class="zelle" colspan="4">Summe</td>
+                                <td class="zelle text-right">${escapeHtml(euroText(catInvoices.reduce((s, i) => s + Number(i.amount || 0), 0)))}</td>
+                                <td class="zelle" colspan="2"></td>
+                            </tr>
+                        </tfoot>
                     </table>
                 </div>
             `;
@@ -3391,33 +3715,24 @@ function renderInvoices() {
             
             catInvoices.forEach(inv => {
                 const tr = document.createElement('tr');
-                tr.style.borderBottom = "1px solid var(--border-color)";
-                
+                const zelle = (text, wert) => {
+                    const td = document.createElement('td');
+                    td.className = 'zelle';
+                    td.textContent = text;
+                    if (wert !== undefined) td.dataset.wert = wert;
+                    return td;
+                };
                 const dateOpts = { day: '2-digit', month: '2-digit', year: 'numeric' };
-                
-                const tdDateFrom = document.createElement('td');
-                tdDateFrom.style.padding = "12px 8px";
-                tdDateFrom.textContent = new Date(inv.start_date).toLocaleDateString('de-DE', dateOpts);
-                
-                const tdDateTo = document.createElement('td');
-                tdDateTo.style.padding = "12px 8px";
-                tdDateTo.textContent = new Date(inv.end_date).toLocaleDateString('de-DE', dateOpts);
-                
-                const tdNum = document.createElement('td');
-                tdNum.style.padding = "12px 8px";
-                tdNum.textContent = inv.invoice_number || '-';
-                
-                const tdProvider = document.createElement('td');
-                tdProvider.style.padding = "12px 8px";
-                tdProvider.textContent = inv.provider_name || '-';
-                
-                const tdAmt = document.createElement('td');
-                tdAmt.style.padding = "12px 8px";
-                tdAmt.className = "text-right";
-                tdAmt.innerHTML = `<strong>${inv.amount.toFixed(2)} €</strong>`;
-                
+                // ISO-Datum als Sortierwert, angezeigt wird das deutsche.
+                const tdDateFrom = zelle(new Date(inv.start_date).toLocaleDateString('de-DE', dateOpts), inv.start_date);
+                const tdDateTo = zelle(new Date(inv.end_date).toLocaleDateString('de-DE', dateOpts), inv.end_date);
+                const tdNum = zelle(inv.invoice_number || '-');
+                const tdProvider = zelle(inv.provider_name || '-');
+                const tdAmt = zelle(euroText(inv.amount), inv.amount);
+                tdAmt.classList.add('text-right');
+
                 const tdDoc = document.createElement('td');
-                tdDoc.style.padding = "12px 8px";
+                tdDoc.className = 'zelle';
                 if (inv.document_path) {
                     let docUrl = dateiAdresse('rechnung', inv.id);
                     let docLabel = inv.filename ? inv.filename : 'Beleg';
@@ -3441,8 +3756,7 @@ function renderInvoices() {
                 tr.appendChild(tdDoc);
                 
                 const tdActions = document.createElement('td');
-                tdActions.style.padding = "12px 8px";
-                tdActions.className = "text-right";
+                tdActions.className = 'zelle text-right';
                 
                 const editBtn = document.createElement('button');
                 editBtn.className = 'btn-icon';
@@ -3999,7 +4313,7 @@ function fuelleAblesungen(table, meter) {
     });
     
     if (meterReadings.length === 0) {
-        table.innerHTML += `<tr><td colspan="2" style="padding: 12px 8px;">Keine Zählerstände vorhanden.</td></tr>`;
+        table.innerHTML += `<tr><td colspan="2" style="padding: 12px 8px;">Für diesen Zähler ist noch kein Stand eingetragen.</td></tr>`;
     }
 }
 
@@ -4384,6 +4698,7 @@ async function openAddInvoiceModal(editInvoiceId = null, spalte = null) {
         providers.forEach(p => {
             provSelect.innerHTML += `<option value="${p.id}">${escapeHtml(p.name)}</option>`;
         });
+        anbieterHinweisAktualisieren();
     }
 
     // Populate Document Dropdown
@@ -5116,22 +5431,69 @@ function populateProviderSelects() {
     });
 }
 
+async function anbieterSpeichern(name) {
+    const res = await fetch('/api/providers', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({name: name})
+    });
+    if(!res.ok) throw await serverFehler(res);
+    return (await res.json()).id;
+}
+
 async function addProvider() {
     const input = document.getElementById('new-provider-name');
     const name = input.value.trim();
     if (!name) return;
-    
+
     try {
-        const res = await fetch('/api/providers', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({name: name})
-        });
-        if(!res.ok) throw await serverFehler(res);
+        await anbieterSpeichern(name);
         input.value = '';
         fetchProviders();
     } catch(e) { showError(meldungZu(e, 'Fehler beim Speichern des Anbieters.')); }
 }
+
+// Runde 4: ohne Anbieter ließ sich keine Rechnung speichern, und angelegt
+// wurden Anbieter nur in den Einstellungen. Jetzt geht es im Formular.
+function anbieterFeldZeigen() {
+    const feld = document.getElementById('anbieter-neu');
+    feld.hidden = false;
+    document.getElementById('anbieter-neu-name').focus();
+}
+window.anbieterFeldZeigen = anbieterFeldZeigen;
+
+function anbieterHinweisAktualisieren() {
+    const leer = providers.length === 0;
+    document.getElementById('anbieter-leer-hinweis').hidden = !leer;
+    document.getElementById('anbieter-neu').hidden = !leer;
+}
+
+async function anbieterImFormularAnlegen() {
+    const input = document.getElementById('anbieter-neu-name');
+    const name = input.value.trim();
+    if (!name) {
+        input.focus();
+        return;
+    }
+    try {
+        const id = await anbieterSpeichern(name);
+        await fetchProviders();
+        document.getElementById('invoice-provider').value = String(id);
+        input.value = '';
+        document.getElementById('anbieter-neu').hidden = true;
+        document.getElementById('anbieter-leer-hinweis').hidden = true;
+        showSuccess(`Anbieter „${name}“ angelegt.`);
+    } catch(e) { showError(meldungZu(e, 'Fehler beim Speichern des Anbieters.')); }
+}
+window.anbieterImFormularAnlegen = anbieterImFormularAnlegen;
+
+document.addEventListener('keydown', ereignis => {
+    // Enter im Namensfeld legt an, statt das Rechnungsformular abzuschicken.
+    if (ereignis.key === 'Enter' && ereignis.target.id === 'anbieter-neu-name') {
+        ereignis.preventDefault();
+        anbieterImFormularAnlegen();
+    }
+});
 
 async function deleteProvider(id) {
     if(!await frageLoeschen('Anbieter wirklich löschen?')) return;
@@ -5366,7 +5728,7 @@ async function ladeSicherungen(ziel) {
         if (!res.ok) throw await serverFehler(res);
         const liste = await res.json();
         if (!liste.sicherungen.length) {
-            tbody.innerHTML = '<tr><td colspan="5" style="padding: 8px; color: var(--text-muted);">Noch keine Sicherung im gewählten Verzeichnis.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="5" style="padding: 8px; color: var(--text-muted);">Hier liegt noch keine Sicherung. Mit „Sicherung erstellen“ legen Sie die erste an.</td></tr>';
             return;
         }
         tbody.innerHTML = liste.sicherungen.map(s => `<tr>
@@ -5401,7 +5763,7 @@ async function sicherungsordnerWaehlen() {
 }
 window.sicherungsordnerWaehlen = sicherungsordnerWaehlen;
 
-async function sicherungErstellen() {
+async function sicherungErstellen(knopf) {
     const ziel = document.getElementById('sicherung-ziel').value.trim();
     const auftrag = { ziel };
     if (document.getElementById('sicherung-verschluesseln').checked) {
@@ -5413,6 +5775,9 @@ async function sicherungErstellen() {
         }
         auftrag.passphrase = eins;
     }
+    // Gesperrt, damit ein zweiter Klick keine zweite Sicherung anstößt.
+    if (knopf) knopf.disabled = true;
+    zeigeArbeit(knopf, true);
     try {
         const res = await fetch('/api/backup/erstellen', {
             method: 'POST',
@@ -5427,6 +5792,9 @@ async function sicherungErstellen() {
         ladeSicherungsStatus();
     } catch (e) {
         showError(meldungZu(e, 'Die Sicherung konnte nicht erstellt werden.'));
+    } finally {
+        if (knopf) knopf.disabled = false;
+        zeigeArbeit(knopf, false);
     }
 }
 
@@ -5929,6 +6297,19 @@ document.addEventListener('keydown', ereignis => {
     if (ziel) ziel.querySelector(`[data-spalte="${feld.dataset.spalte}"]`).focus();
 });
 
+// Runde 4: in der Ablese-Runde springt Enter ins nächste Zählerfeld wie in
+// Excel; erst im letzten Feld speichert Enter die Runde.
+document.addEventListener('keydown', ereignis => {
+    const feld = ereignis.target;
+    if (ereignis.key !== 'Enter' || !(feld instanceof HTMLInputElement) || feld.type !== 'number'
+        || !feld.closest('#ablesen-liste')) return;
+    const felder = [...document.querySelectorAll('#ablesen-liste input[type="number"]')];
+    const naechstes = felder[felder.indexOf(feld) + 1];
+    if (!naechstes) return;
+    ereignis.preventDefault();
+    naechstes.focus();
+});
+
 function rtZeilenLesen() {
     const haus = document.getElementById('rt-immobilie');
     const name = haus.options[haus.selectedIndex] ? haus.options[haus.selectedIndex].text : '';
@@ -6403,7 +6784,7 @@ function jahrFristZeigen() {
 
 async function jahrVorschauLaden() {
     const ziel = document.getElementById('jahr-vorschau');
-    ziel.innerHTML = '<p class="karten-text">Die Vorschau wird gerechnet …</p>';
+    ziel.innerHTML = '<p class="karten-text arbeitet" aria-busy="true">Die Vorschau wird gerechnet …</p>';
     jahrVorschau = {};
     const karten = [];
     for (const m of jahrStand.mieter) {
@@ -6774,6 +7155,7 @@ async function generateMissingPdf(tenantId, startDate, endDate, isDetailed, btnE
     const label = isDetailed ? 'Detaillierte' : 'Einfache';
     btnElement.disabled = true;
     btnElement.textContent = 'Generiert...';
+    zeigeArbeit(btnElement, true);
     
     try {
         const res = await fetch('/api/billing/finalize', {
@@ -6796,6 +7178,8 @@ async function generateMissingPdf(tenantId, startDate, endDate, isDetailed, btnE
         showError(meldungZu(e, 'Die PDF konnte nicht erstellt werden.'));
         btnElement.disabled = false;
         btnElement.textContent = `PDF ${isDetailed ? 'erstellen (detailliert)' : 'erstellen (einfach)'}`;
+    } finally {
+        zeigeArbeit(btnElement, false);
     }
 }
 
@@ -7429,7 +7813,7 @@ async function generateBillPreview(tenantId, startDate, endDate, categoryIds = n
                 }
                 
                 html += `
-                        <div style="background: white; border: 1px solid var(--border-color); padding: 8px; border-radius: 4px;">
+                        <div style="background: var(--surface); border: 1px solid var(--border-color); padding: 8px; border-radius: 4px;">
                             <div style="display: flex; justify-content: space-between; align-items: center;">
                                 <div style="font-weight: 500; font-size: 13px;">${escapeHtml(zaehlerArtName(c.category))} (${escapeHtml(c.meter_type)})</div>
                                 ${statusIcon}
@@ -7583,6 +7967,7 @@ async function finalizeBill(tenantId, startDate, endDate, categoryIds = null, is
     allBtns.forEach(b => { if(b) b.disabled = true; });
     
     btn.textContent = 'PDF wird erstellt...';
+    zeigeArbeit(btn, true);
     
     try {
         const payload = { 
@@ -7626,6 +8011,8 @@ async function finalizeBill(tenantId, startDate, endDate, categoryIds = null, is
         // Restore buttons on error
         allBtns.forEach(b => { if(b) b.disabled = false; });
         btn.innerHTML = originalText;
+    } finally {
+        zeigeArbeit(btn, false);
     }
 }
 
@@ -7875,7 +8262,7 @@ function renderConsumptionTrend(timeseries_data) {
         emptyIcon.style.marginInline = 'auto';
         empty.appendChild(emptyIcon);
         const emptyText = document.createElement('p');
-        emptyText.textContent = 'Noch keine Verbrauchsdaten vorhanden.';
+        emptyText.textContent = 'Noch kein Verbrauch zu sehen. Er erscheint, sobald Zählerstände eingetragen sind.';
         empty.appendChild(emptyText);
         container.appendChild(empty);
         return;
@@ -8513,7 +8900,7 @@ function showKpiHistoryModal(title, historyData, unit) {
     const content = document.getElementById('kpi-history-modal-content');
     
     if (!historyData || historyData.length === 0) {
-        content.innerHTML = '<p style="color: var(--text-muted); text-align: center;">Keine historischen Daten vorhanden.</p>';
+        content.innerHTML = '<p style="color: var(--text-muted); text-align: center;">Für diese Kennzahl gibt es noch keine Werte aus früheren Jahren.</p>';
         modal.classList.add('active');
         return;
     }
@@ -8784,7 +9171,7 @@ function renderAptConsumptionChart(ownConsumptionData) {
     container.innerHTML = '';
     
     if (!ownConsumptionData || ownConsumptionData.length === 0) {
-        container.innerHTML = '<div style="color: var(--text-muted); text-align: center; width: 100%; grid-column: 1 / -1; padding: 24px;">Keine Verbrauchsdaten vorhanden.</div>';
+        container.innerHTML = '<div style="color: var(--text-muted); text-align: center; width: 100%; grid-column: 1 / -1; padding: 24px;">Noch kein Verbrauch zu sehen. Er erscheint, sobald Zählerstände eingetragen sind.</div>';
         return;
     }
     
@@ -9141,11 +9528,22 @@ function openPaymentDetailsModal(tenantId) {
     }
     
     paymentDetailsList.replaceChildren();
+    // Neu geöffnet gilt wieder die Ausgangsfolge (neueste zuerst).
+    paymentDetailsList.closest('table').querySelectorAll('th[aria-sort]').forEach(th => {
+        th.removeAttribute('aria-sort');
+        th.querySelector('.sortier-knopf i').className = 'ph ph-caret-up-down';
+    });
+    const heute = new Date();
+    heute.setHours(0, 0, 0, 0);
+    document.getElementById('payment-details-fuss').hidden = tenantPayments.length === 0;
+    document.getElementById('payment-details-summe').textContent = euroText(tenantPayments
+        .filter(p => new Date(p.payment_date) <= heute)
+        .reduce((summe, p) => summe + Number(p.amount || 0), 0));
     document.getElementById('payment-select-all').checked = false;
     toggleDeleteSelectedButton();
     
     if (tenantPayments.length === 0) {
-        paymentDetailsList.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 24px;">Keine Zahlungen vorhanden.</td></tr>';
+        paymentDetailsList.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 24px;">Für diesen Mieter ist noch keine Zahlung eingetragen.</td></tr>';
     } else {
         tenantPayments.forEach(p => {
             const tr = document.createElement('tr');
@@ -9176,9 +9574,9 @@ function openPaymentDetailsModal(tenantId) {
             const dateStr = p.payment_date ? datumText(p.payment_date) : '-';
             tr.innerHTML = `
                 <td style="text-align: center;"><input type="checkbox" class="payment-row-cb" value="${p.id}" onchange="toggleDeleteSelectedButton()"></td>
-                <td>${dateStr}${isFuture ? ' <i class="ph ph-clock text-secondary" style="font-size: 13px; margin-left: 4px;" title="Zukunft"></i>' : ''}</td>
+                <td data-wert="${escapeHtml(p.payment_date || '')}">${dateStr}${isFuture ? ' <i class="ph ph-clock text-secondary" style="font-size: 13px; margin-left: 4px;" title="Zukunft"></i>' : ''}</td>
                 <td><span class="badge ${p.type === 'Miete' ? 'badge-primary' : (p.type === 'Nebenkostenvorauszahlung' ? 'badge-info' : 'badge-secondary')}" style="font-size: 13px; padding: 4px 8px;">${escapeHtml(p.type)}</span></td>
-                <td style="text-align: right; font-weight: 500;">${p.amount.toLocaleString('de-DE', {style: 'currency', currency: 'EUR'})}</td>
+                <td class="text-right" data-wert="${Number(p.amount)}" style="font-weight: 500;">${p.amount.toLocaleString('de-DE', {style: 'currency', currency: 'EUR'})}</td>
                 <td style="text-align: center; width: 60px;">
                     <button class="btn-icon" onclick="deletePayment(${p.id})" title="Löschen"><i class="ph ph-trash" style="color: var(--danger-color);"></i></button>
                 </td>

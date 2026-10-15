@@ -110,6 +110,13 @@ AUSNAHMEN = {
     'stueck': 'escapeHtml(text.slice(...)) in befehlMarkiert',
     'befehlMarkiert(e.titel, woerter)': 'setzt nur maskierte Stuecke zusammen',
     'befehlMarkiert(e.info, woerter)': 'setzt nur maskierte Stuecke zusammen',
+    # Runde 4: sortierbare Tabellenkoepfe, Titel und Art nur als Konstanten im Code
+    'art': "Sortierart 'text' oder 'zahl' aus sortierKopf-Aufrufen",
+    "sortierKopf('Von', 'text')": 'Kopfzelle aus Konstanten',
+    "sortierKopf('Bis', 'text')": 'Kopfzelle aus Konstanten',
+    "sortierKopf('Anbieter', 'text')": 'Kopfzelle aus Konstanten',
+    "sortierKopf('Rechnungsnr.', 'text')": 'Kopfzelle aus Konstanten',
+    "sortierKopf('Betrag', 'zahl', true)": 'Kopfzelle aus Konstanten',
     # Adressen, gebaut mit dateiUrl()
     'imgUrl': 'dateiAdresse(art, Zahl) (NK-129)',
     'docUrl': 'dateiAdresse(art, Zahl) (NK-129)',

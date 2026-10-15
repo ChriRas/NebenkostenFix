@@ -79,12 +79,16 @@ global.document = {
     querySelectorAll: () => [],
     querySelector: () => null,
     body: erzeugeElement(),
-    documentElement: { style: {} },
+    documentElement: { style: {}, dataset: {} },
 };
 global.Chart = class {
     constructor() {}
     destroy() {}
 };
+// Dunkelmodus (Runde 4): themaAnzeigen liest Tokens und setzt Chart.defaults.
+global.Chart.defaults = { elements: { arc: {} } };
+global.Chart.instances = {};
+global.getComputedStyle = () => ({ getPropertyValue: () => '' });
 global.escapeHtml = s => String(s);
 // initApp ruft beim Laden alle Listen ab. Seit der Rauchtest am Ende auf
 // asynchrone Prüfungen wartet (NK-118), liefen diese Abrufe sonst gegen das
@@ -1169,10 +1173,11 @@ pruefe('NK-224: der Gruß steht im Kopf von „Heute“ und nirgends sonst',
         const hole = id => (el[id] = el[id] || { id, hidden: beispiel, style: {},  // Start = Gegenteil der Erwartung
             replaceChildren() {}, appendChild() {} });
         new Function('document', 'properties', 'allApartments', 'tenants', 'invoices', 'meters',
-            'readings', 'payments', 'abrechnungsHistorie', 'zeigeHeute', 'fuelleHausWahl',
+            'readings', 'payments', 'abrechnungsHistorie', 'zeigeHeute', 'fuelleHausWahl', 'tourAutostart',
             quelle + '; zeigeErsteSchritte();')(
             { getElementById: hole, createElement: () => ({}) },
-            beispiel ? [{ id: 1, ist_beispiel: true }] : [], [], [], [], [], [], [], [], () => {}, () => {});
+            beispiel ? [{ id: 1, ist_beispiel: true }] : [], [], [], [], [], [], [], [], () => {}, () => {},
+            () => { el.tourGestartet = true; });
         return el;
     };
     const mit = lauf(true), ohne = lauf(false);
@@ -1183,6 +1188,8 @@ pruefe('NK-224: der Gruß steht im Kopf von „Heute“ und nirgends sonst',
         && /id="erste-schritte-beispiel"[^>]*>Die Beispielimmobilie zählt nicht mit\.</.test(html));
     pruefe('NK-225: ohne Beispielhaus kein Hinweis',
         !!ohne['erste-schritte-beispiel'] && ohne['erste-schritte-beispiel'].hidden === true);
+    pruefe('Runde 4: die Einführung startet von selbst nur in der leeren App, nicht neben dem Beispielhaus',
+        ohne.tourGestartet === true && !mit.tourGestartet);
 }
 
 // --- NK-226: Vorschlag zur Anpassung der Vorauszahlung -----------------

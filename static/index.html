@@ -18,10 +18,12 @@
     <link rel="stylesheet" href="/static/vendor/fonts/geist-mono/geist-mono.css">
     <link rel="stylesheet" href="/static/vendor/phosphor/regular/style.css">
     <link rel="stylesheet" href="/static/vendor/phosphor/fill/style.css">
-    <link rel="stylesheet" href="/static/style.css?v=12">
+    <link rel="stylesheet" href="/static/style.css?v=13">
     <!-- Einflug (Konzept D): kommt die Seite frisch von der Anmeldung
          (formular.js, höchstens 15 s alt), zieht style.css die Indigo-Fläche weg. -->
     <script>try { if (Date.now() - Number(sessionStorage.getItem('nk-einflug')) < 15000) document.documentElement.classList.add('einflug'); sessionStorage.removeItem('nk-einflug'); } catch (e) { /* ohne Speicher kein Einflug */ }</script>
+    <!-- Runde 4: Thema vor dem ersten Bild setzen, sonst blitzt es hell auf. -->
+    <script>(function () { var t = null; try { t = localStorage.getItem('nk-thema'); } catch (e) { /* ohne Speicher gilt das System */ } if (t !== 'dark' && t !== 'light') t = window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'; document.documentElement.dataset.theme = t; })();</script>
     <script src="/static/vendor/chartjs/chart.umd.min.js"></script>
 </head>
 
@@ -41,6 +43,7 @@
                 <a href="#" class="leiste-eintrag" data-gruppe="kosten"><i class="ph ph-file-text" aria-hidden="true"></i>Kosten</a>
                 <a href="#" class="leiste-eintrag" data-gruppe="abrechnung"><i class="ph ph-receipt" aria-hidden="true"></i>Abrechnung</a>
                 <span class="leiste-luecke"></span>
+                <button type="button" class="thema-knopf" onclick="themaWechseln()" aria-label="Dunkelmodus einschalten" title="Dunkelmodus einschalten"><i class="ph ph-moon" aria-hidden="true"></i></button>
                 <a href="#" class="leiste-eintrag" data-gruppe="einstellungen"><i class="ph ph-gear" aria-hidden="true"></i>Einstellungen</a>
             </nav>
         </aside>
@@ -75,6 +78,14 @@
                     <button class="btn-secondary" onclick="zeigeHilfe()"
                         title="Grundlagen, Checkliste, Begriffe und Kurzanleitung">
                         <i class="ph ph-question"></i> Hilfe öffnen
+                    </button>
+                    <!-- Runde 4: Schnellschalter für größere Schrift (wie unter Einstellungen). -->
+                    <button class="btn-secondary" id="kopf-schrift" onclick="schriftgroesseWechseln()"
+                        title="Schrift in drei Stufen vergrößern: 100, 115 und 130 %">
+                        <i class="ph ph-text-aa"></i> <span id="kopf-schrift-text">Größere Schrift einschalten</span>
+                    </button>
+                    <button class="btn-secondary" id="kopf-thema" onclick="themaWechseln()">
+                        <i class="ph ph-moon" aria-hidden="true"></i> <span class="thema-text">Dunkelmodus einschalten</span>
                     </button>
                     <button class="btn-secondary" onclick="huelle.drucken()"
                         title="Die aktive Ansicht über den Druckdialog des Browsers drucken">
@@ -133,7 +144,11 @@
                      gezeichnet wird sie von zeigeErsteSchritte() in app.js. -->
                 <div id="erste-schritte" class="erste-schritte glass-panel" hidden>
                     <div class="erste-schritte-kopf">
-                        <h2>Erste Schritte</h2>
+                        <div class="erste-schritte-titel">
+                            <h2>Erste Schritte</h2>
+                            <button type="button" class="btn-tint btn-klein" onclick="tourStarten()">
+                                <i class="ph ph-signpost" aria-hidden="true"></i> Einführung ansehen</button>
+                        </div>
                         <p>Fünf Schritte bis zur ersten Abrechnung, dazu zwei optionale: vorher ausprobieren und Zähler.</p>
                         <div class="erste-schritte-fortschritt">
                             <span id="erste-schritte-stand" class="erste-schritte-stand">0 von 5 erledigt</span>
@@ -192,7 +207,7 @@
                 </div>
                 <!-- Konzept D: Liste links, Detail des gewählten Zählers rechts (app.js zeigeZaehlerDetail). -->
                 <div class="zaehler-ansicht">
-                    <div class="spalte" id="meters-container"></div>
+                    <div class="spalte" id="meters-container"><div class="skelett" role="status" aria-label="Wird geladen"><span></span><span></span><span></span></div></div>
                     <aside class="zaehler-detail glass-panel" id="zaehler-detail" aria-label="Gewählter Zähler"></aside>
                 </div>
             </section>
@@ -228,7 +243,7 @@
                         <button type="button" class="btn-primary" onclick="document.getElementById('beleg-datei').click()"><i class="ph ph-upload-simple" aria-hidden="true"></i>
                             Beleg hochladen</button>
                         <input type="file" id="beleg-datei" accept=".pdf,.jpg,.jpeg,.png,.webp,.heic,.heif,application/pdf,image/jpeg,image/png,image/webp,image/heic" hidden onchange="belegGewaehlt(this)">
-                        <div class="eingang-liste" id="documents-container"></div>
+                        <div class="eingang-liste" id="documents-container"><div class="skelett" role="status" aria-label="Wird geladen"><span></span><span></span><span></span></div></div>
                         <p class="eingang-hinweis"><kbd>J</kbd> <kbd>K</kbd> blättern</p>
                     </div>
                     <div class="eingang-vorschau" id="eingang-vorschau"></div>
@@ -270,7 +285,7 @@
                     </div>
                 </div>
                 <div class="spalte" id="invoices-container">
-                    <!-- Grouped by property -->
+                    <div class="skelett" role="status" aria-label="Wird geladen"><span></span><span></span><span></span></div>
                 </div>
                 <div id="invoices-zeitleiste" style="display: none;">
                     <!-- NK-144: per JS gefuellt (renderInvoiceZeitleiste) -->
@@ -293,7 +308,7 @@
                     </div>
                 </div>
                 <div class="properties-grid" id="properties-grid">
-                    <div class="loading-state"><i class="ph ph-spinner ph-spin"></i> Lade Immobilien...</div>
+                    <div class="skelett" role="status" aria-label="Wird geladen"><span></span><span></span><span></span></div>
                 </div>
 
                 <!-- Property Details View (hidden by default) -->
@@ -342,7 +357,7 @@
                     </div>
                 </div>
                 <div class="spalte" id="tenants-container">
-                    <!-- Grouped tenant tables injected here -->
+                    <div class="skelett" role="status" aria-label="Wird geladen"><span></span><span></span><span></span></div>
                 </div>
             </section>
 
@@ -368,7 +383,7 @@
                 </div>
 
                 <div class="properties-grid raster-einspaltig" id="billing-suggestions-container">
-                    <!-- Suggestions rendered here -->
+                    <div class="skelett" role="status" aria-label="Wird geladen"><span></span><span></span><span></span></div>
                 </div>
 
                 <!-- Wie „Alle Rechnungen“: Abstand, Trennlinie, dann die Überschrift. -->
@@ -379,7 +394,7 @@
                     </div>
                 </div>
                 <div class="properties-grid raster-einspaltig" id="billing-history-container">
-                    <!-- History rendered here -->
+                    <div class="skelett" role="status" aria-label="Wird geladen"><span></span><span></span><span></span></div>
                 </div>
             </section>
 
@@ -663,7 +678,7 @@
                             <button class="btn-secondary" id="btn-sicherung-ordner" style="display: none;"
                                 onclick="sicherungsordnerWaehlen()">Ordner auswählen</button>
                             <button class="btn-primary" id="btn-sicherung-erstellen"
-                                onclick="sicherungErstellen()">Sicherung erstellen</button>
+                                onclick="sicherungErstellen(this)">Sicherung erstellen</button>
                         </div>
                         <!-- NK-156: der Belegexport aus dem globalen Kopf; er ist keine Sicherung,
                              gehört aber zum selben Gedanken „Daten heraus“. Der JSON-Export
@@ -817,6 +832,8 @@
                             dorthin kommen</p>
                     </div>
                     <div class="kopf-aktionen">
+                        <button type="button" class="btn-secondary" onclick="tourStarten()">
+                            <i class="ph ph-signpost" aria-hidden="true"></i> Einführung ansehen</button>
                         <a class="btn-primary" href="/api/hilfe/kurzanleitung.pdf" target="_blank">
                             <i class="ph ph-file-pdf" aria-hidden="true"></i> Kurzanleitung öffnen (PDF)</a>
                     </div>
@@ -1493,15 +1510,27 @@
                             <tr>
                                 <th style="width: 40px; text-align: center;"><input type="checkbox"
                                         id="payment-select-all" onchange="toggleAllPaymentSelection(this)"></th>
-                                <th>Datum</th>
-                                <th>Typ</th>
-                                <th style="text-align: right; width: 100px;">Betrag</th>
+                                <th data-sort="text">Datum<button type="button" class="sortier-knopf" onclick="tabelleSortieren(this)"
+                                        title="Nach „Datum“ sortieren" aria-label="Nach „Datum“ sortieren"><i class="ph ph-caret-up-down" aria-hidden="true"></i></button></th>
+                                <th data-sort="text">Typ<button type="button" class="sortier-knopf" onclick="tabelleSortieren(this)"
+                                        title="Nach „Typ“ sortieren" aria-label="Nach „Typ“ sortieren"><i class="ph ph-caret-up-down" aria-hidden="true"></i></button></th>
+                                <th class="text-right" data-sort="zahl">Betrag<button type="button" class="sortier-knopf" onclick="tabelleSortieren(this)"
+                                        title="Nach „Betrag“ sortieren" aria-label="Nach „Betrag“ sortieren"><i class="ph ph-caret-up-down" aria-hidden="true"></i></button></th>
                                 <th style="text-align: center; width: 60px;">Aktion</th>
                             </tr>
                         </thead>
                         <tbody id="payment-details-list">
                             <!-- Injected via JS -->
                         </tbody>
+                        <!-- Runde 4: Summe wie in Excel; Prognosen (Zukunft) zählen nicht mit. -->
+                        <tfoot id="payment-details-fuss">
+                            <tr class="summenzeile">
+                                <td></td>
+                                <td colspan="2">Eingegangen bis heute</td>
+                                <td class="text-right" id="payment-details-summe"></td>
+                                <td></td>
+                            </tr>
+                        </tfoot>
                     </table>
                 </div>
             </div>
@@ -1813,7 +1842,7 @@
     <div class="modal-overlay" id="vorauszahlung-modal">
         <div class="modal glass-panel dialog-vorauszahlung">
             <div class="modal-header">
-                <h2>Vorauszahlungen: <span id="vz-tenant-name"></span></h2>
+                <h2>Vorauszahlungen <button type="button" class="begriff-hilfe" aria-label="Begriff erklären" data-begriff="vorauszahlung"><i class="ph ph-question" aria-hidden="true"></i></button>: <span id="vz-tenant-name"></span></h2>
                 <button class="btn-icon" aria-label="Schließen" onclick="closeVorauszahlungModal()"><i class="ph ph-x"></i></button>
             </div>
             <div class="modal-body">
@@ -2234,8 +2263,21 @@
                         <input type="text" id="invoice-number">
                     </div>
                     <div class="form-group">
-                        <label>Anbieter</label>
-                        <select id="invoice-provider" required></select>
+                        <label for="invoice-provider">Anbieter</label>
+                        <div class="anbieter-zeile">
+                            <select id="invoice-provider" required></select>
+                            <button type="button" class="btn-secondary" onclick="anbieterFeldZeigen()">Anbieter anlegen</button>
+                        </div>
+                        <!-- Runde 4: Anbieter direkt hier anlegen, nicht erst in den Einstellungen. -->
+                        <div id="anbieter-neu" class="anbieter-zeile" hidden>
+                            <input type="text" id="anbieter-neu-name" maxlength="200" placeholder="z. B. Stadtwerke"
+                                aria-label="Name des neuen Anbieters">
+                            <button type="button" class="btn-primary" onclick="anbieterImFormularAnlegen()">Speichern</button>
+                        </div>
+                        <small id="anbieter-leer-hinweis" class="text-muted" hidden>
+                            Noch kein Anbieter angelegt. Tragen Sie ein, wer die Rechnung geschickt hat,
+                            zum Beispiel die Stadtwerke.
+                        </small>
                     </div>
                     <div class="felder-nebeneinander">
                         <div class="form-group feld-breit">
@@ -2698,6 +2740,25 @@
         <button type="button" class="btn-secondary" onclick="entwurfVerwerfen()">Entwurf löschen</button>
     </div>
 
+    <!-- Runde 4: die Einführung als Sprechblasen-Tour. Der Ring hebt die
+         Stelle hervor, auf die die Blase zeigt; gezeichnet von tourZeigen(). -->
+    <div id="tour-ring" class="tour-ring" hidden></div>
+    <div id="tour" class="tour-blase" role="dialog" aria-modal="false"
+         aria-labelledby="tour-titel" aria-describedby="tour-text" hidden>
+        <div class="tour-kopf">
+            <span id="tour-stand" class="tour-stand"></span>
+            <button type="button" class="tour-zu" onclick="tourBeenden()" aria-label="Einführung schließen">
+                <i class="ph ph-x" aria-hidden="true"></i></button>
+        </div>
+        <strong id="tour-titel" class="tour-titel"></strong>
+        <p id="tour-text"></p>
+        <div class="tour-fuss">
+            <span id="tour-punkte" class="tour-punkte" aria-hidden="true"></span>
+            <button type="button" class="btn-secondary btn-klein" id="tour-zurueck" onclick="tourSchritt(-1)">Zurück</button>
+            <button type="button" class="btn-primary btn-klein" id="tour-weiter" onclick="tourSchritt(1)">Weiter</button>
+        </div>
+    </div>
+
     <!-- NK-158: die Erklärung hinter einem „?“ an einem Fachbegriff. -->
     <div id="begriff-blase" class="begriff-blase" role="dialog" aria-live="polite" hidden>
         <strong id="begriff-blase-titel"></strong>
@@ -2706,7 +2767,7 @@
     </div>
     <script src="/static/formular.js?v=2"></script>
     <script src="/static/umzug.js?v=1"></script>
-    <script src="/static/app.js?v=28"></script>
+    <script src="/static/app.js?v=29"></script>
 </body>
 
 </html>

@@ -56,6 +56,7 @@
     --leiste-text: #A9ABC4;
     --leiste-hover: #22233A;
     --leiste-aktiv: #2A2B45;
+    --leiste-hell: #FFFFFF;
     --leiste-breite: 96px;
 
     /* Alte Namen, die app.js und ältere Regeln noch lesen. */
@@ -92,9 +93,47 @@
     --seiten-rand: clamp(16px, 3vw, 32px);
 }
 
-/* Vorlage Dunkelmodus: nur die Farb-Tokens neu setzen, z. B.
-   :root[data-theme="dark"] { --bg-color: …; --surface: …; --text-main: …; }
-   Kontraste dann mit tests/test_barrierearm.py nachrechnen. */
+/* Runde 4: Dunkelmodus. Das Skript im <head> setzt data-theme vor dem ersten
+   Bild, aus der Wahl in nk-thema oder sonst aus der Systemeinstellung. Nur
+   auf dem Bildschirm, gedruckt wird immer hell. Primär- und Gefahrknöpfe
+   werden hell mit dunkler Schrift (--on-primary). Die Kontraste rechnet
+   tests/test_design_einheit.py nach. */
+@media screen {
+    :root[data-theme="dark"] {
+        color-scheme: dark;
+        --bg-color: #0F1020;
+        --surface: #171828;
+        --surface-alt: #141526;
+        --bg-hover: #1F2034;
+        --overlay: rgba(0, 0, 0, 0.6);
+        --vorschau: #1B1C2E;
+        --text-main: #ECECF4;
+        --text-muted: #A3A5BD;
+        --border-color: #26283D;
+        --divider: #26283D;
+        --control-border: #3A3C55;
+        --field-border: #7A7D9A;
+        --primary: #8E88F8;
+        --primary-hover: #AFAAFB;
+        --primary-text: #ABA6FB;
+        --link-hover: #C2BEFC;
+        --primary-tint: #25244A;
+        --on-primary: #10111F;
+        --success-color: #5CC497;
+        --success-bg: #15302A;
+        --warning-color: #E0A447;
+        --warning-text: #EDB866;
+        --warning-bg: #33270F;
+        --warning-strong: #F5D08A;
+        --danger-color: #F08A82;
+        --danger-hover: #F6ABA5;
+        --danger-bg: #3A1C1A;
+        --danger-border: #6B2F2A;
+        --leiste: #0A0B16;
+        --leiste-hover: #17182B;
+        --leiste-aktiv: #202238;
+    }
+}
 
 /* NK-156: ``hidden`` gilt immer. Klassen wie .btn-secondary setzen display und
    stachen das Attribut sonst aus (sichtbarer Knopf „Logo löschen“ ohne Logo). */
@@ -268,6 +307,31 @@ a:hover {
     flex: 1;
 }
 
+/* Runde 4: Sonne/Mond über den Einstellungen. Auf dem Handy steht der
+   Schalter im Kopfmenü (#kopf-thema), die Fußleiste bleibt bei fünf. */
+.thema-knopf {
+    width: 40px;
+    height: 40px;
+    display: grid;
+    place-items: center;
+    border: none;
+    border-radius: var(--radius-feld);
+    background: none;
+    color: var(--leiste-text);
+    font-size: 22px;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.thema-knopf:hover {
+    background: var(--leiste-hover);
+    color: var(--leiste-hell);
+}
+
+#kopf-thema {
+    display: none;
+}
+
 .leiste-eintrag {
     position: relative;
     /* 72 px aus dem Entwurf reichen für „Einstellungen“ in 13 px nicht. */
@@ -291,12 +355,12 @@ a:hover {
 
 .leiste-eintrag:hover {
     background: var(--leiste-hover);
-    color: var(--on-primary);
+    color: var(--leiste-hell);
 }
 
 .leiste-eintrag.active {
     background: var(--leiste-aktiv);
-    color: var(--on-primary);
+    color: var(--leiste-hell);
     font-weight: 600;
 }
 
@@ -716,15 +780,60 @@ kbd {
     gap: var(--space-2);
 }
 
-.loading-state {
+/* Runde 4: graue Platzhalter in Form der Liste, bis die Daten da sind. */
+.skelett {
     grid-column: 1 / -1;
     display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: var(--space-2);
-    padding: var(--space-7) var(--space-5);
-    color: var(--text-muted);
-    font-weight: 500;
+    flex-direction: column;
+    gap: var(--space-3);
+}
+
+.skelett span {
+    display: block;
+    height: 56px;
+    border-radius: var(--radius-md);
+    background: var(--divider);
+}
+
+.skelett span:nth-child(2) { width: 85%; }
+.skelett span:nth-child(3) { width: 70%; }
+
+/* Ein dünner Balken unten im Knopf zeigt, dass eine lange Aktion läuft. */
+.arbeitet {
+    position: relative;
+    overflow: hidden;
+}
+
+.arbeitet::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    width: 100%;
+    height: 3px;
+    background: currentColor;
+    opacity: 0.4;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    .skelett span {
+        animation: skelett-puls 1.4s ease-in-out infinite alternate;
+    }
+
+    .arbeitet::after {
+        width: 40%;
+        opacity: 1;
+        animation: fortschritt 1.2s var(--kurve) infinite;
+    }
+}
+
+@keyframes skelett-puls {
+    to { opacity: 0.45; }
+}
+
+@keyframes fortschritt {
+    from { transform: translateX(-100%); }
+    to   { transform: translateX(250%); }
 }
 
 /* Der drehende Spinner (NK-126): Phosphor liefert nur das Symbol, die
@@ -1048,12 +1157,42 @@ progress {
     display: block;
 }
 
-/* Zebra Striping */
-.table-zebra tbody tr:nth-child(even) {
-    background-color: var(--surface-alt);
+/* Runde 4: Tabellen wie in Excel, aber ohne Gitter. Neben dem Spaltennamen
+   sitzt ein Pfeilknopf wie der Filterpfeil in Excel (tabelleSortieren); er
+   zeigt die aktive Richtung. */
+.sortier-knopf {
+    display: inline-flex;
+    align-items: center;
+    margin-left: var(--space-1);
+    padding: var(--space-1);
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: none;
+    font-size: inherit;
+    color: inherit;
+    cursor: pointer;
+    vertical-align: middle;
 }
-.table-zebra tbody tr:hover {
-    background-color: var(--bg-hover);
+.sortier-knopf:hover,
+th[aria-sort] .sortier-knopf {
+    color: var(--primary-text);
+}
+.sortier-knopf i {
+    opacity: 0.5;
+}
+/* Der Pfeil bleibt neben dem Namen; schmale Tabellen scrollen ohnehin seitlich. */
+th[data-sort] {
+    white-space: nowrap;
+}
+th[aria-sort] .sortier-knopf i {
+    opacity: 1;
+}
+.accordion-content .tabelle tbody tr:hover {
+    background: var(--bg-hover);
+}
+.summenzeile td {
+    border-top: 1px solid var(--control-border);
+    font-weight: 600;
 }
 
 /* Typography Utilities: Beträge, Daten, Zählerstände in Geist Mono. */
@@ -1534,6 +1673,37 @@ td.text-right {
     white-space: nowrap;
 }
 
+/* Runde 4: Anbieter wählen oder gleich im Formular anlegen. */
+.anbieter-zeile {
+    display: flex;
+    gap: var(--space-2);
+    align-items: center;
+}
+
+.anbieter-zeile > select,
+.anbieter-zeile > input {
+    flex: 1;
+    min-width: 0;
+}
+
+.anbieter-zeile > button {
+    flex-shrink: 0;
+}
+
+#anbieter-neu {
+    margin-top: var(--space-2);
+}
+
+/* Runde 4: leerer Bereich in einer Karte, ein Satz plus der nächste Schritt. */
+.leer-zeile {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+    align-items: center;
+    color: var(--text-muted);
+    padding-block: var(--space-2);
+}
+
 /* Feldhilfe (NK-066): als <small> ein Hilfetext unter dem Feld, als
    Symbol <i> das Fragezeichen neben der Beschriftung. Das Erklärfenster
    kommt aus dem title-Attribut des Browsers. */
@@ -1914,6 +2084,9 @@ i.feld-hilfe:hover {
 }
 
 .toast {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
     padding: var(--space-3) var(--space-4);
     border-radius: var(--radius-md);
     border: 1px solid var(--border-color);
@@ -1933,6 +2106,18 @@ i.feld-hilfe:hover {
     background: var(--success-bg);
     border-color: var(--success-bg);
     color: var(--success-color);
+}
+
+/* Der Haken ploppt einmal auf, wenn etwas gespeichert ist. */
+.toast-haken {
+    flex: none;
+    font-size: 20px;
+    line-height: 1.05;
+    animation: haken-ploppen var(--dauer-mittel) var(--kurve);
+}
+
+@keyframes haken-ploppen {
+    from { transform: scale(0); opacity: 0; }
 }
 
 /* Tablet (NK-073): die Leiste bleibt beschriftet (NK-162, F-91); das
@@ -2493,8 +2678,13 @@ a.btn-primary:hover {
     }
 
     .sidebar .logo,
-    .leiste-luecke {
+    .leiste-luecke,
+    .sidebar .thema-knopf {
         display: none;
+    }
+
+    #kopf-thema {
+        display: inline-flex;
     }
 
     .leiste {
@@ -2666,6 +2856,162 @@ a.btn-primary:hover {
 .begriff-blase p {
     margin: var(--space-1) 0 var(--space-3);
     color: var(--text-main);
+}
+
+/* Runde 4: Einführung als Sprechblasen-Tour. Der Ring legt mit seiner
+   breiten Kontur den Schleier über alles außer der Zielstelle (kein
+   box-shadow, siehe Schattenregel); Klicks gehen durch ihn hindurch. */
+.tour-ring {
+    position: fixed;
+    z-index: 1190;
+    border: 2px solid var(--primary);
+    border-radius: var(--radius-md);
+    outline: 200vmax solid var(--overlay);
+    pointer-events: none;
+    transition: left var(--dauer-mittel) var(--kurve), top var(--dauer-mittel) var(--kurve),
+        width var(--dauer-mittel) var(--kurve), height var(--dauer-mittel) var(--kurve);
+}
+
+.tour-blase {
+    position: fixed;
+    z-index: 1200;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-4);
+    border-radius: var(--radius-md);
+    background: var(--surface);
+    border: 1px solid var(--field-border);
+    font-size: 15px;
+    line-height: 1.5;
+    animation: tour-auf var(--dauer-mittel) var(--kurve);
+}
+
+/* Der Pfeil: ein gedrehtes Quadrat an der Kante, die zum Ziel zeigt;
+   --pfeil setzt tourZeigen() auf die Mitte des Ziels. */
+.tour-blase::before {
+    content: "";
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    background: var(--surface);
+    border: 1px solid var(--field-border);
+    transform: rotate(45deg);
+}
+
+.tour-blase[data-seite="unten"]::before {
+    top: -7px;
+    left: calc(var(--pfeil, 50%) - 6px);
+    border-right: 0;
+    border-bottom: 0;
+}
+
+.tour-blase[data-seite="oben"]::before {
+    bottom: -7px;
+    left: calc(var(--pfeil, 50%) - 6px);
+    border-left: 0;
+    border-top: 0;
+}
+
+.tour-blase[data-seite="rechts"]::before {
+    left: -7px;
+    top: calc(var(--pfeil, 50%) - 6px);
+    border-top: 0;
+    border-right: 0;
+}
+
+.tour-blase[data-seite="mitte"]::before {
+    display: none;
+}
+
+.tour-kopf,
+.tour-fuss {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.tour-stand {
+    flex: 1;
+    color: var(--text-muted);
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+}
+
+.tour-zu {
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    border: 0;
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+}
+
+.tour-zu:hover {
+    background: var(--primary-tint);
+    color: var(--primary-text);
+}
+
+.tour-titel {
+    font-size: 17px;
+}
+
+.tour-blase p {
+    margin: 0;
+    color: var(--text-main);
+}
+
+.tour-punkte {
+    display: flex;
+    flex: 1;
+    gap: 6px;
+}
+
+.tour-punkte span {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--field-border);
+    transition: background var(--dauer-kurz) var(--kurve), width var(--dauer-kurz) var(--kurve);
+}
+
+.tour-punkte span.aktiv {
+    width: 18px;
+    border-radius: 3px;
+    background: var(--primary);
+}
+
+.erste-schritte-titel {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2) var(--space-3);
+}
+
+@keyframes tour-auf {
+    from { opacity: 0; transform: scale(0.96); }
+}
+
+@keyframes tour-puls {
+    from { opacity: 0.7; transform: scale(1); }
+    to { opacity: 0; transform: scale(1.12); }
+}
+
+/* Der Puls läuft endlos -- darum nur, wenn Bewegung erwünscht ist; die
+   zentrale Kürzung auf 1 ms ließe ihn sonst flackern. */
+@media (prefers-reduced-motion: no-preference) {
+    .tour-ring::after {
+        content: "";
+        position: absolute;
+        inset: -2px;
+        border: 2px solid var(--primary);
+        border-radius: inherit;
+        animation: tour-puls 1.6s var(--kurve) infinite;
+    }
 }
 
 .hilfe-raster {
