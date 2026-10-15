@@ -208,7 +208,7 @@ def main() -> int:
             schritt('Musterhaus mit Heizungsanlage, Zaehlern und Rechnungen angelegt')
 
             seite.reload()
-            seite.click('.nav-item[data-tab="billing"]')
+            seite.evaluate("wechsleZuTab('billing')")
             seite.click('#btn-freie-abrechnung')
             seite.wait_for_selector('#billing-frei-modal.active')
             seite.select_option('#frei-mieter', str(ids['anna']))
@@ -234,7 +234,7 @@ def main() -> int:
             for reiter in ('dashboard', 'properties', 'tenants', 'meters',
                            'invoices', 'billing', 'payments', 'reports',
                            'settings'):
-                seite.click(f'.nav-item[data-tab="{reiter}"]')
+                seite.evaluate('name => wechsleZuTab(name)', reiter)
                 seite.wait_for_timeout(300)
             if csp_verstoesse:
                 raise SystemExit('CSP-Verstoesse: ' + ' | '.join(csp_verstoesse[:5]))

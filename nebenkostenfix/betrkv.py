@@ -44,6 +44,7 @@ __all__ = [
     'NR_WARMWASSER',
     'NR_VERBUNDENE_ANLAGE',
     'NR_ALLGEMEINSTROM',
+    'FRUEHERE_NAMEN',
     'EINHEITEN',
     'RUBRIKEN',
     'BEREICHE',
@@ -71,6 +72,11 @@ NR_HEIZUNG = 4
 NR_WARMWASSER = 5
 NR_VERBUNDENE_ANLAGE = 6
 NR_ALLGEMEINSTROM = 11
+
+#: Fruehere Katalognamen und wie sie heute heissen. Die Migration
+#: b4e7c1d92a58 benennt den Bestand nur um, wo der neue Name frei ist;
+#: Ergebnisse finalisierter Versionen tragen den alten Namen weiter.
+FRUEHERE_NAMEN = {'Beleuchtung (Allgemeinstrom)': 'Allgemeinstrom'}
 
 #: Nummer aus § 2 BetrKV -> was der Vermieter dazu liest. Am Verordnungstext
 #: gekuerzt: die Sache, nicht die Abrechnungsvarianten.
@@ -127,7 +133,7 @@ KATALOG = (
     {'nr': 8, 'name': 'Straßenreinigung und Müllbeseitigung', 'verteilung': 'PER_SQM', 'zaehler': False},
     {'nr': 9, 'name': 'Gebäudereinigung und Ungezieferbekämpfung', 'verteilung': 'PER_SQM', 'zaehler': False},
     {'nr': 10, 'name': 'Gartenpflege', 'verteilung': 'PER_SQM', 'zaehler': False},
-    {'nr': 11, 'name': 'Beleuchtung (Allgemeinstrom)', 'verteilung': 'PER_SQM', 'zaehler': False},
+    {'nr': 11, 'name': 'Allgemeinstrom', 'verteilung': 'PER_SQM', 'zaehler': False},
     {'nr': 12, 'name': 'Schornsteinreinigung', 'verteilung': 'PER_SQM', 'zaehler': False},
     {'nr': 13, 'name': 'Sach- und Haftpflichtversicherung', 'verteilung': 'PER_SQM', 'zaehler': False},
     {'nr': 14, 'name': 'Hauswart', 'verteilung': 'PER_SQM', 'zaehler': False},
@@ -347,7 +353,7 @@ def katalogeintrag(name) -> dict:
         >>> katalogeintrag('Abwasser')['name'], katalogeintrag('Regenwasser')['name']
         ('Entwässerung', 'Niederschlagswasser')
         >>> katalogeintrag('Strom')['name']
-        'Beleuchtung (Allgemeinstrom)'
+        'Allgemeinstrom'
     """
     nr = zuordnung(name)
     passend = [e for e in KATALOG if e['nr'] == nr]

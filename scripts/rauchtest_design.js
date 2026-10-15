@@ -36,6 +36,8 @@ function pruefe(name, bedingung) {
 
 // --- 1+2: app.js laden mit minimalem window/document ---
 const appQuelle = fs.readFileSync(path.join(__dirname, '..', 'static', 'app.js'), 'utf8');
+// Im Browser ist datumText global; die Sandboxen unten sehen es ebenso.
+globalThis.datumText = new Function(appQuelle.match(/const datumText = [^\n]*/)[0] + '; return datumText;')();
 
 const elemente = [];
 function erzeugeElement() {
@@ -77,12 +79,16 @@ global.document = {
     querySelectorAll: () => [],
     querySelector: () => null,
     body: erzeugeElement(),
-    documentElement: { style: {} },
+    documentElement: { style: {}, dataset: {} },
 };
 global.Chart = class {
     constructor() {}
     destroy() {}
 };
+// Dunkelmodus: themaAnzeigen liest Tokens und setzt Chart.defaults.
+global.Chart.defaults = { elements: { arc: {} } };
+global.Chart.instances = {};
+global.getComputedStyle = () => ({ getPropertyValue: () => '' });
 global.escapeHtml = s => String(s);
 // initApp ruft beim Laden alle Listen ab. Seit der Rauchtest am Ende auf
 // asynchrone Prüfungen wartet (NK-118), liefen diese Abrufe sonst gegen das
@@ -126,8 +132,8 @@ for (const ton of ['--success-bg', '--danger-bg', '--warning-bg']) {
 // Wasserversorgung.“ Ursache war der requires_meter-Filter im Dialog. Der
 // Wächter ruft openAddMeterModal mit dem echten Katalog auf und zählt die
 // Optionen: 18 Stück (NK-117: Nr. 3 zweimal), jede Bezeichnung genau einmal.
-// Am Zähler steht der Alltagsname (F-113): „Strom“ statt „Beleuchtung
-// (Allgemeinstrom)“. Die Zuordnung kommt aus app.js selbst.
+// Am Zähler steht der Alltagsname (F-113): „Strom“ statt
+// „Allgemeinstrom“. Die Zuordnung kommt aus app.js selbst.
 function katalog_aus_quelle() {
     const betrkvQuelle = fs.readFileSync(path.join(__dirname, '..', 'nebenkostenfix', 'betrkv.py'), 'utf8');
     const zeilen = [];
@@ -334,10 +340,10 @@ pruefe('Gefahrenzone traegt die Klasse statt Inline-Farben',
     html.includes('dashboard-card glass-panel gefahrenzone'));
 pruefe('Datenbank-Knopf ist .btn-gefahr', html.includes('class="btn-gefahr"'));
 pruefe('Detailliertes PDF ist .btn-tint', html.includes('btn-secondary btn-tint'));
-// Zwölf Pillen: Rechnungen (Liste/Zeitleiste), Einstellungen (fünf Gruppen),
-// Statistik (fünf Filter); dieselbe Zahl sichert test_ui_konsistenz.py.
-pruefe('Zwölf Auswahlpillen, keine mit Inline-Stil',
-    (html.match(/class="filter-pill/g) || []).length === 12
+// Fünfzehn Pillen: Rechnungen (Eingang/Alle/Nach Kostenart, Liste/Zeitleiste), Einstellungen
+// (fünf Gruppen), Statistik (fünf Filter); dieselbe Zahl sichert test_ui_konsistenz.py.
+pruefe('Fünfzehn Auswahlpillen, keine mit Inline-Stil',
+    (html.match(/class="filter-pill/g) || []).length === 15
     && !/class="filter-pill[^"]*"[^>]*style=/.test(html));
 pruefe('Cache-Buster erhoeht (style.css)', /style\.css\?v=\d+/.test(html));
 pruefe('Cache-Buster erhoeht (app.js)', /app\.js\?v=\d+/.test(html));
@@ -347,14 +353,14 @@ const sockel = /\.btn-primary,\s*\n\.btn-secondary,\s*\n\.btn-tint,\s*\n\.btn-ge
 pruefe('Knopfsockel bündelt alle vier Klassen (K3)', sockel.test(css));
 pruefe('Sockel: feste Höhe aus dem Token (K3)',
     css.includes('height: var(--knopf-hoehe);')
-    && css.includes('padding: 0 var(--space-5);'));
+    && css.includes('padding: 0 var(--space-4);'));
 pruefe('Sockel: Icon-Regel mit Kindselektor (K3)',
     /\.btn-primary > i,\s*\n\.btn-secondary > i,\s*\n\.btn-tint > i,\s*\n\.btn-gefahr > i\s*\{/.test(css));
 pruefe('Raster-Tokens definiert (K6)',
     css.includes('--space-1: 4px;') && css.includes('--space-7: 48px;')
     && css.includes('--knopf-hoehe: 44px;')
     && css.includes('--knopf-hoehe-klein: 32px;')
-    && css.includes('--primary-tint: rgba(79, 70, 229, 0.08);'));
+    && css.includes('--primary-tint: #EEEDFD;'));
 pruefe('B9: fremdes Blau aus dem Stylesheet vertrieben',
     !css.includes('rgba(37, 99, 235'));
 pruefe('B9: Haken-Grün ohne Rückfallliteral',
@@ -372,19 +378,28 @@ pruefe('K2: „Immobilie anlegen“ genau einmal in der Seite',
     (ui.match(/Immobilie anlegen/g) || []).length === 1);
 pruefe('K1: Immobilien-Seitenkopf trägt den Primärknopf',
     ui.indexOf('Immobilie anlegen') > ui.indexOf('id="tab-properties"'));
-pruefe('K1: .kopf-aktionen in allen acht Köpfen mit Knöpfen (global + sieben Bereiche)',
-    (ui.match(/class="kopf-aktionen"/g) || []).length === 8
+// „Rechnungen & Belege“ trägt Seitenkopf (Beleg hochladen) und Ansichtskopf (Rechnungen).
+pruefe('K1: .kopf-aktionen in allen neun Köpfen mit Knöpfen (global + acht Bereiche)',
+    (ui.match(/class="kopf-aktionen"/g) || []).length === 9
     && css.includes('.kopf-aktionen {'));
-pruefe('K1: .section-untertitel statt Inline-Stil (fünf Köpfe)',
-    (ui.match(/class="section-untertitel"/g) || []).length === 5
+pruefe('K1: .section-untertitel statt Inline-Stil (elf Köpfe: jede Seite plus Historie)',
+    (ui.match(/class="section-untertitel"/g) || []).length === 11
     && !ui.includes('color: var(--text-muted); margin-top: 4px;"')
     && css.includes('.section-untertitel {'));
-pruefe('K1: auch die Übersicht beginnt mit einem Seitenkopf',
-    html.indexOf('id="tab-dashboard"') < html.indexOf('<h2>Übersicht</h2>')
-    && html.indexOf('<h2>Übersicht</h2>') < html.indexOf('id="erste-schritte"'));
+pruefe('K1: auch „Heute“ beginnt mit einem Seitenkopf',
+    html.indexOf('id="tab-dashboard"') < html.indexOf('<h2>Heute</h2>')
+    && html.indexOf('<h2>Heute</h2>') < html.indexOf('id="erste-schritte"'));
 
 // --- NK-102: Leerzustand als eine Komponente (K4) ---
 const app = fs.readFileSync(path.join(__dirname, '..', 'static', 'app.js'), 'utf8');
+
+// Zähler-Detail: Verbrauch je Zeitraum, bei Zweitarif HT plus NT.
+const verbrauchQuelle = (app.match(/function zaehlerVerbrauch\([\s\S]*?\n\}\n/) || [''])[0];
+const zaehlerVerbrauch = new Function(verbrauchQuelle + 'return zaehlerVerbrauch;')();
+pruefe('Verbrauch eines Eintarifzählers ist die Differenz',
+    zaehlerVerbrauch({ value: 100 }, { value: 130.5 }) === 30.5);
+pruefe('Verbrauch eines Zweitarifzählers zählt HT und NT',
+    zaehlerVerbrauch({ value: 100, value_nt: 40 }, { value: 130, value_nt: 50 }) === 40);
 pruefe('K4: der Erzeuger leerzustand() existiert genau einmal',
     (app.match(/function leerzustand\(/g) || []).length === 1);
 pruefe('K4: keine handgeschriebene empty-state-Kopie mehr',
@@ -1027,30 +1042,131 @@ async function ausschalterPruefen() {
         !!melden && /if \(!datum\) \{ showError\([^)]*\); return; \}/.test(melden[0]));
 }
 
-// --- NK-224: der Gruß steht nur auf der Übersicht ---------------------
-// Vorher stand „Willkommen …“ über jedem Tab, obwohl jede Seite ihre eigene
-// Überschrift trägt.
+// --- NK-224: der Gruß steht fest im Kopf von „Heute“ ------
+// Früher wurde ein globaler Gruß je Tab ein- und ausgeblendet; jetzt trägt
+// nur der Seitenkopf von „Heute“ ihn, und die Leiste zeigt den Bereich.
+pruefe('NK-224: der Gruß steht im Kopf von „Heute“ und nirgends sonst',
+    html.indexOf('id="begruessung"') > html.indexOf('id="tab-dashboard"')
+    && html.indexOf('id="begruessung"') < html.indexOf('id="erste-schritte"')
+    && !html.includes('class="greeting"'));
+
+// Klick auf einen Reiter schaltet den Leisteneintrag seines
+// Bereichs aktiv; die Leiste öffnet die zuletzt gezeigte Seite des Bereichs.
 {
-    const m = appQuelle.match(/function initTabs\(\)[\s\S]*?\n\}/);
-    const reiter = ['dashboard', 'meters', 'invoices'].map(name => {
-        const h = {};
-        return { dataset: { tab: name }, classList: { add() {}, remove() {} },
-            addEventListener: (typ, fn) => { h[typ] = fn; },
+    const quelle = (appQuelle.match(/function initTabs\(\)[\s\S]*?\n\}/) || [''])[0]
+        + (appQuelle.match(/const letzteSeite = \{\};\nfunction zeigeBereich\([\s\S]*?\n\}/) || [''])[0];
+    const element = (daten) => {
+        const h = {}; const attr = {}; const klassen = new Set(daten.aktiv ? ['active'] : []);
+        return { dataset: daten, hidden: false, style: {},
+            classList: { add: k => klassen.add(k), remove: k => klassen.delete(k),
+                toggle: (k, an) => an ? klassen.add(k) : klassen.delete(k), contains: k => klassen.has(k) },
+            setAttribute: (k, v) => { attr[k] = v; }, removeAttribute: k => { delete attr[k]; },
+            attr, addEventListener: (typ, fn) => { h[typ] = fn; },
             klick: () => h.click({ preventDefault() {} }) };
-    });
-    const gruss = { hidden: false };
-    const init = m && new Function('document', m[0] + '; return initTabs;')({
-        querySelectorAll: s => s === '.nav-item' ? reiter : [],
-        querySelector: s => s === '.greeting' ? gruss : null,
+    };
+    const reiter = [['dashboard', 'heute'], ['meters', 'haus'], ['tenants', 'haus'], ['invoices', 'kosten']]
+        .map(([tab, gruppe]) => element({ tab, gruppe }));
+    const leiste = ['heute', 'haus', 'kosten'].map(gruppe => element({ gruppe }));
+    const unter = { hidden: true, querySelectorAll: () => reiter };
+    const gewechselt = [];
+    const init = quelle.includes('zeigeBereich') && new Function('document', 'wechsleZuTab',
+        quelle + '; return initTabs;')({
+        querySelectorAll: s => s === '.nav-item' ? reiter : s === '.leiste-eintrag' ? leiste
+            : s === '.leiste-eintrag, .logo' ? leiste : [],
+        querySelector: s => s === '.unter-reiter' ? unter
+            : (s.match(/data-gruppe="(\w+)"/) ? reiter.find(r => r.dataset.gruppe === RegExp.$1) : null),
         getElementById: () => null,
-    });
-    const sichtbar = [];
+    }, tab => gewechselt.push(tab));
+    const aktiv = () => leiste.filter(e => e.classList.contains('active')).map(e => e.dataset.gruppe).join();
+    const stand = [];
     if (init) {
         init();
-        for (const r of [reiter[1], reiter[0], reiter[2]]) { r.klick(); sichtbar.push(!gruss.hidden); }
+        reiter[2].klick(); stand.push(aktiv(), String(unter.hidden));
+        reiter[3].klick(); stand.push(aktiv(), String(unter.hidden));
+        leiste[1].klick();
     }
-    pruefe('NK-224: der Gruß verschwindet auf anderen Tabs und kommt auf der Übersicht zurück',
-        sichtbar.join() === 'false,true,false');
+    pruefe('Der Reiter „Mieter“ macht „Haus“ in der Leiste aktiv, „Rechnungen“ dann „Kosten“',
+        stand.join('|') === 'haus|false|kosten|true');
+    pruefe('„Haus“ in der Leiste öffnet die zuletzt gezeigte Seite (Mieter)',
+        gewechselt.join() === 'tenants' && leiste[1].attr['aria-current'] === undefined);
+}
+
+// Die Hilfe hat keinen Reiter: zeigeHilfe nimmt der Leiste die Markierung.
+{
+    const m = appQuelle.match(/function zeigeHilfe\([\s\S]*?\n\}/);
+    let bereich, tourZu = 0;
+    const hilfe = { classList: { add() {} }, style: {} };
+    if (m) {
+        new Function('document', 'window', 'schliesseBegriffBlase', 'hilfeChecklisteLaden', 'ladeUeber', 'zeigeBereich',
+            'tourBeenden', m[0] + '; zeigeHilfe();')({
+            querySelectorAll: () => [],
+            querySelector: () => null,
+            getElementById: id => id === 'tab-hilfe' ? hilfe : null,
+        }, { scrollTo() {} }, () => {}, () => {}, () => {}, item => { bereich = item; }, () => { tourZu++; });
+    }
+    pruefe('NK-224: die Hilfe markiert keinen Bereich in der Leiste', !!m && bereich === null);
+    // Sonst holt die offene Tour beim Schließen eines Dialogs ihren Reiter zurück.
+    pruefe('die Hilfe beendet eine offene Einführungstour', tourZu === 1);
+    const versuch = (appQuelle.match(/const versuch = \(\) => \{[\s\S]*?\n    \};/) || [''])[0];
+    pruefe('die Einführung startet nicht von selbst über der offenen Hilfe',
+        /getElementById\('tab-hilfe'\)\.classList\.contains\('active'\)\) return;/.test(versuch));
+}
+
+// Die Befehlspalette markiert jedes Suchwort und maskiert den Rest.
+{
+    const funktion = name => (appQuelle.match(new RegExp('function ' + name + '\\([\\s\\S]*?\\n\\}')) || [''])[0];
+    const quelle = funktion('escapeHtml') + funktion('befehlMarkiert');
+    const markiert = quelle.includes('befehlMarkiert')
+        && new Function(quelle + '; return befehlMarkiert;')()('Strom <b>2. OG', ['strom', 'og']);
+    pruefe('Suchwörter in <mark>, Text maskiert',
+        markiert === '<mark>Strom</mark> &lt;b&gt;2. <mark>OG</mark>');
+}
+
+// „Heute“ nennt Zähler ohne Stand im laufenden Jahr, Belege ohne
+// Rechnung und fällige Abrechnungen; Beispieldaten erzeugen keine Aufgabe.
+{
+    const quelle = (appQuelle.match(/function heuteAufgaben\(\)[\s\S]*?\n\}/) || [''])[0];
+    const jahr = String(new Date().getFullYear());
+    const gruppen = quelle && new Function('echterBestand', 'tenants', 'abrechnungsVorschlaege',
+        'zaehlerArtName', 'datumText', 'openAddReadingModal', 'openBillingSelectionModal',
+        'currentDocuments', 'belegOffen', 'wechsleZuTab', 'zeigeKostenAnsicht',
+        quelle + '; return heuteAufgaben();')(
+        () => ({ properties: [{ id: 1 }], meters: [{ id: 1, category_name: 'Strom', meter_number: 'A1', property_name: 'Haus' },
+            { id: 2, category_name: 'Strom', meter_number: 'B2', property_name: 'Haus' }],
+        readings: [{ meter_id: 1, reading_date: jahr + '-03-01' }] }),
+        [{ id: 7, ist_beispiel: true }],
+        [{ tenant_id: 7, tenant_name: 'Beispiel' }, { tenant_id: 8, tenant_name: 'Echt', apartment_name: 'EG' }],
+        art => art, d => d, () => {}, () => {},
+        [{ id: 5, property_id: 1, description: 'Stadtwerke', property_name: 'Haus', upload_date: '2026-02-01T10:00:00' },
+            { id: 6, property_id: 1, description: 'Erledigt', property_name: 'Haus', upload_date: '2026-02-01T10:00:00' },
+            { id: 7, property_id: 9, description: 'Beispiel', property_name: 'Beispielhaus', upload_date: '2026-02-01T10:00:00' }],
+        d => d.id !== 6, () => {}, () => {});
+    const stand = (gruppen || []).map(g => g.name + ':' + g.aufgaben.map(a => a.titel + '/' + a.chip).join(',')).join('|');
+    pruefe('Heute zeigt nur Zähler ohne Stand, offene Belege und echte fällige Abrechnungen',
+        stand === 'Erfassen:Strom B2/fehlt|Belege:Stadtwerke/offen|Abrechnen:Echt (EG)/fällig');
+}
+
+// --- Immobilienfilter im Kopf ----------------------------------------------
+// Vorher sprang die Auswahl nur zur Immobilie, Mieter und Kosten zeigten weiter
+// alles. Jetzt filtert imHaus jede geladene Liste über ihr Verknüpfungsfeld.
+{
+    const funktion = name => (appQuelle.match(new RegExp('function ' + name + '\\([\\s\\S]*?\\n\\}')) || [''])[0];
+    const filtere = (filter, liste, merke) => new Function('hausFilter', 'liste', 'merke',
+        funktion('gehoertZumHaus') + funktion('imHaus') + '; return [imHaus(liste, merke), hausFilter];')(filter, liste, merke);
+    const f = () => ({ id: 1, wohnungen: new Set([11]), zaehler: new Set([21]), mieter: new Set([31]) });
+    const ids = l => l.map(x => x.id).join(',');
+    pruefe('Hausfilter: ohne Auswahl bleibt jede Liste vollständig',
+        ids(filtere(null, [{ id: 1, property_id: 2 }])[0]) === '1');
+    const gemischt = [{ id: 1, property_id: 1 }, { id: 2, property_id: 2 }, { id: 3, apartment_id: 11 },
+        { id: 4, apartment_id: 12 }, { id: 5, meter_id: 21 }, { id: 6, meter_id: 22 },
+        { id: 7, tenant_id: 31 }, { id: 8, tenant_id: 32 }, { id: 9, property_id: null }];
+    pruefe('Hausfilter: Immobilie, Wohnung, Zähler und Mieter grenzen ein, Unzugeordnetes bleibt',
+        ids(filtere(f(), gemischt)[0]) === '1,3,5,7,9');
+    pruefe('Hausfilter: die Immobilie hat Vorrang vor der Wohnung',
+        ids(filtere(f(), [{ id: 1, property_id: 2, apartment_id: 11 }])[0]) === '');
+    const [, nach] = filtere(f(), [{ id: 11, property_id: 1 }, { id: 12, property_id: 2 }, { id: 13, property_id: 1 }], 'wohnungen');
+    pruefe('Hausfilter: neu geladene Wohnungen landen in der Menge, an der die Mieter hängen',
+        [...nach.wohnungen].join() === '11,13');
 }
 
 // --- NK-225: „0 von 5“ trotz Beispielhaus wird erklärt -----------------
@@ -1062,9 +1178,11 @@ async function ausschalterPruefen() {
         const hole = id => (el[id] = el[id] || { id, hidden: beispiel, style: {},  // Start = Gegenteil der Erwartung
             replaceChildren() {}, appendChild() {} });
         new Function('document', 'properties', 'allApartments', 'tenants', 'invoices', 'meters',
-            'readings', 'payments', 'abrechnungsHistorie', quelle + '; zeigeErsteSchritte();')(
+            'readings', 'payments', 'abrechnungsHistorie', 'zeigeHeute', 'fuelleHausWahl', 'tourAutostart',
+            quelle + '; zeigeErsteSchritte();')(
             { getElementById: hole, createElement: () => ({}) },
-            beispiel ? [{ id: 1, ist_beispiel: true }] : [], [], [], [], [], [], [], []);
+            beispiel ? [{ id: 1, ist_beispiel: true }] : [], [], [], [], [], [], [], [], () => {}, () => {},
+            () => { el.tourGestartet = true; });
         return el;
     };
     const mit = lauf(true), ohne = lauf(false);
@@ -1075,6 +1193,8 @@ async function ausschalterPruefen() {
         && /id="erste-schritte-beispiel"[^>]*>Die Beispielimmobilie zählt nicht mit\.</.test(html));
     pruefe('NK-225: ohne Beispielhaus kein Hinweis',
         !!ohne['erste-schritte-beispiel'] && ohne['erste-schritte-beispiel'].hidden === true);
+    pruefe('Die Einführung startet von selbst nur in der leeren App, nicht neben dem Beispielhaus',
+        ohne.tourGestartet === true && !mit.tourGestartet);
 }
 
 // --- NK-226: Vorschlag zur Anpassung der Vorauszahlung -----------------
@@ -1459,7 +1579,9 @@ async function ablesenPruefen() {
             && gleich.includes('kpi-trend kpi-trend--gleich') && gleich.includes('kpi-wert--erledigt'));
         const css = fs.readFileSync(path.join(__dirname, '..', 'static', 'style.css'), 'utf8');
         pruefe('NK-260: Hover der klickbaren Kacheln steht im Stylesheet',
-            /\.kpi-clickable:hover\s*\{[^}]*translateY\(-2px\)/.test(css)
+            /\.kpi-clickable:hover\s*\{[^}]*background: var\(--surface-alt\)/.test(css)
+            // Aufsteigen nur in @keyframes, kein Anheben beim Hover
+            && !/translateY/.test(css.replace(/@keyframes[^{]*\{(?:[^{}]*\{[^}]*\})*\s*\}/g, ''))
             && /\.kpi-karte\s*\{[^}]*border-left:\s*4px solid var\(--kpi-farbe/.test(css));
     }
 }

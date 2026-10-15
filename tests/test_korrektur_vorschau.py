@@ -239,3 +239,57 @@ def test_nur_andere_texte_sind_unveraendert(auth_client, app_ctx):
     assert antwort.status_code == 200, antwort.get_data(as_text=True)
     assert antwort.get_json()['unveraendert'] is True
     assert BillingReportVersion.query.filter_by(report_id=bericht_id).count() == 1
+
+
+def _allgemeinstrom_unter_altem_namen(app_ctx):
+    """Nr. 11 heißt noch wie vor der Migration b4e7c1d92a58, nach Fläche."""
+    from datetime import date
+    from billing_factories import apt, category, house, invoice, profile, tenant
+
+    kategorie = category('Allgemeinstrom')
+    kategorie.name = 'Beleuchtung (Allgemeinstrom)'
+    prop = house()
+    mieter_a = tenant(apt(prop, 'EG links', 50.0), 'Anna Mieterin', move_in=date(2024, 1, 1))
+    mieter_b = tenant(apt(prop, 'EG rechts', 50.0), 'Berta Mieterin', move_in=date(2024, 1, 1))
+    profile(mieter_a, kategorie, 'qm')
+    profile(mieter_b, kategorie, 'qm')
+    invoice(prop, kategorie, 600.0, date(2025, 1, 1), date(2025, 12, 31))
+    db.session.commit()
+    return mieter_a.id, kategorie.id
+
+
+def test_umbenennung_durch_die_migration_ist_keine_aenderung(auth_client, app_ctx):
+    """Review 0.15.0: nach der Umbenennung von Nr. 11 meldete die Vorschau
+    jede finalisierte Abrechnung als geändert (alter und neuer Name als zwei
+    Positionen), und die Korrektur legte eine Kopie mit gleichen Zahlen an."""
+    from nebenkostenfix.models import CostCategory
+    mieter_id, kategorie_id = _allgemeinstrom_unter_altem_namen(app_ctx)
+    bericht_id = _finalisiere(auth_client, mieter_id).id
+    db.session.get(CostCategory, kategorie_id).name = 'Allgemeinstrom'
+    db.session.commit()
+
+    vorschau = _vorschau(auth_client, bericht_id)
+
+    assert vorschau['unveraendert'] is True
+    assert vorschau['positionen'] == [
+        {'kostenart': 'Allgemeinstrom', 'alt': '300.00', 'neu': '300.00'}]
+    korrektur = auth_client.post(f'/api/billing/reports/{bericht_id}/korrektur')
+    assert korrektur.status_code == 400
+    assert BillingReportVersion.query.filter_by(report_id=bericht_id).count() == 1
+
+
+def test_frueherer_name_als_eigene_kostenart_bleibt_eine_aenderung(auth_client, app_ctx):
+    """Trägt das neue Ergebnis den früheren Namen noch (eigene Kostenart, die
+    Migration hat übersprungen), ist er keine Umbenennung: der Abgleich greift
+    nicht, ein echter Unterschied bleibt sichtbar."""
+    from nebenkostenfix.abrechnung_version import gleich_gerechnet
+    alt = {'line_items': [{'category': 'Beleuchtung (Allgemeinstrom)', 'tenant_cost': '300.00'}]}
+    neu = {'line_items': [{'category': 'Beleuchtung (Allgemeinstrom)', 'tenant_cost': '300.00'},
+                          {'category': 'Allgemeinstrom', 'tenant_cost': '300.00'}]}
+    umbenannt = {'line_items': [{'category': 'Allgemeinstrom', 'tenant_cost': '300.00'}]}
+
+    assert gleich_gerechnet(alt, umbenannt) is True
+    assert gleich_gerechnet(alt, neu) is False
+    assert gleich_gerechnet(
+        {'line_items': [{'category': 'Allgemeinstrom', 'tenant_cost': '1.00'}]},
+        {'line_items': [{'category': 'Beleuchtung (Allgemeinstrom)', 'tenant_cost': '1.00'}]}) is False

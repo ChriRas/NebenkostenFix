@@ -1,9 +1,9 @@
 """F-113: Stromzaehler heissen in der Oberflaeche "Strom".
 
 Befund aus dem Echtbetrieb: Haupt- und Wohnungszaehler fuer Strom haengen an
-BetrKV Nr. 11 "Beleuchtung (Allgemeinstrom)", weil der Allgemeinstrom aus
+BetrKV Nr. 11 "Allgemeinstrom", weil der Allgemeinstrom aus
 ihnen gerechnet wird (Hauptzaehler minus Wohnungszaehler). Die Zaehlerliste
-bot deshalb nur "Beleuchtung (Allgemeinstrom)" an -- fuer einen
+bot deshalb nur "Allgemeinstrom" an -- fuer einen
 Wohnungszaehler falsch. Eine neue Kostenart gibt es dafuer nicht (Entscheidung vom
 30.09.2026); die Zaehleransicht zeigt einen Alltagsnamen, Kostenarten
 und PDF behalten den Namen aus der BetrKV. Seit F-136 zeigt auch der
@@ -36,7 +36,7 @@ def test_alltagsname_fuer_strom_sonst_unveraendert():
     beginn = QUELLE.index('const ZAEHLER_ANZEIGENAMEN')
     code = QUELLE[beginn:QUELLE.index('\n}', beginn) + 2] + (
         'console.log(JSON.stringify(['
-        'zaehlerArtName("Beleuchtung (Allgemeinstrom)"),'
+        'zaehlerArtName("Allgemeinstrom"),'
         'zaehlerArtName("Wasserversorgung"), zaehlerArtName(undefined)]));')
     aus = subprocess.run(['node', '-e', code], capture_output=True, text=True,
                          check=True).stdout
@@ -55,7 +55,7 @@ def test_zaehlerstellen_zeigen_den_alltagsnamen():
 
 def test_rechnungen_zeigen_den_alltagsnamen():
     """F-136: Der Rechnungen-Tab zeigte bei der Stromrechnung noch
-    "Beleuchtung (Allgemeinstrom)" -- Ueberschrift, Filter und Dialog nennen
+    "Allgemeinstrom" -- Ueberschrift, Filter und Dialog nennen
     sie jetzt wie die Zaehler "Strom". Gebucht wird weiter auf die Kostenart
     (Wert ist die id bzw. der Originalname), PDF und Kostenarten behalten den
     BetrKV-Namen."""

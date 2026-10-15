@@ -4,7 +4,7 @@ Befund aus der Abrechnung Mieter 3 auf 6061:
 
 * Die Kachel "Zeitraum (§ 556 Abs. 3 BGB)" stand als Zaehler mit
   "Zähler: N/A" und "Keine ausreichenden Daten" da; ihre Meldung fehlte.
-* Der Stromzaehler hiess "Beleuchtung (Allgemeinstrom)" (F-113 galt nur
+* Der Stromzaehler hiess "Allgemeinstrom" (F-113 galt nur
   fuer die Zaehlerliste).
 * Zwei gleiche Warnungen (Entwaesserung, Wasserversorgung) standen voll
   ausgeschrieben untereinander, mit der Kennung vorn.
@@ -89,6 +89,14 @@ def test_datum_und_betrag_im_deutschen_format():
                      + 'console.log(JSON.stringify([datumText("2025-09-01"), euroText(53)]));')
     # toLocaleString trennt Betrag und Zeichen mit einem geschuetzten Leerzeichen.
     assert [t.replace(' ', ' ') for t in ergebnis] == ['01.09.2025', '53,00 €']
+
+
+@pytest.mark.skipif(shutil.which('node') is None, reason='node fehlt')
+def test_datum_mit_zeitstempel_und_leerwert():
+    # Berechnete Felder kommen per isoformat() auch mit Uhrzeit; ohne slice(0, 10) „Invalid Date“.
+    ergebnis = _node(_konstante('datumText')
+                     + 'console.log(JSON.stringify([datumText("2025-09-01T10:00:00"), datumText(null)]));')
+    assert ergebnis == ['01.09.2025', '—']
 
 
 def test_vorschau_trennt_hinweise_von_zaehlern():

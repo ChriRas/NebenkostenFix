@@ -14,8 +14,9 @@ und beigeleget Lizenz. Diese Prüfungen halten das fest:
    ``app.js``) enthalten keine fremde Adresse. ``data:``-Adressen sind
    erlaubt: sie tragen die Daten in sich (SVG-Namensraum im Kopfpfeil von
    style.css) und gehen an niemanden.
-2. Die drei Pakete liegen mit Lizenzdatei vor — Chart.js (MIT),
-   Phosphor-Icons (MIT), Outfit (OFL).
+2. Die Pakete liegen mit Lizenzdatei vor — Chart.js (MIT),
+   Phosphor-Icons (MIT), die Schriften Geist und Geist Mono
+   (Design Aufgaben) sowie Outfit (OFL, noch von den Anmeldeseiten verlinkt).
 3. Jede gebündelte Datei ist gegen ihren sha256 gepinnt. Die Kommentare
    im Bündel von Chart.js nennen Webseiten — gesehen wird das nicht als
    Netzadresse, sondern dadurch, dass der Inhalt unveränderlich ist: Wer
@@ -57,6 +58,26 @@ PAKETE = {
         'fonts/outfit/OFL.txt',
         None,
     ),
+    'fonts/geist': (
+        ['fonts/geist/geist.css',
+         'fonts/geist/geist-latin.woff2',
+         'fonts/geist/geist-latin-ext.woff2'],
+        'fonts/geist/OFL.txt',
+        b"font-family: 'Geist';",
+    ),
+    'fonts/geist-mono': (
+        ['fonts/geist-mono/geist-mono.css',
+         'fonts/geist-mono/geist-mono-latin.woff2',
+         'fonts/geist-mono/geist-mono-latin-ext.woff2'],
+        'fonts/geist-mono/OFL.txt',
+        b"font-family: 'Geist Mono';",
+    ),
+    # Legacy-Build: läuft auch in der Edge-WebView der Desktop-App.
+    'pdfjs': (
+        ['pdfjs/pdf.min.js', 'pdfjs/pdf.worker.min.js'],
+        'pdfjs/LICENSE',
+        b'"4.10.38"',
+    ),
 }
 
 # Der Pin: sha256 jeder gebündelten Datei. Ein neues Paket heißt: Datei
@@ -79,6 +100,22 @@ PINS = {
         '6c18d579fd87c3776be068b762cbc83fde3acb543d49eabd3ade842eb987e887',
     'fonts/outfit/outfit-latin-ext.woff2':
         '0f53d1c03b3918d744a843b5039001ee31695ca1e255e3914188df81beb461e9',
+    'fonts/geist/geist.css':
+        '64d6d98df287c81e0d03783000c17716af56dfe7a98ee772e4c1e79ce09b0e80',
+    'fonts/geist/geist-latin.woff2':
+        '19f9c92546aa300c312235e3125af1b81394d8db9a4bc4a425cd5b641d2d54e1',
+    'fonts/geist/geist-latin-ext.woff2':
+        '824f485b5d26e2f2da3c2b236132ece1bc8e4e43373452950bb0e40548b4313f',
+    'fonts/geist-mono/geist-mono.css':
+        '16c22d13f6ec8507a92e802dbf0561e926f64ee161c92d1cea9328f868ddec0f',
+    'fonts/geist-mono/geist-mono-latin.woff2':
+        '684ad5b531f81d43c1e8c7038262d5db7cdc1f68006e04d6c7769efa8d33c8cc',
+    'fonts/geist-mono/geist-mono-latin-ext.woff2':
+        '1a189eb997c3e2ece68373e387afaec9e8617424186c4b1ab3cff7c54ba6223b',
+    'pdfjs/pdf.min.js':
+        '44ec6f011027ee77791386b66c14876a5fc29e20bf0433c07c6726fff7212b72',
+    'pdfjs/pdf.worker.min.js':
+        'bd88805178a26c729db8c0107a5b630cb900ec070f4d8c7529a3e45530afd41d',
 }
 
 
@@ -142,7 +179,8 @@ def test_index_laedt_nur_gebuendeltes():
     for fremd in ('fonts.googleapis', 'fonts.gstatic', 'unpkg.com',
                   'cdn.jsdelivr.net'):
         assert fremd not in html, f'index.html verweist noch auf {fremd}.'
-    for gebuendelt in ('vendor/fonts/outfit/outfit.css',
+    for gebuendelt in ('vendor/fonts/geist/geist.css',
+                       'vendor/fonts/geist-mono/geist-mono.css',
                        'vendor/phosphor/regular/style.css',
                        'vendor/phosphor/fill/style.css',
                        'vendor/chartjs/chart.umd.min.js'):
@@ -154,6 +192,17 @@ def test_gebuendelte_dateien_werden_ausgeliefert(auth_client):
     antwort = auth_client.get('/static/vendor/chartjs/chart.umd.min.js')
     assert antwort.status_code == 200
     assert b'Chart.js' in antwort.data
-    antwort = auth_client.get('/static/vendor/fonts/outfit/outfit-latin.woff2')
-    assert antwort.status_code == 200
-    assert antwort.data[:4] == b'wOF2'
+    for schrift in ('outfit/outfit-latin.woff2',
+                    'geist/geist-latin.woff2',
+                    'geist-mono/geist-mono-latin.woff2'):
+        antwort = auth_client.get(f'/static/vendor/fonts/{schrift}')
+        assert antwort.status_code == 200, schrift
+        assert antwort.data[:4] == b'wOF2', schrift
+
+
+def test_pdfjs_wird_als_skript_ausgeliefert(auth_client):
+    """pdf.js lädt als Modul und Worker: das geht nur mit JS-Medientyp."""
+    for datei in ('pdf.min.js', 'pdf.worker.min.js'):
+        antwort = auth_client.get(f'/static/vendor/pdfjs/{datei}')
+        assert antwort.status_code == 200, datei
+        assert 'javascript' in antwort.content_type, (datei, antwort.content_type)

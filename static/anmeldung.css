@@ -1,19 +1,38 @@
 /* Anmelde-, Einrichtungs- und Passwortseite (NK-155, Layout K9).
-   Dieselben Farben, Schrift und Maße wie die Anwendung (style.css), aber
-   eigenständig: die Seiten stehen vor der Anmeldung und laden nicht die ganze
-   Oberfläche. Werte hier ändern sich nur zusammen mit :root in style.css. */
+   Dieselben Farben, Schrift und Maße wie die Anwendung (style.css),
+   aber eigenständig: die Seiten stehen vor der Anmeldung und
+   laden nicht die ganze Oberfläche. Werte hier ändern sich nur zusammen
+   mit :root in style.css. Die Schriften liegen unter vendor/fonts/ und
+   sind ohne Anmeldung erreichbar (auth.OEFFENTLICHE_ORDNER). */
+@import url('vendor/fonts/geist/geist.css');
+@import url('vendor/fonts/geist-mono/geist-mono.css');
 
 :root {
     --primary: #4F46E5;
-    --primary-hover: #4338CA;
-    --primary-tint: rgba(79, 70, 229, 0.08);
-    --text-main: #111827;
-    --text-muted: #4B5563;
-    --rand: #D1D5DB;
-    --fehler: #B91C1C;
-    --erfolg: #15803D;
-    --radius: 16px;
-    --radius-sm: 10px;
+    --primary-hover: #2F289E;
+    --primary-text: #3E36C2;
+    --primary-tint: #EEEDFD;
+    --on-primary: #FFFFFF;
+    --text-main: #17182B;
+    --text-muted: #5B5D72;
+    --bg-color: #FAFAFB;
+    --surface: #FFFFFF;
+    --border-color: #ECEDF2;
+    --control-border: #D4D5E0;
+    --field-border: #8C8FA6;
+    --success-color: #2F7D5B;
+    --danger-color: #A3312A;
+    --font-sans: 'Geist', 'Segoe UI', system-ui, sans-serif;
+    --font-mono: 'Geist Mono', ui-monospace, monospace;
+    --radius-lg: 12px;
+    --radius-md: 8px;
+    --radius-sm: 4px;
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 24px;
+    --space-6: 32px;
     --knopf-hoehe: 44px;
 }
 
@@ -29,24 +48,22 @@ body.anmeldung {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 24px;
-    padding: 24px 16px;
-    font-family: 'Outfit', system-ui, sans-serif;
-    font-size: 16px;
+    gap: var(--space-5);
+    padding: var(--space-5) var(--space-4);
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.5;
     color: var(--text-main);
-    background:
-        radial-gradient(circle at 15% 10%, rgba(139, 92, 246, 0.18), transparent 45%),
-        radial-gradient(circle at 85% 90%, rgba(16, 185, 129, 0.16), transparent 45%),
-        #F3F4F6;
+    background: var(--bg-color);
 }
 
 .anmelde-marke {
     display: flex;
     align-items: center;
-    gap: 12px;
-    font-size: 26px;
+    gap: var(--space-3);
+    font-size: 24px;
     font-weight: 600;
-    letter-spacing: -0.01em;
+    letter-spacing: -0.02em;
 }
 
 .anmelde-marke b { color: var(--primary); font-weight: 700; }
@@ -54,97 +71,193 @@ body.anmeldung {
 .anmelde-karte {
     width: 100%;
     max-width: 440px;
-    background: rgba(255, 255, 255, 0.85);
-    border: 1px solid rgba(255, 255, 255, 0.6);
-    border-radius: var(--radius);
-    padding: 32px;
-    box-shadow: 0 10px 30px rgba(17, 24, 39, 0.08);
+    background: var(--surface);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: var(--space-6);
 }
 
-.anmelde-karte h1 { font-size: 22px; margin: 0 0 8px; }
+.anmelde-karte h1 {
+    font-size: 24px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    line-height: 1.25;
+    margin: 0 0 var(--space-2);
+}
 
 .anmelde-karte .hinweis,
-.anmelde-karte p { font-size: 15px; color: var(--text-muted); line-height: 1.55; margin: 0 0 16px; }
+.anmelde-karte p { font-size: 15px; color: var(--text-muted); line-height: 1.5; margin: 0 0 var(--space-4); }
 
 .anmelde-karte label {
     display: block;
-    font-size: 14px;
-    font-weight: 500;
-    margin: 16px 0 6px;
+    font-size: 15px;
+    font-weight: 600;
+    margin: var(--space-4) 0 var(--space-2);
 }
 
 .anmelde-karte input,
 .anmelde-karte select {
     width: 100%;
-    padding: 12px 16px;
+    min-height: var(--knopf-hoehe);
+    padding: 0 var(--space-3);
     font: inherit;
-    font-size: 16px;
-    border: 1px solid var(--rand);
-    border-radius: var(--radius-sm);
-    background: #FFFFFF;
+    font-size: 15px;
+    color: var(--text-main);
+    border: 1px solid var(--field-border);
+    border-radius: var(--radius-md);
+    background: var(--surface);
 }
 
+/* Fokus wie in der Anwendung: 2 px Indigo, Polster gleicht die Linie aus. */
 .anmelde-karte input:focus,
 .anmelde-karte select:focus {
     outline: none;
-    border-color: var(--primary);
-    box-shadow: 0 0 0 3px var(--primary-tint);
+    border: 2px solid var(--primary);
+    padding: 0 11px;
+}
+
+/* Die geöffnete Kontoliste wie in der Anwendung (Chromium ab 135). */
+@supports (appearance: base-select) {
+    .anmelde-karte select,
+    ::picker(select) {
+        appearance: base-select;
+    }
+
+    /* Flexbox wie in der App: Text mittig, Pfeil als Chevron des Felds. */
+    .anmelde-karte select {
+        align-items: center;
+        background: var(--surface) url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235A5C72' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e") no-repeat right var(--space-3) center / 16px;
+        padding-right: 40px;
+    }
+
+    .anmelde-karte select:focus {
+        padding-right: 39px;
+    }
+
+    select::picker-icon,
+    option::checkmark {
+        display: none;
+    }
+
+    ::picker(select) {
+        /* Wie die Systemliste nach unten; nach oben nur ohne Platz. */
+        position-try-order: normal;
+        margin-block: var(--space-1);
+        padding: var(--space-1);
+        background: var(--surface);
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-lg);
+    }
+
+    option {
+        padding: var(--space-2) var(--space-3);
+        border-radius: var(--radius-md);
+    }
+
+    option:hover,
+    option:focus-visible {
+        background: var(--bg-color);
+        outline: none;
+    }
+
+    option:checked {
+        background: var(--primary-tint);
+        color: var(--primary-text);
+    }
 }
 
 .anmelde-karte button {
     width: 100%;
     height: var(--knopf-hoehe);
-    margin-top: 24px;
-    border: 0;
-    border-radius: var(--radius-sm);
+    margin-top: var(--space-5);
+    padding: 0 var(--space-4);
+    border: 1px solid var(--primary);
+    border-radius: var(--radius-md);
     background: var(--primary);
-    color: #FFFFFF;
+    color: var(--on-primary);
     font: inherit;
-    font-size: 16px;
+    font-size: 15px;
     font-weight: 600;
     cursor: pointer;
 }
 
-.anmelde-karte button:hover { background: var(--primary-hover); }
-.anmelde-karte button:focus-visible { outline: 3px solid var(--primary-tint); outline-offset: 2px; }
+.anmelde-karte button:hover { background: var(--primary-hover); border-color: var(--primary-hover); }
+.anmelde-karte button:focus-visible,
+.umzug-karte summary:focus-visible,
+.umzug-karte .knopf-link:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 
-.anmelde-karte .hilfe { font-size: 14px; margin: 8px 0 0; }
+.anmelde-karte .hilfe { font-size: 13px; margin: var(--space-2) 0 0; }
 .anmelde-karte code {
     background: var(--primary-tint);
+    color: var(--primary-text);
     padding: 1px 6px;
-    border-radius: 6px;
-    font-size: 14px;
+    border-radius: var(--radius-sm);
+    font-family: var(--font-mono);
+    font-size: 13px;
 }
-.anmelde-karte .fehler { color: var(--fehler); margin: 16px 0 0; }
-.anmelde-karte .ok { color: var(--erfolg); margin: 16px 0 0; }
+.anmelde-karte .fehler { color: var(--danger-color); margin: var(--space-4) 0 0; }
+.anmelde-karte .ok { color: var(--success-color); margin: var(--space-4) 0 0; }
 
 /* NK-164: der zweite Weg der Einrichtung, zugeklappt unter dem ersten. */
 .umzug-karte summary {
     cursor: pointer;
     font-weight: 600;
-    color: var(--primary);
+    color: var(--primary-text);
 }
-.umzug-karte[open] summary { margin-bottom: 16px; }
-.umzug-karte input[type=file] { padding: 10px; }
+.umzug-karte[open] summary { margin-bottom: var(--space-4); }
+.umzug-karte input[type=file] { padding: 9px var(--space-3); }
 .umzug-karte .zweitknopf {
-    background: #FFFFFF;
-    color: var(--primary);
-    border: 1px solid var(--rand);
-    margin-top: 8px;
+    background: var(--surface);
+    color: var(--text-main);
+    border: 1px solid var(--control-border);
+    font-weight: 500;
+    margin-top: var(--space-2);
 }
-.umzug-karte .zweitknopf:hover { background: var(--primary-tint); }
-.umzug-karte progress { width: 100%; margin-top: 16px; accent-color: var(--primary); }
-.umzug-karte #umzug-status { margin: 16px 0 0; }
-.umzug-karte #umzug-status.fehler { color: var(--fehler); }
-.umzug-karte #umzug-status.ok { color: var(--erfolg); }
+.umzug-karte .zweitknopf:hover { background: var(--bg-color); border-color: var(--field-border); }
+.umzug-karte progress { width: 100%; margin-top: var(--space-4); accent-color: var(--primary); }
+.umzug-karte #umzug-status { margin: var(--space-4) 0 0; }
+.umzug-karte #umzug-status.fehler { color: var(--danger-color); }
+.umzug-karte #umzug-status.ok { color: var(--success-color); }
 .umzug-karte .knopf-link {
-    display: block;
-    margin-top: 16px;
-    text-align: center;
-    padding: 11px;
-    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: var(--knopf-hoehe);
+    margin-top: var(--space-4);
+    padding: 0 var(--space-4);
+    border-radius: var(--radius-md);
     background: var(--primary);
-    color: #FFFFFF;
+    color: var(--on-primary);
     font-weight: 600;
     text-decoration: none;
+}
+.umzug-karte .knopf-link:hover { background: var(--primary-hover); }
+
+@media (max-width: 560px) {
+    .anmelde-karte { padding: var(--space-5); }
+}
+
+/* Swoosh nach dem Absenden (formular.js): Indigo wischt von links über die
+   Seite, Marke und Karte weichen nach links. Die App zieht die Fläche nach
+   rechts wieder weg (style.css, html.einflug). */
+body.anmeldung::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: 10;
+    background: var(--primary);
+    transform: scaleX(0);
+    transform-origin: left;
+    pointer-events: none;
+}
+body.anmeldung.swoosh::after { animation: wischen 360ms cubic-bezier(0.7, 0, 0.3, 1) forwards; }
+body.anmeldung.swoosh .anmelde-karte,
+body.anmeldung.swoosh .anmelde-marke { animation: weichen 300ms cubic-bezier(0.7, 0, 0.3, 1) forwards; }
+@keyframes wischen { to { transform: scaleX(1); } }
+@keyframes weichen { to { opacity: 0; transform: translateX(-48px); } }
+
+@media (prefers-reduced-motion: reduce) {
+    body.anmeldung.swoosh::after,
+    body.anmeldung.swoosh .anmelde-karte,
+    body.anmeldung.swoosh .anmelde-marke { animation: none; }
 }

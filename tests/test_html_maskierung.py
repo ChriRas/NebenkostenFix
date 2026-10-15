@@ -27,7 +27,6 @@ AUSNAHMEN = {
     # Im Code gebautes HTML, Nutzertext darin ist schon maskiert
     'beleg': 'Symbol-HTML aus festen Zeichenketten',
     'klasse': 'Phosphor-Klasse aus festen Zeichenketten (getCategoryIcon, NK-156)',
-    'html': 'Tabelle, deren Zellen einzeln maskiert werden',
     'rows': 'Zeilen, deren Zellen einzeln maskiert werden',
     'tableRows': 'Zeilen, deren Zellen einzeln maskiert werden',
     'liste': 'Liste aus maskierten Eintraegen (Versionen)',
@@ -44,22 +43,18 @@ AUSNAHMEN = {
     'getIcon(group.category)': 'liefert ein Emoji aus einer festen Tabelle',
     'valStr': 'Wert-HTML aus Zahlformat und maskierter Einheit',
     'ttStr': 'Tooltip aus Datum, Zahl und maskierter Einheit',
-    'subDesc': 'escapeHtml(sub.description), ggf. in wrapInterpolated',
-    "hasSub ? '' : itemDesc": 'escapeHtml(item.description), ggf. in wrapInterpolated',
-    'tCons': 'toFixed(1) in wrapInterpolated',
-    'mCons': 'toFixed(1) in wrapInterpolated',
-    'aCons': 'toFixed(1) in wrapInterpolated',
-    'prozent': 'toLocaleString der Allgemeinquote (NK-209)',
-    'pfTitle': 'feste Zeichenkette je Ampelstufe',
-    'umschlag.version ? `<p style="color: var(--text-muted); marg':
+    # Gemeinsame Abrechnungstabelle, jeder Baustein maskiert seine Teile selbst
+    'interpolationsTooltip(infoObj)': 'Tooltip aus Datum, Zahl und maskierter Einheit',
+    'abrechnungsDetailZeilen(item)': 'Unterzeilen, Texte und Betraege einzeln maskiert',
+    'abrechnungsErgebnis(data)': 'Ergebnisfelder, Betraege per escapeHtml(euroText())',
+    'abrechnungsTabelle(data)': 'Tabelle, Texte und Betraege einzeln maskiert',
+    'nr': 'laufende Zahl fuer die ID der Detailzeilen',
+    'umschlag.version ? `<p class="abr-kopf-klein">Version ${umsc':
         'Versionsnummer (Zahl), Texte darin maskiert',
+    'pfTitle': 'feste Zeichenkette je Ampelstufe',
     'group.kaution > 0 ? ` <div style="display: flex; justify-con':
         'Betraege per toLocaleString',
     "k.last_login_at ? escapeHtml(k.last_login_at) : 'nie'": 'maskiert oder fest',
-    "data.balance > 0 ? 'Nachzahlung des Mieters' : (data.balance":
-        'verschachtelter Ternaer aus festen Zeichenketten',
-    "data.balance > 0 ? 'Nachzahlung des Mieters:' : (data.balanc":
-        'verschachtelter Ternaer aus festen Zeichenketten',
     "p.type === 'Miete' ? 'badge-primary' : (p.type === 'Nebenkos":
         'CSS-Klassen aus festen Zeichenketten',
     # Oberflaechentexte aus Code-Konstanten (Erste Schritte, Leerzustaende)
@@ -90,10 +85,12 @@ AUSNAHMEN = {
     'kpis.open_tasks': 'Anzahl (Integer)',
     'formatVal(r.value)': 'Intl.NumberFormat',
     'formatVal(r.value_nt)': 'Intl.NumberFormat',
-    'rDate': 'toLocaleDateString',
-    'rStart': 'toLocaleDateString',
-    'rEnd': 'toLocaleDateString',
-    'dateStr': "toLocaleDateString oder '-'",
+    'rDate': 'datumText',
+    'rStart': 'datumText',
+    'rEnd': 'datumText',
+    'dateStr': "datumText oder '-'",
+    'basis.map(r => { const pct = getPct(r.date); return ` <div c':
+        'Zeitleiste: Prozentwert, escapeHtml(datumText), toFixed, escapeHtml(unit)',
     'r.start_date': 'ISO-Datum vom Server (Date-Spalte)',
     'r.end_date': 'ISO-Datum vom Server (Date-Spalte)',
     'accId': 'Kennung aus Zaehlschleife',
@@ -103,6 +100,19 @@ AUSNAHMEN = {
     'intervalDays': 'Tage (Zahl)',
     'missingDays': 'Tage (Zahl)',
     'umschlag.version': 'Versionsnummer (Integer)',
+    'gi': 'Index der Aufgabengruppe (Zahl)',
+    'ai': 'Index der Aufgabe (Zahl)',
+    'i': 'Index des Befehlstreffers (Zahl)',
+    'stueck': 'escapeHtml(text.slice(...)) in befehlMarkiert',
+    'befehlMarkiert(e.titel, woerter)': 'setzt nur maskierte Stuecke zusammen',
+    'befehlMarkiert(e.info, woerter)': 'setzt nur maskierte Stuecke zusammen',
+    # Sortierbare Tabellenkoepfe, Titel und Art nur als Konstanten im Code
+    'art': "Sortierart 'text' oder 'zahl' aus sortierKopf-Aufrufen",
+    "sortierKopf('Von', 'text')": 'Kopfzelle aus Konstanten',
+    "sortierKopf('Bis', 'text')": 'Kopfzelle aus Konstanten',
+    "sortierKopf('Anbieter', 'text')": 'Kopfzelle aus Konstanten',
+    "sortierKopf('Rechnungsnr.', 'text')": 'Kopfzelle aus Konstanten',
+    "sortierKopf('Betrag', 'zahl', true)": 'Kopfzelle aus Konstanten',
     # Adressen, gebaut mit dateiUrl()
     'imgUrl': 'dateiAdresse(art, Zahl) (NK-129)',
     'docUrl': 'dateiAdresse(art, Zahl) (NK-129)',

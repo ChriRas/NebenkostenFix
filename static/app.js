@@ -80,19 +80,26 @@ function schriftgroesseWaehlen(wert) {
     } catch (e) {
         // gilt dann nur bis zum Neuladen
     }
+    schriftgroesseZeigen();
 }
 window.schriftgroesseWaehlen = schriftgroesseWaehlen;
 
+// Der Knopf im Kontomenü schaltet reihum durch die drei Stufen.
+function schriftgroesseWechseln() {
+    const jetzt = Number(document.documentElement.dataset.schrift || '1');
+    schriftgroesseWaehlen(SCHRIFTGROESSEN[(SCHRIFTGROESSEN.indexOf(jetzt) + 1) % SCHRIFTGROESSEN.length]);
+}
+window.schriftgroesseWechseln = schriftgroesseWechseln;
+
 function schriftgroesseZeigen() {
-    let faktor = 1;
-    try {
-        faktor = Number(localStorage.getItem('nk-schrift') || '1');
-    } catch (e) {
-        faktor = 1;
-    }
+    // Der angewendete Wert, damit es auch ohne Speicher (privater Modus) stimmt.
+    const faktor = Number(document.documentElement.dataset.schrift || '1');
     document.querySelectorAll('input[name="schriftgroesse"]').forEach(feld => {
         feld.checked = Number(feld.value) === faktor;
     });
+    const knopf = document.getElementById('kopf-schrift-text');
+    if (knopf) knopf.textContent = faktor === SCHRIFTGROESSEN[SCHRIFTGROESSEN.length - 1]
+        ? 'Schrift zurücksetzen' : 'Größere Schrift einschalten';
 }
 
 // ---------------------------------------------------------------------------
@@ -103,13 +110,81 @@ function schriftgroesseZeigen() {
 // hier an genau einer Stelle statt verstreut in den Renderfunktionen.
 // ---------------------------------------------------------------------------
 const DIAGRAMM_FARBE = {
-    blau: '#3B82F6',
-    gruen: '#10B981',
-    gelb: '#F59E0B',
-    lila: '#8B5CF6',
-    rot: '#EF4444',
-    grau: '#9CA3AF',
+    blau: '#4F46E5',
+    gruen: '#2E7D6B',
+    gelb: '#C27A12',
+    lila: '#8E4FB8',
+    rot: '#A3312A',
+    grau: '#8C8FA6',
 };
+const DIAGRAMM_FARBE_HELL = { ...DIAGRAMM_FARBE };
+// Blau und Rot halten auf der dunklen Fläche sonst keine 3 : 1.
+const DIAGRAMM_FARBE_DUNKEL = { ...DIAGRAMM_FARBE, blau: '#8E88F8', rot: '#F08A82' };
+
+// ---------------------------------------------------------------------------
+// Dunkelmodus. Das Skript im <head> setzt data-theme vor dem ersten
+// Bild; Sonne/Mond in der Leiste (auf dem Handy im Kopfmenü) wechselt es und
+// merkt die Wahl in nk-thema. Ohne Wahl folgt die App dem System.
+// ---------------------------------------------------------------------------
+function themaAnzeigen(thema) {
+    document.documentElement.dataset.theme = thema;
+    const dunkel = thema === 'dark';
+    const text = dunkel ? 'Hellen Modus einschalten' : 'Dunkelmodus einschalten';
+    const symbol = `ph ${dunkel ? 'ph-sun' : 'ph-moon'}`;
+    document.querySelectorAll('.thema-knopf').forEach(knopf => {
+        knopf.setAttribute('aria-label', text);
+        knopf.title = text;
+    });
+    document.querySelectorAll('.thema-knopf i, #kopf-thema i').forEach(i => { i.className = symbol; });
+    document.querySelectorAll('#kopf-thema .thema-text').forEach(span => { span.textContent = text; });
+    const vorher = { ...DIAGRAMM_FARBE };
+    Object.assign(DIAGRAMM_FARBE, dunkel ? DIAGRAMM_FARBE_DUNKEL : DIAGRAMM_FARBE_HELL);
+    // Gezeichnete Datensätze tragen die Farbe als Text, teils mit Alpha-Anhang ('#F08A8259').
+    const tausch = farbe => {
+        if (typeof farbe !== 'string') return farbe;
+        const k = Object.keys(vorher).find(k => vorher[k] !== DIAGRAMM_FARBE[k] && farbe.startsWith(vorher[k]));
+        return k ? DIAGRAMM_FARBE[k] + farbe.slice(vorher[k].length) : farbe;
+    };
+    // Canvas kennt keine CSS-Variablen: Achsen, Gitter und Tortenränder aus den Tokens.
+    if (typeof Chart === 'undefined') return;
+    const stil = getComputedStyle(document.documentElement);
+    Chart.defaults.color = stil.getPropertyValue('--text-muted').trim();
+    Chart.defaults.borderColor = stil.getPropertyValue('--divider').trim();
+    Chart.defaults.elements.arc.borderColor = stil.getPropertyValue('--surface').trim();
+    // Chart.js schreibt aufgelöste Achsenfarben fest in options.scales; neue Defaults allein greifen dort nicht.
+    Object.values(Chart.instances).forEach(diagramm => {
+        Object.values(diagramm.options.scales || {}).forEach(achse => {
+            if (achse.grid) achse.grid.color = Chart.defaults.borderColor;
+            if (achse.border) achse.border.color = Chart.defaults.borderColor;
+            if (achse.ticks) achse.ticks.color = Chart.defaults.color;
+        });
+        diagramm.data.datasets.forEach(satz => ['backgroundColor', 'borderColor'].forEach(feld => {
+            satz[feld] = Array.isArray(satz[feld]) ? satz[feld].map(tausch) : tausch(satz[feld]);
+        }));
+        diagramm.update();
+    });
+}
+
+function themaWechseln() {
+    const neu = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+    try {
+        localStorage.setItem('nk-thema', neu);
+    } catch (e) {
+        // gilt dann nur bis zum Neuladen
+    }
+    themaAnzeigen(neu);
+}
+window.themaWechseln = themaWechseln;
+
+function initThema() {
+    themaAnzeigen(document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light');
+    if (!window.matchMedia) return;
+    matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+        let gewaehlt = null;
+        try { gewaehlt = localStorage.getItem('nk-thema'); } catch (fehler) { /* ohne Speicher */ }
+        if (!gewaehlt) themaAnzeigen(e.matches ? 'dark' : 'light');
+    });
+}
 
 async function abmelden() {
     try {
@@ -173,6 +248,8 @@ async function zeigeAngemeldetenBenutzer() {
         if (netzhinweis) netzhinweis.hidden = !!daten.desktop;
         const leiste = document.getElementById('ohne-anmeldung-hinweis');
         if (leiste) leiste.hidden = !(offen && !daten.desktop);
+        const chip = document.getElementById('kopf-anmeldung-aus');
+        if (chip) chip.hidden = !(offen && !daten.desktop);
         // NK-123: die Gefahrenzone gehoert nur in den Entwicklungsstapel.
         // Sie bleibt im HTML verborgen, bis /api/auth/me meldet, dass die
         // Entwicklerroute angemeldet ist -- im Auslieferungsbuild bleibt
@@ -191,8 +268,9 @@ async function zeigeAngemeldetenBenutzer() {
     }
 }
 
-window.wrapInterpolated = (valStr, isInterpolated, infoObj) => {
-    if (!isInterpolated) return valStr;
+// Erklärtext und Klick zum Rechenweg einer Schätzung; geteilt vom ~-Wert
+// (KPIs) und vom Etikett „geschätzt“ der Abrechnungstabelle.
+function interpolationsTooltip(infoObj) {
     let ttStr = `Wert wurde interpoliert.`;
     if (infoObj) {
         if (infoObj.target_days) {
@@ -201,24 +279,34 @@ window.wrapInterpolated = (valStr, isInterpolated, infoObj) => {
         if (infoObj.basis_readings && infoObj.basis_readings.length > 0) {
             ttStr += `<br>Basis-Ablesungen (stückweise):<br>`;
             infoObj.basis_readings.forEach(r => {
-                const rDate = new Date(r.date).toLocaleDateString('de-DE');
+                const rDate = datumText(r.date);
                 ttStr += `- ${rDate} (${r.total.toFixed(1)} ${escapeHtml(infoObj.unit)})<br>`;
             });
         } else if (infoObj.r_start && infoObj.r_end) {
-            const rStart = new Date(infoObj.r_start.date).toLocaleDateString('de-DE');
-            const rEnd = new Date(infoObj.r_end.date).toLocaleDateString('de-DE');
+            const rStart = datumText(infoObj.r_start.date);
+            const rEnd = datumText(infoObj.r_end.date);
             ttStr += `<br>Basis-Ablesungen:<br>
 - ${rStart} (${infoObj.r_start.total.toFixed(1)} ${escapeHtml(infoObj.unit)})<br>
 - ${rEnd} (${infoObj.r_end.total.toFixed(1)} ${escapeHtml(infoObj.unit)})`;
         }
     }
-    let clickAttr = '';
+    return ttStr;
+}
+
+function interpolationsKlickAttr(infoObj) {
     if (infoObj && infoObj.meter_id && infoObj.target_start_date && infoObj.target_end_date) {
-        clickAttr = `onclick="openInterpolationAudit(${infoObj.meter_id}, '${infoObj.target_start_date}', '${infoObj.target_end_date}')"`;
+        return `onclick="openInterpolationAudit(${infoObj.meter_id}, '${infoObj.target_start_date}', '${infoObj.target_end_date}')"`;
     }
+    return '';
+}
+
+window.wrapInterpolated = (valStr, isInterpolated, infoObj) => {
+    if (!isInterpolated) return valStr;
+    const ttStr = interpolationsTooltip(infoObj);
+    const clickAttr = interpolationsKlickAttr(infoObj);
     
     return `<span class="interpolated-wrapper">
-        <span class="interpolated-value"><b style="color:var(--primary);margin-right:4px;font-size:1.1em;">~</b> ${valStr}</span>
+        <span class="interpolated-value"><b style="color:var(--primary);margin-right:4px;">~</b> ${valStr}</span>
         <span class="math-icon" ${clickAttr}><i class="ph ph-calculator" aria-hidden="true"></i></span>
         <div class="glass-tooltip">${ttStr}</div>
     </span>`;
@@ -259,15 +347,11 @@ function initApp() {
     initTabs();
     initModalBedienung();
     initBarrierearm();
+    initThema();
+    initBefehl();
     initKopfMenues();
-    fetchProperties();
-    fetchTenants();
-    fetchAllApartments();
+    hausFilterSetzen(gemerkterHausFilter());
     fetchCategories();
-    fetchMeters();
-    fetchReadings();
-    fetchInvoices();
-    fetchDocuments();
     fetchProviders();
     fetchVermieterdaten();
     ladeKonten();
@@ -276,9 +360,6 @@ function initApp() {
     ladeGesperrteMieter();
     ladeUpdateEinstellung();
     ladeBegriffe();
-    fetchBillingSuggestions();
-    fetchBillingHistory();
-    fetchPayments();
     zeigeEinstellungsgruppe(gemerkteEinstellungsgruppe());
     startHinweise();
 }
@@ -348,6 +429,11 @@ const huelle = {
         link.click();
         link.remove();
         setTimeout(() => URL.revokeObjectURL(adresse), 1000);
+    },
+
+    // Adresse für die Vorschau einer gewählten, noch nicht hochgeladenen Datei.
+    vorschauAdresse(datei) {
+        return URL.createObjectURL(datei);
     },
 
     // Große Dateien (Umzugspaket, NK-164): im Browser direkt über einen Link,
@@ -478,18 +564,17 @@ function initTabs() {
     navItems.forEach(item => {
         item.addEventListener('click', (e) => {
             e.preventDefault();
+            const vorher = document.querySelector('.nav-item.active');
             navItems.forEach(nav => nav.classList.remove('active'));
             tabContents.forEach(tab => tab.classList.remove('active'));
             tabContents.forEach(tab => tab.style.display = 'none');
             
             item.classList.add('active');
-            // NK-224: der Gruß gehört zur Übersicht, jede andere Seite hat
-            // ihre eigene Überschrift.
-            const gruss = document.querySelector('.greeting');
-            if (gruss) gruss.hidden = item.dataset.tab !== 'dashboard';
+            zeigeBereich(item);
             const targetId = 'tab-' + item.dataset.tab;
             const targetTab = document.getElementById(targetId);
             if (targetTab) {
+                targetTab.dataset.richtung = seitenRichtung(vorher, item);
                 targetTab.classList.add('active');
                 targetTab.style.display = 'block';
                 
@@ -507,6 +592,9 @@ function initTabs() {
                     ladeUpdateEinstellung();
                 }
                 if (item.dataset.tab === 'reports') fetchAnalytics();
+                if (item.dataset.tab === 'invoices') {
+                    zeigeKostenAnsicht(kostenAnsicht || (currentDocuments.some(belegOffen) ? 'eingang' : 'alle'));
+                }
             }
         });
     });
@@ -516,6 +604,49 @@ function initTabs() {
             tab.style.display = 'none';
         }
     });
+
+    // Leiste: ein Bereich öffnet seine zuletzt gezeigte Seite.
+    document.querySelectorAll('.leiste-eintrag, .logo').forEach(eintrag => {
+        eintrag.addEventListener('click', (e) => {
+            e.preventDefault();
+            const gruppe = eintrag.dataset.gruppe;
+            const erste = document.querySelector(`.nav-item[data-gruppe="${gruppe}"]`);
+            wechsleZuTab(letzteSeite[gruppe] || erste.dataset.tab);
+        });
+    });
+    zeigeBereich(document.querySelector('.nav-item.active'));
+}
+
+// Richtung des Seitenwechsels: ein Bereich weiter unten in der
+// Leiste steigt von unten auf, Reiter desselben Bereichs gleiten quer.
+function seitenRichtung(von, nach) {
+    if (!von || von === nach) return '';
+    if (von.dataset.gruppe === nach.dataset.gruppe) {
+        return von.compareDocumentPosition(nach) & Node.DOCUMENT_POSITION_FOLLOWING ? 'rechts' : 'links';
+    }
+    const gruppen = [...document.querySelectorAll('.leiste-eintrag')].map(e => e.dataset.gruppe);
+    return gruppen.indexOf(nach.dataset.gruppe) > gruppen.indexOf(von.dataset.gruppe) ? 'vor' : 'zurueck';
+}
+
+// Die Leiste zeigt den Bereich, die Reiter im Seitenkopf seine
+// Seiten. Die Reiter wandern in den Kopf der offenen Seite.
+const letzteSeite = {};
+function zeigeBereich(item) {
+    const gruppe = item ? item.dataset.gruppe : null;
+    if (item) letzteSeite[gruppe] = item.dataset.tab;
+    document.querySelectorAll('.leiste-eintrag').forEach(eintrag => {
+        const aktiv = eintrag.dataset.gruppe === gruppe;
+        eintrag.classList.toggle('active', aktiv);
+        if (aktiv) eintrag.setAttribute('aria-current', 'page');
+        else eintrag.removeAttribute('aria-current');
+    });
+    const reiter = document.querySelector('.unter-reiter');
+    if (!reiter) return;
+    const seiten = [...reiter.querySelectorAll('.nav-item')];
+    seiten.forEach(seite => { seite.hidden = seite.dataset.gruppe !== gruppe; });
+    reiter.hidden = seiten.filter(seite => !seite.hidden).length < 2;
+    const kopf = item && document.querySelector(`#tab-${item.dataset.tab} > .section-header`);
+    if (kopf) kopf.appendChild(reiter);
 }
 
 // --- Erste Schritte (NK-072) ---
@@ -554,6 +685,331 @@ function wechsleZuTab(tabName) {
     }
     const item = document.querySelector(`.nav-item[data-tab="${tabName}"]`);
     if (item) item.click();
+}
+
+// --- Heute --------------------------------------------------------
+// Was jetzt zu tun ist, abgelesen aus den geladenen Daten: Zähler ohne Stand
+// im laufenden Jahr, Belege ohne Rechnung und fällige Abrechnungen. Zahlungen
+// haben keinen Status, an dem sich „offen“ ablesen ließe; sie fehlen darum hier.
+
+let abrechnungsVorschlaege = [];
+
+// --- Immobilienfilter (Kopf rechts) ----------------------------------------
+// Ist eine Immobilie gewählt, zeigt die ganze App nur noch ihre Daten. Die
+// Listen werden beim Laden gefiltert (imHaus), so greift jede Seite, die
+// Palette und jede Auswahl in Formularen ohne eigene Prüfung.
+let hausFilter = null;  // { id, wohnungen, zaehler, mieter } oder null = alle
+let alleHaeuser = [];   // ungefiltert, nur für die Auswahl im Kopf
+
+function gemerkterHausFilter() {
+    try {
+        return Number(localStorage.getItem('nk-haus-filter')) || null;
+    } catch (e) {
+        return null;
+    }
+}
+
+function gehoertZumHaus(x, f) {
+    if (x.property_id != null) return x.property_id === f.id;
+    if (x.apartment_id != null) return f.wohnungen.has(x.apartment_id);
+    if (x.meter_id != null) return f.zaehler.has(x.meter_id);
+    if (x.tenant_id != null) return f.mieter.has(x.tenant_id);
+    return true;  // ohne jeden Bezug zu einer Immobilie: immer zeigen
+}
+
+// merke: hält die Kennungen der Treffer fest, an denen Ablesungen,
+// Zahlungen und Vorschläge hängen ('wohnungen', 'zaehler', 'mieter').
+function imHaus(liste, merke) {
+    if (!hausFilter || !Array.isArray(liste)) return liste;
+    const treffer = liste.filter(x => gehoertZumHaus(x, hausFilter));
+    if (merke) hausFilter[merke] = new Set(treffer.map(x => x.id));
+    return treffer;
+}
+
+// Alles, was der Immobilienfilter einschränkt.
+function ladeHausListen() {
+    return Promise.all([fetchProperties(), fetchTenants(), fetchAllApartments(), fetchMeters(),
+        fetchReadings(), fetchInvoices(), fetchDocuments(), fetchBillingSuggestions(),
+        fetchBillingHistory(), fetchPayments()]);
+}
+
+// Zählt jede Auswahl mit: bei schnellem Wechsel gilt nur die jüngste.
+let hausFilterLauf = 0;
+
+async function hausFilterSetzen(id) {
+    const lauf = ++hausFilterLauf;
+    if (id) {
+        try {
+            const [wohnungen, zaehler, mieter] = await Promise.all(['/api/apartments', '/api/meters', '/api/tenants']
+                .map(async url => {
+                    const res = await fetch(url);
+                    if (!res.ok) throw await serverFehler(res);
+                    return res.json();
+                }));
+            if (lauf !== hausFilterLauf) return;
+            hausFilter = { id, wohnungen: new Set(), zaehler: new Set(), mieter: new Set() };
+            // Reihenfolge zählt: Mieter hängen an Wohnungen.
+            imHaus(wohnungen, 'wohnungen');
+            imHaus(zaehler, 'zaehler');
+            imHaus(mieter, 'mieter');
+        } catch (e) {
+            if (lauf !== hausFilterLauf) return;
+            hausFilter = null;
+            showError(meldungZu(e, 'Der Immobilienfilter ließ sich nicht laden. Es werden alle Immobilien gezeigt.'));
+        }
+    } else {
+        hausFilter = null;
+    }
+    try {
+        localStorage.setItem('nk-haus-filter', hausFilter ? String(hausFilter.id) : '');
+    } catch (e) {
+        // privates Fenster: der Filter gilt dann nur bis zum Neuladen
+    }
+    await ladeHausListen();
+    if (lauf !== hausFilterLauf) return;
+    // Offene Ansichten der vorigen Auswahl nachziehen.
+    if (propertyDetailsView.style.display === 'block') {
+        const haus = hausFilter && properties[0];
+        if (haus) showPropertyDetails(haus);
+        else propertyDetailsView.style.display = 'none';
+    }
+    if (document.querySelector('.nav-item.active')?.dataset.tab === 'reports') fetchAnalytics();
+}
+
+function heuteAufgaben() {
+    const echt = echterBestand();
+    const jahr = String(new Date().getFullYear());
+    const mitStand = new Set(echt.readings
+        .filter(r => (r.reading_date || '').startsWith(jahr)).map(r => r.meter_id));
+    const beispielMieter = new Set(tenants.filter(t => t.ist_beispiel).map(t => t.id));
+    return [
+        { name: 'Erfassen', aufgaben: echt.meters.filter(m => !mitStand.has(m.id)).map(m => ({
+            titel: `${zaehlerArtName(m.category_name)} ${m.meter_number}`,
+            info: `${m.property_name} · noch kein Stand ${jahr}`,
+            chip: 'fehlt', art: 'warn', aktion: 'Stand eintragen',
+            los: () => openAddReadingModal(m.id),
+        })) },
+        { name: 'Belege', aufgaben: currentDocuments
+            .filter(d => echt.properties.some(p => p.id === d.property_id) && belegOffen(d)).map(d => ({
+                titel: d.description || d.filename,
+                info: `${d.property_name} · hochgeladen am ${datumText(String(d.upload_date).slice(0, 10))}`,
+                chip: 'offen', art: 'rot', aktion: 'Rechnung übernehmen',
+                los: () => {
+                    eingangBeleg = { id: d.id, offen: true };
+                    wechsleZuTab('invoices');
+                    zeigeKostenAnsicht('eingang');
+                },
+            })) },
+        { name: 'Abrechnen', aufgaben: abrechnungsVorschlaege
+            .filter(v => !beispielMieter.has(v.tenant_id)).map(v => ({
+                titel: `${v.tenant_name} (${v.apartment_name})`,
+                info: `${datumText(v.suggested_start)} – ${datumText(v.suggested_end)} · unberechnete Kosten`,
+                chip: 'fällig', art: 'ind', aktion: 'Offene Kosten abrechnen',
+                los: () => openBillingSelectionModal(v),
+            })) },
+    ].filter(gruppe => gruppe.aufgaben.length);
+}
+
+function zeigeHeute() {
+    const feld = document.getElementById('heute-aufgaben');
+    if (!feld) return;
+    const gruppen = heuteAufgaben();
+    const anzahl = gruppen.reduce((summe, g) => summe + g.aufgaben.length, 0);
+    const zahl = document.getElementById('heute-zahl');
+    if (zahl) {
+        zahl.textContent = anzahl;
+        zahl.hidden = !anzahl;
+    }
+    const stand = document.getElementById('heute-stand');
+    if (stand) {
+        stand.textContent = !echterBestand().properties.length ? ''
+            : anzahl === 1 ? '1 Aufgabe offen.' : anzahl ? `${anzahl} Aufgaben offen.` : 'Nichts offen.';
+    }
+    feld.hidden = !anzahl;
+    feld.innerHTML = gruppen.map((g, gi) => `<section class="aufgaben-gruppe" aria-label="${escapeHtml(g.name)}">` +
+        `<h3 class="aufgaben-titel">${escapeHtml(g.name)}</h3>` +
+        g.aufgaben.map((a, ai) => `<div class="aufgabe" data-gruppe="${gi}" data-aufgabe="${ai}">` +
+            `<div class="aufgabe-text"><span class="aufgabe-name">${escapeHtml(a.titel)}</span>` +
+            `<span class="aufgabe-info">${escapeHtml(a.info)}</span></div>` +
+            `<span class="chip chip-${escapeHtml(a.art)}">${escapeHtml(a.chip)}</span>` +
+            `<button type="button" class="${gi + ai ? 'btn-secondary' : 'btn-primary'}">${escapeHtml(a.aktion)}</button>` +
+            `</div>`).join('') +
+        `</section>`).join('');
+    // Kein Datensatz im onclick-Attribut (NK-149): die Aktion hängt am Knopf.
+    feld.querySelectorAll('.aufgabe').forEach(zeile => {
+        const aufgabe = gruppen[zeile.dataset.gruppe].aufgaben[zeile.dataset.aufgabe];
+        zeile.querySelector('button').addEventListener('click', aufgabe.los);
+    });
+}
+
+// --- Kopfleiste ---------------------------------------------------
+
+function fuelleHausWahl() {
+    const feld = document.getElementById('haus-wahl-feld');
+    const wahl = document.getElementById('haus-wahl');
+    if (!feld || !wahl) return;
+    feld.hidden = !alleHaeuser.length;
+    feld.classList.toggle('gefiltert', !!hausFilter);
+    wahl.innerHTML = '<option value="">Alle Immobilien</option>' + alleHaeuser
+        .map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
+    wahl.value = hausFilter ? String(hausFilter.id) : '';
+}
+function hausWaehlen(wahl) {
+    hausFilterSetzen(Number(wahl.value) || null);
+}
+window.hausWaehlen = hausWaehlen;
+
+// --- Befehlspalette -----------------------------------------------
+// Strg+K oder das Suchfeld im Kopf: Seiten, häufige Aktionen und der Bestand
+// (Mieter, Zähler, Immobilien, Rechnungen) in einer Liste. Jedes Suchwort
+// muss vorkommen, darum findet „Stand Strom“ jeden Stromzähler.
+
+let befehlTreffer = [];
+let befehlAuswahl = 0;
+
+function befehlEintraege() {
+    const seiten = [...document.querySelectorAll('.unter-reiter .nav-item')].map(item => ({
+        gruppe: 'Seiten', titel: item.textContent.trim(), info: '',
+        los: () => wechsleZuTab(item.dataset.tab),
+    }));
+    seiten.push({ gruppe: 'Seiten', titel: 'Hilfe', info: '', los: () => zeigeHilfe() });
+    const aktionen = [
+        ['Rechnung erfassen', () => openAddInvoiceModal()],
+        ['Zahlung erfassen', () => openAddPaymentModal()],
+        ['Mieter anlegen', () => openAddTenantModal()],
+        ['Immobilie anlegen', () => openAddPropertyModal()],
+        ['Jahr abrechnen', () => oeffneJahrAssistent()],
+    ].map(([titel, los]) => ({ gruppe: 'Aktionen', titel, info: '', los }));
+    const zaehler = meters.map(m => ({
+        gruppe: 'Zähler', titel: `Stand eintragen: ${zaehlerArtName(m.category_name)} ${m.meter_number}`,
+        info: m.property_name || '', los: () => openAddReadingModal(m.id),
+    }));
+    const mieter = tenants.map(t => ({
+        gruppe: 'Mieter', titel: t.name, info: `${t.apartment_name} · ${t.property_name}`,
+        los: () => { wechsleZuTab('tenants'); openAddTenantModal(t); },
+    }));
+    const haeuser = properties.map(p => ({
+        gruppe: 'Immobilien', titel: p.name, info: '',
+        los: () => { wechsleZuTab('properties'); showPropertyDetails(p); },
+    }));
+    const rechnungen = invoices.map(r => ({
+        gruppe: 'Rechnungen', titel: [r.provider_name, r.invoice_number].filter(Boolean).join(' · ') || 'Rechnung',
+        info: `${r.category_name} · ${r.property_name} · ${datumText(r.start_date)} – ${datumText(r.end_date)}`,
+        los: () => { wechsleZuTab('invoices'); openAddInvoiceModal(r.id); },
+    }));
+    return [...seiten, ...aktionen, ...zaehler, ...mieter, ...haeuser, ...rechnungen];
+}
+
+// Hebt jedes Suchwort im Text hervor; der Text bleibt maskiert.
+function befehlMarkiert(text, woerter) {
+    const klein = text.toLowerCase();
+    const an = new Array(text.length).fill(false);
+    woerter.forEach(wort => {
+        for (let i = klein.indexOf(wort); i !== -1 && wort; i = klein.indexOf(wort, i + wort.length)) {
+            for (let j = i; j < i + wort.length; j++) an[j] = true;
+        }
+    });
+    let html = '';
+    for (let i = 0; i < text.length;) {
+        let j = i;
+        while (j < text.length && an[j] === an[i]) j++;
+        const stueck = escapeHtml(text.slice(i, j));
+        html += an[i] ? `<mark>${stueck}</mark>` : stueck;
+        i = j;
+    }
+    return html;
+}
+
+function befehlSuchen() {
+    const feld = document.getElementById('befehl-feld');
+    const woerter = feld.value.toLowerCase().split(/\s+/).filter(Boolean);
+    const alle = befehlEintraege();
+    befehlTreffer = woerter.length
+        ? alle.filter(e => woerter.every(w => `${e.titel} ${e.info}`.toLowerCase().includes(w)))
+        : alle.filter(e => e.gruppe === 'Seiten' || e.gruppe === 'Aktionen');
+    // Je Gruppe höchstens sechs, damit die Liste überschaubar bleibt.
+    const jeGruppe = {};
+    befehlTreffer = befehlTreffer.filter(e => (jeGruppe[e.gruppe] = (jeGruppe[e.gruppe] || 0) + 1) <= 6);
+    befehlAuswahl = 0;
+    const liste = document.getElementById('befehl-liste');
+    if (!befehlTreffer.length) {
+        liste.innerHTML = '<p class="befehl-leer">Nichts gefunden. Versuchen Sie einen anderen Begriff.</p>';
+        feld.removeAttribute('aria-activedescendant');
+        return;
+    }
+    let gruppe = '';
+    liste.innerHTML = befehlTreffer.map((e, i) => {
+        const kopf = e.gruppe !== gruppe ? `<div class="befehl-gruppe" role="presentation">${escapeHtml(e.gruppe)}</div>` : '';
+        gruppe = e.gruppe;
+        return kopf + `<div class="befehl-eintrag" role="option" id="befehl-${i}" data-index="${i}">` +
+            `<span class="befehl-titel">${befehlMarkiert(e.titel, woerter)}</span>` +
+            (e.info ? `<span class="befehl-info">${befehlMarkiert(e.info, woerter)}</span>` : '') +
+            `</div>`;
+    }).join('');
+    befehlMarkieren();
+}
+
+function befehlMarkieren() {
+    document.querySelectorAll('.befehl-eintrag').forEach(eintrag => {
+        const aktiv = Number(eintrag.dataset.index) === befehlAuswahl;
+        eintrag.setAttribute('aria-selected', aktiv ? 'true' : 'false');
+        if (aktiv) eintrag.scrollIntoView({ block: 'nearest' });
+    });
+    document.getElementById('befehl-feld').setAttribute('aria-activedescendant', `befehl-${befehlAuswahl}`);
+}
+
+function befehlAusfuehren(index) {
+    const eintrag = befehlTreffer[index];
+    if (!eintrag) return;
+    befehlSchliessen();
+    eintrag.los();
+}
+
+function befehlOeffnen() {
+    const dialog = document.getElementById('befehl-dialog');
+    const feld = document.getElementById('befehl-feld');
+    feld.value = '';
+    befehlSuchen();
+    dialog.classList.add('active');
+    setTimeout(() => feld.focus(), 0);
+}
+window.befehlOeffnen = befehlOeffnen;
+
+function befehlSchliessen() {
+    document.getElementById('befehl-dialog').classList.remove('active');
+}
+window.befehlSchliessen = befehlSchliessen;
+
+function initBefehl() {
+    const feld = document.getElementById('befehl-feld');
+    const liste = document.getElementById('befehl-liste');
+    if (!feld || !liste) return;
+    // Tippen ist hier Suchen, keine Änderung: Esc fragt nicht nach.
+    feld.addEventListener('input', (e) => {
+        e.stopPropagation();
+        befehlSuchen();
+    });
+    feld.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            e.preventDefault();
+            const schritt = e.key === 'ArrowDown' ? 1 : -1;
+            befehlAuswahl = (befehlAuswahl + schritt + befehlTreffer.length) % (befehlTreffer.length || 1);
+            befehlMarkieren();
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            befehlAusfuehren(befehlAuswahl);
+        }
+    });
+    liste.addEventListener('click', (e) => {
+        const eintrag = e.target.closest('.befehl-eintrag');
+        if (eintrag) befehlAusfuehren(Number(eintrag.dataset.index));
+    });
+    document.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+            e.preventDefault();
+            befehlOeffnen();
+        }
+    });
 }
 
 // --- Hilfe (NK-158, F-88) ------------------------------------------------------
@@ -621,12 +1077,16 @@ async function ladeUeber() {
 }
 
 function zeigeHilfe(abschnitt) {
+    // Wer die Hilfe öffnet, verlässt die Tour; sonst holt sie beim Schließen
+    // eines Dialogs ihren Reiter zurück.
+    tourBeenden();
     schliesseBegriffBlase();
     document.querySelectorAll('.nav-item').forEach(nav => nav.classList.remove('active'));
     document.querySelectorAll('.tab-content').forEach(tab => {
         tab.classList.remove('active');
         tab.style.display = 'none';
     });
+    zeigeBereich(null);
     // data-fest bleibt offen: „Über …“ im Menü der Windows-App darf den
     // Haftungshinweis nicht wegklicken (NK-174).
     document.querySelectorAll('.modal-overlay.active:not([data-fest])')
@@ -697,6 +1157,189 @@ document.addEventListener('keydown', ereignis => {
 });
 window.addEventListener('scroll', schliesseBegriffBlase, true);
 
+// --- Einführung -----------------------------------------------------
+// Eine Sprechblasen-Tour: jeder Schritt öffnet seine Seite und zeigt auf die
+// Stelle, an der man dort anfängt. Vor und zurück blättern, X oder Escape
+// beendet sie jederzeit; danach startet sie nicht mehr von selbst.
+const TOUR = [
+    { tab: 'dashboard', ziel: '.leiste-eintrag[data-gruppe="haus"]', titel: 'Alles rund ums Haus',
+      text: 'In dieser Leiste wechseln Sie zwischen den Bereichen. Unter „Haus“ legen Sie Immobilien, Wohnungen, Mieter und Zähler an.' },
+    { tab: 'properties', ziel: '#tab-properties [onclick="openAddPropertyModal()"]', titel: 'Zuerst das Haus',
+      text: 'Legen Sie hier Ihre Immobilie an. Die Wohnungen fügen Sie danach direkt auf der Karte der Immobilie hinzu.' },
+    { tab: 'tenants', ziel: '#tab-tenants [onclick="openAddTenantModal()"]', titel: 'Dann die Mieter',
+      text: 'Hier tragen Sie ein, wer in welcher Wohnung wohnt.' },
+    { tab: 'invoices', ziel: '#pill-eingang', titel: 'Die Rechnungen des Jahres',
+      text: 'Im Eingang laden Sie Belege hoch, etwa die Gas- oder die Müllrechnung. Mit wenigen Angaben wird daraus eine Rechnung.' },
+    { tab: 'billing', ziel: '#tab-billing [onclick="oeffneJahrAssistent()"]', titel: 'Zum Schluss abrechnen',
+      text: 'Am Jahresende führt Sie „Jahr abrechnen“ durch die Abrechnung und zeigt vorher, was noch fehlt.' },
+    { tab: 'dashboard', ziel: '.konto-knopf', titel: 'Hilfe, wenn Sie sie brauchen',
+      text: 'In diesem Menü finden Sie die Hilfe mit Erklärungen zu allen Begriffen. Dort können Sie diese Einführung auch jederzeit neu starten.' },
+];
+let tourIndex = -1;
+let tourZiel = null;
+let tourFokusVorher = null;
+let tourAutoVersucht = false;
+
+function tourOffen() {
+    return tourIndex >= 0;
+}
+
+// Offen und nicht gerade hinter einem Dialog pausiert.
+function tourSichtbar() {
+    return tourOffen() && !document.getElementById('tour').hidden;
+}
+
+// Ein Dialog hat Vorrang: die Tour tritt zurück und kommt danach am selben Schritt wieder.
+function tourDialogAbgleichen() {
+    if (!tourOffen()) return;
+    const dialog = Boolean(document.querySelector('.modal-overlay.active'));
+    const blase = document.getElementById('tour');
+    if (dialog === blase.hidden) return;
+    blase.hidden = dialog;
+    if (dialog) {
+        document.getElementById('tour-ring').hidden = true;
+        return;
+    }
+    tourZeigen();
+    document.getElementById('tour-weiter').focus();
+}
+
+function tourStarten() {
+    schliesseBegriffBlase();
+    tourFokusVorher = document.activeElement;
+    tourIndex = 0;
+    document.getElementById('tour').hidden = false;
+    tourZeigen();
+    document.getElementById('tour-weiter').focus();
+}
+window.tourStarten = tourStarten;
+
+function tourBeenden() {
+    if (!tourOffen()) return;
+    tourIndex = -1;
+    tourZiel = null;
+    document.getElementById('tour').hidden = true;
+    document.getElementById('tour-ring').hidden = true;
+    try {
+        localStorage.setItem('nk-tour-gesehen', '1');
+    } catch (e) { /* ohne Speicher startet sie beim nächsten Mal wieder */ }
+    if (tourFokusVorher && tourFokusVorher.isConnected) tourFokusVorher.focus();
+}
+window.tourBeenden = tourBeenden;
+
+function tourSchritt(richtung) {
+    const neu = tourIndex + richtung;
+    if (neu >= TOUR.length) return tourBeenden();
+    if (neu < 0) return;
+    tourIndex = neu;
+    tourZeigen();
+}
+window.tourSchritt = tourSchritt;
+
+function tourZeigen() {
+    const schritt = TOUR[tourIndex];
+    wechsleZuTab(schritt.tab);
+    const kandidaten = [...document.querySelectorAll(schritt.ziel)];
+    tourZiel = kandidaten.find(el => el.getClientRects().length) || null;
+    // Am Handy steckt der Knopf im eingeklappten Aktionsmenü: dann auf dessen Menüknopf zeigen.
+    const menue = !tourZiel && kandidaten.length && kandidaten[0].closest('.kopf-aktionen.mit-menue');
+    if (menue) tourZiel = menue.parentElement.querySelector('.kopf-menue-knopf');
+    if (tourZiel) tourZiel.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+
+    document.getElementById('tour-stand').textContent = `Schritt ${tourIndex + 1} von ${TOUR.length}`;
+    document.getElementById('tour-titel').textContent = schritt.titel;
+    document.getElementById('tour-text').textContent = schritt.text;
+    const punkte = document.getElementById('tour-punkte');
+    punkte.replaceChildren(...TOUR.map((_, i) => {
+        const punkt = document.createElement('span');
+        if (i === tourIndex) punkt.className = 'aktiv';
+        return punkt;
+    }));
+    document.getElementById('tour-zurueck').disabled = tourIndex === 0;
+    document.getElementById('tour-weiter').textContent = tourIndex === TOUR.length - 1 ? 'Verstanden' : 'Weiter';
+
+    tourPlatzieren();
+    // Die Seite baut sich gestaffelt auf (40 ms je Block); danach steht das Ziel.
+    setTimeout(tourPlatzieren, 400);
+}
+
+function tourPlatzieren() {
+    if (!tourSichtbar()) return;
+    const blase = document.getElementById('tour');
+    const ring = document.getElementById('tour-ring');
+    const rand = 16;
+    const abstand = 20;  // Ring (6 px) plus Pfeil
+    const breite = Math.min(340, window.innerWidth - 2 * rand);
+    blase.style.width = `${breite}px`;
+    const hoehe = blase.offsetHeight;
+    const klemme = (wert, min, max) => Math.max(min, Math.min(wert, max));
+
+    if (!tourZiel || !tourZiel.getClientRects().length) {
+        ring.hidden = true;
+        blase.dataset.seite = 'mitte';
+        blase.style.left = `${(window.innerWidth - breite) / 2}px`;
+        blase.style.top = `${Math.max(rand, (window.innerHeight - hoehe) / 2)}px`;
+        return;
+    }
+    const r = tourZiel.getBoundingClientRect();
+    ring.hidden = false;
+    ring.style.left = `${r.left - 6}px`;
+    ring.style.top = `${r.top - 6}px`;
+    ring.style.width = `${r.width + 12}px`;
+    ring.style.height = `${r.height + 12}px`;
+
+    let seite = 'oben';
+    if (window.innerWidth > 720 && r.left < window.innerWidth / 3 &&
+        r.right + abstand + breite + rand <= window.innerWidth) seite = 'rechts';
+    else if (r.bottom + abstand + hoehe + rand <= window.innerHeight) seite = 'unten';
+    blase.dataset.seite = seite;
+
+    if (seite === 'rechts') {
+        const oben = klemme(r.top + r.height / 2 - 32, rand, window.innerHeight - hoehe - rand);
+        blase.style.left = `${r.right + abstand}px`;
+        blase.style.top = `${oben}px`;
+        blase.style.setProperty('--pfeil', `${klemme(r.top + r.height / 2 - oben, 16, hoehe - 16)}px`);
+        return;
+    }
+    const links = klemme(r.left + r.width / 2 - breite / 2, rand, window.innerWidth - breite - rand);
+    blase.style.left = `${links}px`;
+    blase.style.top = `${seite === 'unten' ? r.bottom + abstand : Math.max(rand, r.top - abstand - hoehe)}px`;
+    blase.style.setProperty('--pfeil', `${klemme(r.left + r.width / 2 - links, 16, breite - 16)}px`);
+}
+
+// Von selbst nur einmal, nur bei leerer App und nur, wenn sie noch nie lief.
+function tourAutostart() {
+    if (tourAutoVersucht) return;
+    tourAutoVersucht = true;
+    try {
+        if (localStorage.getItem('nk-tour-gesehen')) return;
+    } catch (e) { return; }
+    // Beim ersten Anmelden liegt der Haftungshinweis davor: warten, bis kein
+    // Dialog mehr offen ist, und nur starten, wenn noch kein Haus angelegt wurde.
+    const versuch = () => {
+        if (tourOffen() || echterBestand().properties.length > 0) return;
+        if (document.getElementById('tab-hilfe').classList.contains('active')) return;
+        if (document.querySelector('.modal-overlay.active')) return setTimeout(versuch, 1000);
+        tourStarten();
+    };
+    setTimeout(versuch, 600);
+}
+
+document.addEventListener('keydown', ereignis => {
+    if (!tourSichtbar()) return;
+    if (ereignis.key === 'Escape') tourBeenden();
+    if (ereignis.target.closest('input, textarea, select')) return;
+    if (ereignis.key === 'ArrowRight') tourSchritt(1);
+    if (ereignis.key === 'ArrowLeft') tourSchritt(-1);
+});
+// Ein echter Klick daneben (auch auf das Ziel) beendet die Tour und wirkt
+// trotzdem; die künstlichen Klicks aus wechsleZuTab zählen nicht.
+document.addEventListener('click', ereignis => {
+    if (tourSichtbar() && ereignis.isTrusted && !document.getElementById('tour').contains(ereignis.target)) tourBeenden();
+}, true);
+window.addEventListener('resize', tourPlatzieren);
+window.addEventListener('scroll', () => requestAnimationFrame(tourPlatzieren), true);
+
 // „Was bedeutet das für den Mieter?“ -- das Ergebnis in einem Satz (NK-158).
 function mieterErklaerung(daten) {
     const euro = betrag => Math.abs(betrag).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
@@ -720,6 +1363,9 @@ function mieterErklaerungHtml(daten) {
 }
 
 function zeigeErsteSchritte() {
+    // Heute hängt an denselben Zahlen.
+    zeigeHeute();
+    fuelleHausWahl();
     const panel = document.getElementById('erste-schritte');
     const liste = document.getElementById('erste-schritte-liste');
     if (!panel || !liste) return;
@@ -746,6 +1392,7 @@ function zeigeErsteSchritte() {
     const offen = schritte.filter(s => !s.erledigt);
     panel.hidden = !offen.some(s => s.pflicht);
     if (panel.hidden) return;
+    if (echt.properties.length === 0 && !beispielDa) tourAutostart();
 
     // K5 (NK-103): Fortschritt „x von 5 erledigt“ mit schmalem Balken —
     // nur die fünf Pflichtschritte zählen, der optionale nicht (B8).
@@ -866,7 +1513,8 @@ function initKopfMenues() {
         aktionen.parentElement.querySelector('.kopf-menue-knopf')
             .setAttribute('aria-expanded', String(offen));
     };
-    document.querySelectorAll('.section-header > .kopf-aktionen').forEach(aktionen => {
+    // Auch der App-Kopf (Hilfe, Drucken, Abmelden) klappt am Handy ein.
+    document.querySelectorAll('.section-header > .kopf-aktionen, .top-header > .kopf-aktionen').forEach(aktionen => {
         if (aktionen.querySelectorAll('button').length < 2) return;
         const knopf = document.createElement('button');
         knopf.type = 'button';
@@ -877,10 +1525,22 @@ function initKopfMenues() {
         knopf.setAttribute('aria-label', 'Aktionen');
         knopf.title = 'Aktionen';
         knopf.innerHTML = '<i class="ph ph-dots-three-vertical" aria-hidden="true"></i>';
+        // Im App-Kopf ist es das Kontomenü, mit dem Namen als Aufschrift.
+        if (aktionen.parentElement.classList.contains('top-header')) {
+            knopf.classList.add('konto-knopf');
+            knopf.setAttribute('aria-label', 'Konto und Hilfe');
+            knopf.title = 'Konto und Hilfe';
+            knopf.innerHTML = '<i class="ph ph-user-circle" aria-hidden="true"></i>';
+            const name = document.getElementById('angemeldeterBenutzer');
+            if (name) knopf.append(name);
+            knopf.insertAdjacentHTML('beforeend', '<i class="ph ph-caret-down" aria-hidden="true"></i>');
+        }
         knopf.addEventListener('click', () => schalte(aktionen, !aktionen.classList.contains('offen')));
         aktionen.classList.add('mit-menue');
         // Direkt hinter den Titel, damit Filter-Pillen nicht dazwischen umbrechen.
-        aktionen.parentElement.firstElementChild.after(knopf);
+        // Im App-Kopf direkt vor die Aktionen, also hinter die Hauswahl.
+        if (aktionen.parentElement.classList.contains('top-header')) aktionen.before(knopf);
+        else aktionen.parentElement.firstElementChild.after(knopf);
         aktionen.addEventListener('click', e => { if (e.target.closest('button')) schalte(aktionen, false); });
     });
     const schliesseAlle = () => document.querySelectorAll('.kopf-aktionen.offen').forEach(a => schalte(a, false));
@@ -959,7 +1619,10 @@ function initModalBedienung() {
                 overlay.dataset.geaendert = '';
                 const zurueck = dialogAusloeser.get(overlay);
                 if (zurueck && document.contains(zurueck) && zurueck.focus) zurueck.focus();
+                // Lag das Rechnungsformular als Overlay über dem Eingang, kehrt es danach in die Spalte zurück.
+                if (overlay.id === 'invoice-modal') setTimeout(renderDocuments, 250);
             }
+            tourDialogAbgleichen();
         }).observe(overlay, { attributes: true, attributeFilter: ['class'] });
     });
 }
@@ -1164,7 +1827,14 @@ async function fetchProperties() {
     try {
         const response = await fetch('/api/properties');
         if (!response.ok) throw await serverFehler(response);
-        properties = await response.json();
+        alleHaeuser = await response.json();
+        if (hausFilter && !alleHaeuser.some(p => p.id === hausFilter.id)) {
+            // Gewählte Immobilie gelöscht: Filter aufheben. Das lädt alle
+            // Listen neu, auch diese; der laufende Durchgang bricht ab.
+            hausFilterSetzen(null);
+            return;
+        }
+        properties = hausFilter ? alleHaeuser.filter(p => p.id === hausFilter.id) : alleHaeuser;
         updateDashboard();
         zeigeErsteSchritte();
     } catch (error) {
@@ -1370,7 +2040,7 @@ async function fetchAllApartments() {
     try {
         const response = await fetch('/api/apartments');
         if (!response.ok) throw await serverFehler(response);
-        allApartments = await response.json();
+        allApartments = imHaus(await response.json(), 'wohnungen');
         populateApartmentDropdown();
         zeigeErsteSchritte();
     } catch (e) {
@@ -1409,8 +2079,15 @@ async function showPropertyDetails(prop) {
         apartmentsList.replaceChildren();
         if (apartments.length === 0) {
             const empty = document.createElement('div');
-            empty.textContent = 'Noch keine Wohnungen angelegt. Legen Sie die erste mit dem Knopf „Wohnung anlegen“ oben an.';
-            empty.style.color = "var(--text-muted)";
+            empty.className = 'leer-zeile';
+            const satz = document.createElement('span');
+            satz.textContent = 'In diesem Haus ist noch keine Wohnung angelegt.';
+            const knopf = document.createElement('button');
+            knopf.type = 'button';
+            knopf.className = 'btn-primary';
+            knopf.textContent = 'Wohnung anlegen';
+            knopf.addEventListener('click', () => openAddApartmentModal());
+            empty.append(satz, knopf);
             apartmentsList.appendChild(empty);
         } else {
             apartments.forEach(apt => {
@@ -1418,7 +2095,7 @@ async function showPropertyDetails(prop) {
                 
                 const item = document.createElement('div');
                 item.style.padding = '12px';
-                item.style.background = 'rgba(255,255,255,0.4)';
+                item.style.background = 'var(--bg-color)';
                 item.style.borderRadius = '8px';
                 item.style.display = 'flex';
                 item.style.justifyContent = 'space-between';
@@ -1509,7 +2186,7 @@ async function renderHeizungsanlagen(propertyId) {
     aktuelleHeizungsanlagen.forEach(anlage => {
         const item = document.createElement('div');
         item.style.padding = '12px';
-        item.style.background = 'rgba(255,255,255,0.4)';
+        item.style.background = 'var(--bg-color)';
         item.style.borderRadius = '8px';
         item.style.display = 'flex';
         item.style.justifyContent = 'space-between';
@@ -1695,7 +2372,7 @@ async function fetchTenants() {
     try {
         const response = await fetch('/api/tenants');
         if (!response.ok) throw await serverFehler(response);
-        tenants = await response.json();
+        tenants = imHaus(await response.json(), 'mieter');
         
         // Ortszeit, nicht UTC: kurz nach Mitternacht waere sonst noch gestern
         const heute = new Date().toLocaleDateString('sv-SE');
@@ -1744,7 +2421,7 @@ async function fetchTenants() {
             const title = document.createElement('h3');
             title.textContent = propName;
             title.style.marginBottom = '16px';
-            title.style.borderBottom = '2px solid rgba(79, 70, 229, 0.2)';
+            title.style.borderBottom = '1px solid var(--border-color)';
             title.style.paddingBottom = '8px';
             box.appendChild(title);
             
@@ -1770,7 +2447,6 @@ async function fetchTenants() {
             
             grouped[propName].forEach(t => {
                 const tr = document.createElement('tr');
-                tr.style.borderBottom = "1px solid var(--border-color)";
                 
                 const tdName = document.createElement('td');
                 tdName.style.padding = "12px 8px";
@@ -1782,11 +2458,11 @@ async function fetchTenants() {
                 
                 const tdIn = document.createElement('td');
                 tdIn.style.padding = "12px 8px";
-                tdIn.textContent = new Date(t.move_in_date).toLocaleDateString('de-DE');
+                tdIn.textContent = datumText(t.move_in_date);
                 
                 const tdOut = document.createElement('td');
                 tdOut.style.padding = "12px 8px";
-                tdOut.textContent = t.move_out_date ? new Date(t.move_out_date).toLocaleDateString('de-DE') : '-';
+                tdOut.textContent = t.move_out_date ? datumText(t.move_out_date) : '-';
                 
                 const tdContract = document.createElement('td');
                 tdContract.style.padding = "12px 8px";
@@ -1794,7 +2470,7 @@ async function fetchTenants() {
                     const contractBtn = document.createElement('button');
                     contractBtn.className = 'btn-icon';
                     contractBtn.innerHTML = '<i class="ph ph-file-text"></i> Ansehen';
-                    contractBtn.style.fontSize = '0.85rem';
+                    contractBtn.style.fontSize = '13px';
                     contractBtn.style.color = 'var(--primary-color)';
                     contractBtn.onclick = () => huelle.oeffnen(`/api/tenants/${t.id}/contract`);
                     tdContract.appendChild(contractBtn);
@@ -2145,7 +2821,7 @@ async function ladeGesperrteMieter() {
             liste.map(t => `<tr>
                 <td style="padding: 8px;">${escapeHtml(t.name)}</td>
                 <td style="padding: 8px;">${escapeHtml(t.apartment_name)} (${escapeHtml(t.property_name)})</td>
-                <td style="padding: 8px;">${escapeHtml(new Date(t.gesperrt_bis).toLocaleDateString('de-DE'))}</td>
+                <td style="padding: 8px;">${escapeHtml(datumText(t.gesperrt_bis))}</td>
                 <td style="padding: 8px;"><button class="btn-secondary" onclick="exportiereMieter(${Number(t.id)})"
                     title="Auskunft nach Art. 15 DSGVO als ZIP">Auskunft herunterladen</button></td>
             </tr>`).join('') + '</tbody></table>';
@@ -2318,9 +2994,25 @@ function zeigeMeldung(message, art) {
     const meldung = document.createElement('div');
     meldung.className = 'toast toast-' + art;
     meldung.setAttribute('role', 'alert');
-    meldung.textContent = message;
+    const text = document.createElement('span');
+    text.textContent = message;
+    if (art === 'erfolg') {
+        const haken = document.createElement('i');
+        haken.className = 'ph ph-check-circle toast-haken';
+        haken.setAttribute('aria-hidden', 'true');
+        meldung.append(haken);
+    }
+    meldung.append(text);
     stapel.appendChild(meldung);
     setTimeout(() => meldung.remove(), 6000);
+}
+
+// Ein laufender Balken im Knopf, solange eine lange Aktion arbeitet.
+function zeigeArbeit(el, an) {
+    if (!el) return;
+    el.classList.toggle('arbeitet', an);
+    if (an) el.setAttribute('aria-busy', 'true');
+    else el.removeAttribute('aria-busy');
 }
 
 function showError(message) {
@@ -2342,7 +3034,7 @@ async function fetchCategories() {
 async function fetchMeters() {
     try {
         const res = await fetch('/api/meters');
-        meters = await res.json();
+        meters = imHaus(await res.json(), 'zaehler');
         renderMeters();
         zeigeErsteSchritte();
     } catch(e) { console.error(e); }
@@ -2351,7 +3043,7 @@ async function fetchMeters() {
 async function fetchReadings() {
     try {
         const res = await fetch('/api/readings');
-        readings = await res.json();
+        readings = imHaus(await res.json());
         renderMeters(); // readings are shown inside meters
         zeigeErsteSchritte();
     } catch(e) { console.error(e); }
@@ -2360,8 +3052,9 @@ async function fetchReadings() {
 async function fetchInvoices() {
     try {
         const res = await fetch('/api/invoices');
-        invoices = await res.json();
+        invoices = imHaus(await res.json());
         renderInvoices();
+        renderDocuments();
         zeigeErsteSchritte();
     } catch(e) { console.error(e); }
 }
@@ -2472,16 +3165,32 @@ function renderInvoiceZeitleiste(daten, ziel) {
 }
 
 // Zaehler zeigen ihre Kostenart unter einem Alltagsnamen (F-113). Haupt- und
-// Wohnungszaehler fuer Strom haengen an BetrKV Nr. 11 „Beleuchtung
-// (Allgemeinstrom)“, weil der Allgemeinstrom daraus gerechnet wird (Haupt-
+// Wohnungszaehler fuer Strom haengen an BetrKV Nr. 11 „Allgemeinstrom“,
+// weil der Allgemeinstrom daraus gerechnet wird (Haupt-
 // zaehler minus Wohnungszaehler). Am Zaehler selbst ist das schlicht Strom.
 // Der Rechnungen-Tab nennt die Stromrechnung ebenso (F-136). Kostenarten und
 // PDF behalten den Namen aus der BetrKV.
-const ZAEHLER_ANZEIGENAMEN = { 'Beleuchtung (Allgemeinstrom)': 'Strom' };
+const ZAEHLER_ANZEIGENAMEN = { 'Allgemeinstrom': 'Strom' };
 
 function zaehlerArtName(name) {
     return ZAEHLER_ANZEIGENAMEN[name] || name;
 }
+
+// Fotovorschau einer Ablesung: neben dem Symbol auf der Seite mit mehr Platz,
+// waagrecht im Fenster gehalten (die Vorschau ist position: fixed).
+document.addEventListener('mouseover', ereignis => {
+    const halter = ereignis.target.closest && ereignis.target.closest('.image-hover-container');
+    const bild = halter && halter.querySelector('.image-hover-preview');
+    if (!bild) return;
+    const r = halter.getBoundingClientRect();
+    const breite = 260;   // 250 px Bild plus Innenabstand und Rand
+    const links = Math.min(Math.max(8, r.left + r.width / 2 - breite / 2), window.innerWidth - breite - 8);
+    const oben = r.top, unten = window.innerHeight - r.bottom;
+    bild.style.left = `${links}px`;
+    bild.style.top = oben >= unten ? '' : `${r.bottom + 8}px`;
+    bild.style.bottom = oben >= unten ? `${window.innerHeight - r.top + 8}px` : '';
+    bild.style.maxHeight = `${Math.max(oben, unten) - 16}px`;
+});
 
 function getReadingHtml(r, einheit) {
     // NK-220: die Einheit kommt vom Server (einheit_fuer im Rechenkern),
@@ -2493,10 +3202,10 @@ function getReadingHtml(r, einheit) {
 
     let valStr = `<strong>${formatVal(r.value)}${escapeHtml(unit)}</strong>`;
     if (r.value_nt !== null && r.value_nt !== undefined) {
-        valStr = `<strong><span style="color: var(--text-muted); font-size: 0.85em; font-weight: normal;">HT:</span> ${formatVal(r.value)}${escapeHtml(unit)} <span style="color: var(--text-muted); font-size: 0.85em; font-weight: normal; margin-left: 8px;">NT:</span> ${formatVal(r.value_nt)}${escapeHtml(unit)}</strong>`;
+        valStr = `<strong><span style="color: var(--text-muted); font-size: 13px; font-weight: normal;">HT:</span> ${formatVal(r.value)}${escapeHtml(unit)} <span style="color: var(--text-muted); font-size: 13px; font-weight: normal; margin-left: 8px;">NT:</span> ${formatVal(r.value_nt)}${escapeHtml(unit)}</strong>`;
     }
     
-    let html = `${valStr} <br><small style="color:var(--text-muted)">${new Date(r.reading_date).toLocaleDateString('de-DE')}</small>`;
+    let html = `${valStr} <br><small style="color:var(--text-muted)">${escapeHtml(datumText(r.reading_date))}</small>`;
     
     if (r.document_path) {
         const imgUrl = dateiAdresse('ablesung', r.id);
@@ -2518,10 +3227,17 @@ function getReadingHtml(r, einheit) {
 }
 
 // --- Render Meters ---
+// Links die Liste mit Filterpillen nach Art, rechts das Detail des
+// gewählten Zählers (zeigeZaehlerDetail). Ohne Wahl gilt der erste sichtbare.
+let zaehlerGewaehlt = null;
+let zaehlerArtFilter = null;
+
 function renderMeters() {
     const container = document.getElementById('meters-container');
     if (!container) return;
     container.replaceChildren();
+    const detail = document.getElementById('zaehler-detail');
+    if (detail) detail.replaceChildren();
     
     if (meters.length === 0) {
         container.innerHTML = leerzustand({
@@ -2533,8 +3249,28 @@ function renderMeters() {
         return;
     }
     
+    const arten = [...new Set(meters.map(m => zaehlerArtName(m.category_name)))].sort();
+    if (!arten.includes(zaehlerArtFilter)) zaehlerArtFilter = null;
+    if (arten.length > 1) {
+        const pillen = document.createElement('div');
+        pillen.className = 'knopf-zeile';
+        pillen.setAttribute('role', 'group');
+        pillen.setAttribute('aria-label', 'Zähler nach Art');
+        [null, ...arten].forEach(art => {
+            const knopf = document.createElement('button');
+            knopf.type = 'button';
+            knopf.className = zaehlerArtFilter === art ? 'filter-pill active' : 'filter-pill';
+            knopf.setAttribute('aria-pressed', String(zaehlerArtFilter === art));
+            knopf.textContent = art || 'Alle';
+            knopf.onclick = () => { zaehlerArtFilter = art; renderMeters(); };
+            pillen.appendChild(knopf);
+        });
+        container.appendChild(pillen);
+    }
+    const sichtbar = meters.filter(m => !zaehlerArtFilter || zaehlerArtName(m.category_name) === zaehlerArtFilter);
+
     const grouped = {};
-    meters.forEach(m => {
+    sichtbar.forEach(m => {
         if (!grouped[m.property_name]) grouped[m.property_name] = [];
         grouped[m.property_name].push(m);
     });
@@ -2547,7 +3283,7 @@ function renderMeters() {
         const title = document.createElement('h3');
         title.textContent = propName;
         title.style.marginBottom = '16px';
-        title.style.borderBottom = '2px solid rgba(79, 70, 229, 0.2)';
+        title.style.borderBottom = '1px solid var(--border-color)';
         title.style.paddingBottom = '8px';
         box.appendChild(title);
         
@@ -2572,9 +3308,17 @@ function renderMeters() {
             return a.is_official ? -1 : 1;
         }).forEach(m => {
             const tr = document.createElement('tr');
+            tr.dataset.zaehler = m.id;
+            tr.tabIndex = 0;
             tr.style.borderBottom = "1px solid var(--border-color)";
             tr.style.cursor = "pointer";
-            tr.onclick = () => openHistoryModal(m.id);
+            tr.onclick = () => zeigeZaehler(m.id);
+            tr.onkeydown = (e) => {
+                if (e.target === tr && (e.key === 'Enter' || e.key === ' ')) {
+                    e.preventDefault();
+                    zeigeZaehler(m.id);
+                }
+            };
             
             const tdCat = document.createElement('td');
             tdCat.style.padding = "12px 8px";
@@ -2587,8 +3331,8 @@ function renderMeters() {
             // NK-219: die Nummer tippt der Nutzer ein, sie kommt maskiert ins HTML.
             tdNum.innerHTML = escapeHtml(m.meter_number) + (
                 m.is_official 
-                ? ' <span style="font-size: 13px; padding: 2px 6px; background: var(--primary); color: white; border-radius: 4px; margin-left: 8px;" title="Offizieller Zähler des Versorgers"><i class="ph ph-check-circle"></i> Versorger</span>' 
-                : ' <span style="font-size: 13px; padding: 2px 6px; background: var(--border-color); color: var(--text-color); border-radius: 4px; margin-left: 8px;" title="Privater Zwischenzähler">Privat</span>'
+                ? ' <span class="dq-status-badge green" style="margin-left: 8px;" title="Offizieller Zähler des Versorgers"><i class="ph ph-check-circle"></i> Versorger</span>' 
+                : ' <span class="dq-status-badge none" style="margin-left: 8px;" title="Privater Zwischenzähler">Privat</span>'
             );
             
             // NK-258: ausgebaut (Zaehlerwechsel), Einbauort und Eichfrist.
@@ -2630,8 +3374,8 @@ function renderMeters() {
             // NK-219: der Verlauf war nur über einen Klick auf die Zeile
             // zu finden; der Stift sagt jetzt, dass er nur den letzten Stand ändert.
             const verlaufBtn = document.createElement('button');
-            verlaufBtn.className = 'btn-secondary';
-            verlaufBtn.style.cssText = 'font-size: 0.85rem; padding: 4px 10px; margin-right: 8px;';
+            verlaufBtn.className = 'btn-secondary btn-klein';
+            verlaufBtn.style.cssText = 'margin-right: 8px;';
             verlaufBtn.innerHTML = '<i class="ph ph-clock-counter-clockwise"></i> Verlauf';
             verlaufBtn.title = 'Alle Stände dieses Zählers ansehen';
             verlaufBtn.onclick = () => openHistoryModal(m.id);
@@ -2650,7 +3394,7 @@ function renderMeters() {
                 // NK-257: ohne Ablesung fehlte in der Zeile jeder Weg zum ersten Stand.
                 const ersterBtn = document.createElement('button');
                 ersterBtn.className = 'btn-secondary';
-                ersterBtn.style.cssText = 'font-size: 0.85rem; padding: 4px 10px; margin-right: 8px;';
+                ersterBtn.style.cssText = 'margin-right: 8px;';
                 ersterBtn.innerHTML = '<i class="ph ph-plus" aria-hidden="true"></i> Ersten Stand erfassen';
                 ersterBtn.onclick = () => openAddReadingModal(m.id);
                 tdActions.appendChild(ersterBtn);
@@ -2694,6 +3438,105 @@ function renderMeters() {
         box.appendChild(table);
         container.appendChild(box);
     });
+
+    if (!sichtbar.some(m => m.id === zaehlerGewaehlt)) {
+        // Erster sichtbarer Zähler in Listenreihenfolge (Häuser, darin Versorger zuerst).
+        const erste = container.querySelector('tr[data-zaehler]');
+        zaehlerGewaehlt = erste ? Number(erste.dataset.zaehler) : null;
+    }
+    zeigeZaehlerDetail();
+}
+
+// Wählt einen Zähler; in der einspaltigen Ansicht rückt das Detail ins Bild.
+function zeigeZaehler(meterId) {
+    zaehlerGewaehlt = meterId;
+    zeigeZaehlerDetail();
+    const detail = document.getElementById('zaehler-detail');
+    if (detail && window.matchMedia('(max-width: 1100px)').matches) detail.scrollIntoView({ block: 'start' });
+}
+
+// Verbrauch zwischen zwei Ständen; bei Zweitarif zählen HT und NT zusammen.
+function zaehlerVerbrauch(vorher, nachher) {
+    const nt = (nachher.value_nt ?? 0) - (vorher.value_nt ?? 0);
+    return (nachher.value - vorher.value) + nt;
+}
+
+function zeigeZaehlerDetail() {
+    const detail = document.getElementById('zaehler-detail');
+    if (!detail) return;
+    document.querySelectorAll('#meters-container tr[data-zaehler]').forEach(tr =>
+        Number(tr.dataset.zaehler) === zaehlerGewaehlt ? tr.setAttribute('aria-current', 'true') : tr.removeAttribute('aria-current'));
+    const m = meters.find(z => z.id === zaehlerGewaehlt);
+    detail.replaceChildren();
+    if (!m) return;
+
+    const fmt = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 2 });
+    const datum = d => datumText(d);
+    const einheit = m.einheit ? ' ' + m.einheit : '';
+    const staende = readings.filter(r => r.meter_id === m.id)
+        .sort((a, b) => new Date(a.reading_date) - new Date(b.reading_date));
+    const letzter = staende[staende.length - 1];
+    const zeitraeume = staende.slice(1).map((r, i) => ({ bis: r.reading_date, menge: zaehlerVerbrauch(staende[i], r) }));
+    const jungster = zeitraeume[zeitraeume.length - 1];
+    const ort = [m.property_name, m.is_main_meter ? 'Allgemein' : m.apartment_name, m.ort].filter(Boolean).join(' · ');
+
+    const kennzahl = (titel, wert, zusatz) => `<div class="kennzahl">
+            <span class="kennzahl-titel">${escapeHtml(titel)}</span>
+            <strong class="tabular-nums">${escapeHtml(wert)}</strong>
+            <small>${escapeHtml(zusatz)}</small>
+        </div>`;
+    const kennzahlenHtml = kennzahl('Letzter Stand',
+            letzter ? fmt.format(letzter.value) + einheit : '–',
+            letzter ? datum(letzter.reading_date) : 'noch kein Stand')
+        + kennzahl('Ablesungen', String(staende.length),
+            staende.length ? 'seit ' + datum(staende[0].reading_date) : 'noch keine')
+        + kennzahl('Verbrauch', jungster ? fmt.format(jungster.menge) + einheit : '–',
+            jungster ? 'bis ' + datum(jungster.bis) : 'ab zwei Ständen');
+
+    const balken = zeitraeume.slice(-8);
+    const hoechster = Math.max(...balken.map(z => z.menge), 0);
+    const balkenHtml = balken.length ? `<div class="verbrauch-balken" role="img" aria-label="Verbrauch je Ablesezeitraum">${balken.map(z => {
+        const anteil = hoechster > 0 ? Math.max(0, z.menge) / hoechster * 100 : 0;
+        const titel = `${fmt.format(z.menge)}${einheit} bis ${datum(z.bis)}`;
+        return `<div class="balken" title="${escapeHtml(titel)}">
+                <span class="balken-saeule" style="--anteil: ${escapeHtml(anteil.toFixed(1))}%"></span>
+                <span class="balken-datum">${escapeHtml(new Date(`${String(z.bis).slice(0, 10)}T00:00:00`).toLocaleDateString('de-DE', { month: 'short', year: '2-digit' }))}</span>
+            </div>`;
+    }).join('')}</div>` : '';
+
+    const markenHtml = (m.is_official
+            ? '<span class="dq-status-badge green" title="Offizieller Zähler des Versorgers"><i class="ph ph-check-circle"></i> Versorger</span>'
+            : '<span class="dq-status-badge none" title="Privater Zwischenzähler">Privat</span>')
+        + (m.ersetzt_durch ? ' <span class="dq-status-badge none">ausgebaut</span>' : '')
+        + (m.eichhinweis ? ` <span class="dq-status-badge yellow"><i class="ph ph-warning" aria-hidden="true"></i> ${escapeHtml(m.eichhinweis)}</span>` : '');
+
+    const wechselHtml = m.ersetzt_durch ? '' : `<button class="btn-secondary" type="button" onclick="openWechselModal(${Number(m.id)})"><i class="ph ph-swap" aria-hidden="true"></i> Zählerwechsel erfassen</button>`;
+
+    detail.innerHTML = `
+        <div class="zaehler-detail-kopf">
+            <div class="zaehler-detail-titel">
+                <span class="zaehler-art">${escapeHtml(zaehlerArtName(m.category_name))}</span>
+                <h3 class="zaehler-nummer">${escapeHtml(m.meter_number)}</h3>
+                <span class="text-muted">${escapeHtml(ort)}</span>
+            </div>
+            <div class="zeile-eng">
+                <button class="btn-icon" type="button" title="Zähler bearbeiten" aria-label="Zähler bearbeiten" onclick="openEditMeterModal(${Number(m.id)})"><i class="ph ph-gear-six" aria-hidden="true"></i></button>
+                <button class="btn-icon" type="button" title="Zähler löschen" aria-label="Zähler löschen" onclick="deleteMeter(${Number(m.id)})"><i class="ph ph-trash" aria-hidden="true"></i></button>
+            </div>
+        </div>
+        <div class="zeile-eng">${markenHtml}</div>
+        <div class="zeile-eng zaehler-detail-aktionen">
+            ${wechselHtml}
+            <button class="btn-primary" type="button" onclick="openAddReadingModal(${Number(m.id)})"><i class="ph ph-plus" aria-hidden="true"></i> Ablesung erfassen</button>
+        </div>
+        <div class="zaehler-kennzahlen">${kennzahlenHtml}</div>
+        ${balkenHtml}
+        <table class="tabelle ablese-tabelle"></table>`;
+    fuelleAblesungen(detail.querySelector('.ablese-tabelle'), m);
+    // Das Detail blendet bei jedem Wechsel neu ein.
+    detail.classList.remove('blendet-ein');
+    void detail.offsetWidth;
+    detail.classList.add('blendet-ein');
 }
 
 // --- Accordion Logic & Invoices ---
@@ -2723,6 +3566,41 @@ function rechnungsfilterZuruecksetzen() {
     renderInvoices();
 }
 window.rechnungsfilterZuruecksetzen = rechnungsfilterZuruecksetzen;
+
+// Spalten per Klick sortieren wie in Excel. Die Kopfzelle sagt,
+// ob Text oder Zahl; eine Zelle kann ihren Rohwert in data-wert tragen
+// (ISO-Datum, Betrag), sonst zählt der sichtbare Text.
+function sortierKopf(titel, art, rechts = false) {
+    const hinweis = escapeHtml(`Nach „${titel}“ sortieren`);
+    return `<th class="zelle${rechts ? ' text-right' : ''}" data-sort="${art}">${escapeHtml(titel)}`
+        + `<button type="button" class="sortier-knopf" onclick="tabelleSortieren(this)" title="${hinweis}" aria-label="${hinweis}"><i class="ph ph-caret-up-down" aria-hidden="true"></i></button></th>`;
+}
+
+function tabelleSortieren(knopf) {
+    const kopf = knopf.closest('th');
+    const tabelle = kopf.closest('table');
+    const spalte = [...kopf.parentElement.children].indexOf(kopf);
+    const aufsteigend = kopf.getAttribute('aria-sort') !== 'ascending';
+    tabelle.querySelectorAll('thead th[aria-sort]').forEach(th => {
+        th.removeAttribute('aria-sort');
+        th.querySelector('.sortier-knopf i').className = 'ph ph-caret-up-down';
+    });
+    kopf.setAttribute('aria-sort', aufsteigend ? 'ascending' : 'descending');
+    knopf.querySelector('i').className = `ph ph-caret-${aufsteigend ? 'up' : 'down'}`;
+    const wert = zeile => {
+        const zelle = zeile.children[spalte];
+        return zelle.dataset.wert ?? zelle.textContent.trim();
+    };
+    const tbody = tabelle.tBodies[0];
+    const zeilen = [...tbody.rows].sort((a, b) => {
+        const d = kopf.dataset.sort === 'zahl'
+            ? Number(wert(a)) - Number(wert(b))
+            : wert(a).localeCompare(wert(b), 'de', { numeric: true });
+        return aufsteigend ? d : -d;
+    });
+    tbody.append(...zeilen);
+}
+window.tabelleSortieren = tabelleSortieren;
 
 function renderInvoices() {
     const container = document.getElementById('invoices-container');
@@ -2801,7 +3679,7 @@ function renderInvoices() {
         const title = document.createElement('h3');
         title.textContent = propName;
         title.style.marginBottom = '16px';
-        title.style.borderBottom = '2px solid rgba(79, 70, 229, 0.2)';
+        title.style.borderBottom = '1px solid var(--border-color)';
         title.style.paddingBottom = '8px';
         box.appendChild(title);
         
@@ -2828,24 +3706,31 @@ function renderInvoices() {
                     <div class="accordion-header-left">
                         <i class="ph ${icon} accordion-icon"></i>
                         <span>${escapeHtml(zaehlerArtName(catName))}</span>
-                        <span class="accordion-badge">${catInvoices.length} Einträge</span>
+                        <span class="accordion-badge">${catInvoices.length} ${catInvoices.length === 1 ? 'Eintrag' : 'Einträge'}</span>
                     </div>
                     <i class="ph ph-caret-down accordion-chevron"></i>
                 </div>
                 <div class="accordion-content">
-                    <table class="table-zebra" style="width: 100%; border-collapse: collapse; text-align: left;">
+                    <table class="tabelle">
                         <thead>
-                            <tr style="border-bottom: 1px solid var(--border-color); background: var(--bg-hover);">
-                                <th style="padding: 12px 16px;">Von</th>
-                                <th style="padding: 12px 16px;">Bis</th>
-                                <th style="padding: 12px 16px;">Rechnungsnr.</th>
-                                <th style="padding: 12px 16px;">Anbieter</th>
-                                <th style="padding: 12px 16px;" class="text-right">Betrag</th>
-                                <th style="padding: 12px 16px;">Beleg</th>
-                                <th style="padding: 12px 16px;" class="text-right">Aktionen</th>
+                            <tr>
+                                ${sortierKopf('Von', 'text')}
+                                ${sortierKopf('Bis', 'text')}
+                                ${sortierKopf('Rechnungsnr.', 'text')}
+                                ${sortierKopf('Anbieter', 'text')}
+                                ${sortierKopf('Betrag', 'zahl', true)}
+                                <th class="zelle">Beleg</th>
+                                <th class="zelle text-right">Aktionen</th>
                             </tr>
                         </thead>
                         <tbody id="tbody-${accId}"></tbody>
+                        <tfoot>
+                            <tr class="summenzeile">
+                                <td class="zelle" colspan="4">Summe</td>
+                                <td class="zelle text-right">${escapeHtml(euroText(catInvoices.reduce((s, i) => s + Number(i.amount || 0), 0)))}</td>
+                                <td class="zelle" colspan="2"></td>
+                            </tr>
+                        </tfoot>
                     </table>
                 </div>
             `;
@@ -2855,33 +3740,23 @@ function renderInvoices() {
             
             catInvoices.forEach(inv => {
                 const tr = document.createElement('tr');
-                tr.style.borderBottom = "1px solid var(--border-color)";
-                
-                const dateOpts = { day: '2-digit', month: '2-digit', year: 'numeric' };
-                
-                const tdDateFrom = document.createElement('td');
-                tdDateFrom.style.padding = "12px 16px";
-                tdDateFrom.textContent = new Date(inv.start_date).toLocaleDateString('de-DE', dateOpts);
-                
-                const tdDateTo = document.createElement('td');
-                tdDateTo.style.padding = "12px 16px";
-                tdDateTo.textContent = new Date(inv.end_date).toLocaleDateString('de-DE', dateOpts);
-                
-                const tdNum = document.createElement('td');
-                tdNum.style.padding = "12px 16px";
-                tdNum.textContent = inv.invoice_number || '-';
-                
-                const tdProvider = document.createElement('td');
-                tdProvider.style.padding = "12px 16px";
-                tdProvider.textContent = inv.provider_name || '-';
-                
-                const tdAmt = document.createElement('td');
-                tdAmt.style.padding = "12px 16px";
-                tdAmt.className = "text-right";
-                tdAmt.innerHTML = `<strong>${inv.amount.toFixed(2)} €</strong>`;
-                
+                const zelle = (text, wert) => {
+                    const td = document.createElement('td');
+                    td.className = 'zelle';
+                    td.textContent = text;
+                    if (wert !== undefined) td.dataset.wert = wert;
+                    return td;
+                };
+                // ISO-Datum als Sortierwert, angezeigt wird das deutsche.
+                const tdDateFrom = zelle(datumText(inv.start_date), inv.start_date);
+                const tdDateTo = zelle(datumText(inv.end_date), inv.end_date);
+                const tdNum = zelle(inv.invoice_number || '-');
+                const tdProvider = zelle(inv.provider_name || '-');
+                const tdAmt = zelle(euroText(inv.amount), inv.amount);
+                tdAmt.classList.add('text-right');
+
                 const tdDoc = document.createElement('td');
-                tdDoc.style.padding = "12px 16px";
+                tdDoc.className = 'zelle';
                 if (inv.document_path) {
                     let docUrl = dateiAdresse('rechnung', inv.id);
                     let docLabel = inv.filename ? inv.filename : 'Beleg';
@@ -2905,8 +3780,7 @@ function renderInvoices() {
                 tr.appendChild(tdDoc);
                 
                 const tdActions = document.createElement('td');
-                tdActions.style.padding = "12px 16px";
-                tdActions.className = "text-right";
+                tdActions.className = 'zelle text-right';
                 
                 const editBtn = document.createElement('button');
                 editBtn.className = 'btn-icon';
@@ -2953,7 +3827,7 @@ async function openCostProfileModal(tenantId, tenantName) {
             <div class="form-group" style="background: var(--bg-hover); padding: 12px; border-radius: 8px;">
                 <label style="margin-bottom: 8px;">${escapeHtml(cat.name)}
                     <i class="ph ph-question feld-hilfe" title="Wählen Sie, wie diese Kostenart auf die Wohnungen verteilt wird. Nach Verbrauch (eigener Zähler) weist die ganze Rechnung der Wohnung zu, deren Zähler sie betrifft."></i></label>
-                <select id="profile-cat-${cat.id}" title="Wie wird diese Kostenart umgelegt?" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--border-color); background: rgba(255,255,255,0.8);">
+                <select id="profile-cat-${cat.id}" title="Wie wird diese Kostenart umgelegt?">
                     <option value="qm" ${val === 'qm' ? 'selected' : ''}>Umlage nach Wohnfläche</option>
                     <option value="personen" ${val === 'personen' ? 'selected' : ''}>Umlage nach Personen</option>
                     <option value="direkt" ${val === 'direkt' ? 'selected' : ''}>Nach Verbrauch (eigener Zähler)</option>
@@ -3042,7 +3916,7 @@ async function loadHouseholdSizes(tenantId) {
         const tr = document.createElement('tr');
         const tdDatum = document.createElement('td');
         tdDatum.style.padding = '8px';
-        tdDatum.textContent = new Date(h.gueltig_ab).toLocaleDateString('de-DE');
+        tdDatum.textContent = datumText(h.gueltig_ab);
         const tdAnzahl = document.createElement('td');
         tdAnzahl.style.padding = '8px';
         tdAnzahl.style.textAlign = 'right';
@@ -3141,11 +4015,11 @@ async function ladeVorauszahlungen(tenantId) {
             : m.soll === null ? ['text-muted', 'kein Soll']
             : ['dq-status-badge green', 'bezahlt'];
         return `<tr>
-            <td style="padding: 6px 8px;">${escapeHtml(m.monat.slice(5) + '/' + m.monat.slice(0, 4))}</td>
-            <td style="padding: 6px 8px; text-align: right;">${escapeHtml(m.soll === null ? '–' : euroText(m.soll))}</td>
-            <td style="padding: 6px 8px; text-align: right;">${escapeHtml(euroText(m.ist))}</td>
-            <td style="padding: 6px 8px; text-align: right;">${escapeHtml(m.differenz === null ? '–' : euroText(m.differenz))}</td>
-            <td style="padding: 6px 8px;"><span class="${escapeHtml(klasse)}">${escapeHtml(stand)}</span></td>
+            <td style="padding: 8px;">${escapeHtml(m.monat.slice(5) + '/' + m.monat.slice(0, 4))}</td>
+            <td style="padding: 8px; text-align: right;">${escapeHtml(m.soll === null ? '–' : euroText(m.soll))}</td>
+            <td style="padding: 8px; text-align: right;">${escapeHtml(euroText(m.ist))}</td>
+            <td style="padding: 8px; text-align: right;">${escapeHtml(m.differenz === null ? '–' : euroText(m.differenz))}</td>
+            <td style="padding: 8px;"><span class="${escapeHtml(klasse)}">${escapeHtml(stand)}</span></td>
         </tr>`;
     }).join('');
     const saldo = Number(d.saldo);
@@ -3402,10 +4276,22 @@ async function deleteMeter(id) {
 function openHistoryModal(meterId) {
     const meter = meters.find(m => m.id === meterId);
     if(!meter) return;
+    // Auf der Zählerseite steht der Verlauf im Detail. Aus einem
+    // Dialog heraus (Jahresassistent, NK-265) bleibt es beim Verlaufsdialog.
+    if (document.getElementById('tab-meters').classList.contains('active')
+        && !document.querySelector('.modal-overlay.active:not(.als-spalte)')) {
+        zeigeZaehler(meterId);
+        return;
+    }
     
     document.getElementById('history-modal-title').textContent = `Historie: ${meter.meter_number} (${zaehlerArtName(meter.category_name)})`;
-    
-    const table = document.getElementById('history-table');
+    fuelleAblesungen(document.getElementById('history-table'), meter);
+    document.getElementById('history-modal').classList.add('active');
+}
+
+// Ablesungen eines Zählers, neueste zuerst; Verlaufsdialog und Zählerdetail teilen sie.
+function fuelleAblesungen(table, meter) {
+    const meterId = meter.id;
     table.replaceChildren();
     table.innerHTML = `
         <tr style="border-bottom: 1px solid var(--border-color);">
@@ -3451,10 +4337,8 @@ function openHistoryModal(meterId) {
     });
     
     if (meterReadings.length === 0) {
-        table.innerHTML += `<tr><td colspan="2" style="padding: 12px 8px;">Keine Zählerstände vorhanden.</td></tr>`;
+        table.innerHTML += `<tr><td colspan="2" style="padding: 12px 8px;">Für diesen Zähler ist noch kein Stand eingetragen.</td></tr>`;
     }
-    
-    document.getElementById('history-modal').classList.add('active');
 }
 
 function closeHistoryModal() {
@@ -3619,7 +4503,7 @@ function ablesenZeilen(propertyId) {
             : 'zuletzt ' + (letzte.value_nt != null
                 ? `HT ${fmt.format(letzte.value)}${einheit}, NT ${fmt.format(letzte.value_nt)}${einheit}`
                 : `${fmt.format(letzte.value)}${einheit}`)
-              + ` am ${new Date(letzte.reading_date).toLocaleDateString('de-DE')}`);
+              + ` am ${datumText(letzte.reading_date)}`);
         const nameHtml = escapeHtml(`${m.is_main_meter ? 'Allgemein' : (m.apartment_name || '')} · ${zaehlerArtName(m.category_name)} (${m.meter_number})`);
         // NK-255: die Einheit gehört an das Feld, nicht nur in den letzten Stand.
         const stand = tarif => {
@@ -3737,14 +4621,14 @@ async function checkPlausibility() {
             alertBox.style.display = 'block';
             alertBox.style.backgroundColor = 'var(--danger-bg)';
             alertBox.style.color = 'var(--danger-color)';
-            alertBox.style.border = '1px solid rgba(220, 38, 38, 0.3)';
-            alertBox.innerHTML = `<i class="ph ph-warning-circle" style="margin-right: 6px;"></i> ${escapeHtml(data.message)}`;
+            alertBox.style.border = '1px solid var(--danger-border)';
+            alertBox.innerHTML = `<i class="ph ph-warning-circle" style="margin-right: 8px;"></i> ${escapeHtml(data.message)}`;
         } else if (data.status === 'success') {
             alertBox.style.display = 'block';
             alertBox.style.backgroundColor = 'var(--success-bg)';
             alertBox.style.color = 'var(--success-color)';
-            alertBox.style.border = '1px solid rgba(34, 197, 94, 0.3)';
-            alertBox.innerHTML = `<i class="ph ph-check-circle" style="margin-right: 6px;"></i> ${escapeHtml(data.message)}`;
+            alertBox.style.border = '1px solid var(--success-border)';
+            alertBox.innerHTML = `<i class="ph ph-check-circle" style="margin-right: 8px;"></i> ${escapeHtml(data.message)}`;
         } else {
             alertBox.style.display = 'none';
         }
@@ -3803,7 +4687,15 @@ function toggleInvoiceHeizkosten() {
     document.getElementById('gruppe-invoice-co2').style.display = anlageWahl ? 'block' : 'none';
 }
 
-async function openAddInvoiceModal(editInvoiceId = null) {
+async function openAddInvoiceModal(editInvoiceId = null, spalte = null) {
+    // Im Eingang steht der Dialog als Spalte neben der Vorschau,
+    // sonst wie bisher als Overlay. Speichern und Prüfen bleiben dieselben.
+    const dialog = document.getElementById('invoice-modal');
+    const ziel = spalte || document.body;
+    if (dialog.parentElement !== ziel) ziel.append(dialog);
+    dialog.classList.toggle('als-spalte', !!spalte);
+    dialog.querySelector('.modal').setAttribute('aria-modal', String(!spalte));
+    document.getElementById('btn-save-invoice').textContent = spalte && !editInvoiceId ? 'Rechnung übernehmen' : 'Rechnung speichern';
     const catSelect = document.getElementById('invoice-category');
     catSelect.replaceChildren();
     categories.forEach(c => {
@@ -3830,6 +4722,7 @@ async function openAddInvoiceModal(editInvoiceId = null) {
         providers.forEach(p => {
             provSelect.innerHTML += `<option value="${p.id}">${escapeHtml(p.name)}</option>`;
         });
+        anbieterHinweisAktualisieren();
     }
 
     // Populate Document Dropdown
@@ -3913,7 +4806,7 @@ async function openAddInvoiceModal(editInvoiceId = null) {
     toggleInvoiceDescription();
     toggleInvoiceFileUpload();
     
-    document.getElementById('invoice-modal').classList.add('active');
+    if (!spalte) dialog.classList.add('active');
 }
 
 function toggleInvoiceFileUpload() {
@@ -3927,76 +4820,473 @@ function toggleInvoiceFileUpload() {
     }
 }
 
-function openAddInvoiceForDoc(docId) {
-    openAddInvoiceModal();
-    const docSelect = document.getElementById('invoice-document-id');
-    if (docSelect.querySelector(`option[value="${docId}"]`)) {
-        docSelect.value = docId;
-    }
-    toggleInvoiceFileUpload();
-}
-
-// --- Document Manager Logic ---
+// --- Eingang -----------------------------------------------------
+// Drei Ansichten: Eingang (Belege ohne Rechnung), alle Rechnungen und die
+// Tabelle nach Kostenart. Eingang und „Alle“ teilen sich den Dreispalter:
+// links die Liste, in der Mitte das Blatt, rechts das Rechnungsformular.
 let currentDocuments = [];
+let kostenAnsicht = null;   // bis zum ersten Besuch: Eingang, wenn etwas offen ist
+let eingangBeleg = null;    // { id, offen }: der gewählte Beleg und ob er offen war
+let eingangRechnung = null; // in „Alle“: die gewählte Rechnung (id) oder 'neu'
+let neueDatei = null;       // hochgeladene Datei, an der noch keine Rechnung hängt
+let neueDateiAdresse = '';  // Blob-Adresse dieser Datei für die Vorschau
 
 async function fetchDocuments() {
     try {
         const res = await fetch('/api/invoice_documents');
-        currentDocuments = await res.json();
+        currentDocuments = imHaus(await res.json());
         renderDocuments();
+        zeigeHeute();
     } catch(e) { console.error('Belegabruf fehlgeschlagen', e); }
 }
 
+function belegOffen(d) {
+    return !invoices.some(i => i.invoice_document_id === d.id);
+}
+
+function zeigeKostenAnsicht(ansicht) {
+    kostenAnsicht = ansicht;
+    document.getElementById('kosten-eingang').hidden = ansicht === 'kostenart';
+    document.getElementById('kosten-rechnungen').hidden = ansicht !== 'kostenart';
+    ['eingang', 'alle', 'kostenart'].forEach(a =>
+        document.getElementById(`pill-${a}`).classList.toggle('active', a === ansicht));
+    renderDocuments();
+}
+
+// Zahlen zählen kurz vom alten zum neuen Wert, statt zu springen. Ohne
+// Bewegungswunsch (oder ohne Bildtakt) steht sofort der Endwert da.
+function zaehleHoch(el, ziel, text) {
+    const start = Number(el.dataset.wert) || 0;  // die gerade sichtbare Zahl, auch mitten im Lauf
+    const zeige = (wert) => { el.dataset.wert = wert; el.textContent = text(wert); };
+    const lauf = el.zaehlLauf = (el.zaehlLauf || 0) + 1;
+    if (start === ziel || typeof requestAnimationFrame !== 'function'
+        || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+        zeige(ziel);
+        return;
+    }
+    const beginn = performance.now();
+    const schritt = (jetzt) => {
+        if (el.zaehlLauf !== lauf) return;  // ein neuerer Wert hat übernommen
+        const anteil = Math.min(1, (jetzt - beginn) / 600);
+        zeige(anteil < 1 ? start + (ziel - start) * (1 - (1 - anteil) ** 3) : ziel);
+        if (anteil < 1) requestAnimationFrame(schritt);
+    };
+    requestAnimationFrame(schritt);
+}
+
+// Kopfzahl wie im Entwurf: „12.345,67 € aus 8 Rechnungen“.
+function zeigeKopfzahl() {
+    const kopf = document.getElementById('kosten-kopfzahl');
+    if (!invoices.length) {
+        kopf.textContent = 'Belege hochladen und als Rechnung übernehmen';
+        return;
+    }
+    const summe = kopf.querySelector('strong') || document.createElement('strong');
+    zaehleHoch(summe, invoices.reduce((s, i) => s + Number(i.amount || 0), 0), euroText);
+    kopf.replaceChildren(summe, invoices.length === 1 ? ' aus einer Rechnung' : ` aus ${invoices.length} Rechnungen`);
+}
+
 function renderDocuments() {
-    const container = document.getElementById('documents-container');
-    if (!container) return;
-    
-    if (currentDocuments.length === 0) {
-        container.innerHTML = leerzustand({
-            icon: 'ph-file-pdf',
-            titel: 'Noch keine Belege hochgeladen',
-            text: 'Hier gehört der Beleg des Anbieters hinein — zum Beispiel die Jahresabrechnung der Stadtwerke.',
-            aktion: { label: 'Beleg hochladen', fn: 'openAddDocumentModal()', icon: 'ph-upload-simple' },
+    const liste = document.getElementById('documents-container');
+    if (!liste) return;
+    const offen = currentDocuments.filter(belegOffen);
+    const zahl = document.getElementById('eingang-zahl');
+    zahl.textContent = offen.length;
+    zahl.hidden = !offen.length;
+    zeigeKopfzahl();
+    const eingang = document.getElementById('kosten-eingang');
+    if (eingang.hidden) return;
+    const hatteFokus = liste.contains(document.activeElement);
+    if (kostenAnsicht === 'alle') {
+        renderAlleRechnungen(liste, eingang);
+    } else {
+        renderEingangsBelege(liste, eingang, offen);
+    }
+    if (hatteFokus) liste.querySelector('[aria-pressed="true"]')?.focus();
+}
+
+function renderEingangsBelege(liste, eingang, offen) {
+    // Nach dem Übernehmen rückt der nächste offene Beleg nach.
+    const gewaehlt = eingangBeleg && currentDocuments.find(d => d.id === eingangBeleg.id);
+    if (!gewaehlt || (eingangBeleg.offen && !belegOffen(gewaehlt))) {
+        eingangBeleg = offen.length ? { id: offen[0].id, offen: true } : null;
+    }
+    const sortiert = [...offen, ...currentDocuments.filter(d => !belegOffen(d))];
+    liste.innerHTML = sortiert.map(d => {
+        const anzahl = invoices.filter(i => i.invoice_document_id === d.id).length;
+        const info = `${d.property_name} · ${datumText(String(d.upload_date).slice(0, 10))}` +
+            (anzahl ? ` · ${anzahl === 1 ? '1 Rechnung' : `${anzahl} Rechnungen`}` : '');
+        const zeileHtml = `<span class="beleg-text"><span class="beleg-name">${escapeHtml(d.description || d.filename)}</span>` +
+            `<span class="beleg-info">${escapeHtml(info)}</span></span>` +
+            (anzahl ? '' : '<span class="chip chip-rot">offen</span>');
+        return `<button type="button" class="beleg-zeile" data-beleg="${d.id}" aria-pressed="${eingangBeleg && eingangBeleg.id === d.id ? 'true' : 'false'}">${zeileHtml}</button>`;
+    }).join('');
+    liste.querySelectorAll('.beleg-zeile').forEach(zeile => zeile.addEventListener('click', async () => {
+        const id = Number(zeile.dataset.beleg);
+        if (eingangBeleg && eingangBeleg.id === id) return;
+        if (!(await darfDialogSchliessen(document.getElementById('invoice-modal')))) return;
+        eingangBeleg = { id, offen: belegOffen(currentDocuments.find(d => d.id === id)) };
+        renderDocuments();
+    }));
+
+    const vorschau = document.getElementById('eingang-vorschau');
+    eingang.classList.toggle('eingang-leer', !eingangBeleg);
+    if (!eingangBeleg) {
+        delete vorschau.dataset.beleg;
+        vorschau.innerHTML = currentDocuments.length
+            ? leerzustand({
+                icon: 'ph-check-circle',
+                titel: 'Alles übernommen',
+                text: 'An jedem Beleg hängt eine Rechnung. Neue Belege erscheinen hier.',
+                aktion: { label: 'Rechnungen ansehen', fn: "zeigeKostenAnsicht('alle')", icon: 'ph-list' },
+            })
+            : leerzustand({
+                icon: 'ph-file-pdf',
+                titel: 'Noch keine Belege hochgeladen',
+                text: 'Hier gehört der Beleg des Anbieters hinein — zum Beispiel die Jahresabrechnung der Stadtwerke.',
+                aktion: { label: 'Beleg hochladen', fn: "document.getElementById('beleg-datei').click()", icon: 'ph-upload-simple' },
+            });
+        return;
+    }
+    const formular = document.getElementById('eingang-formular');
+    if (vorschau.dataset.beleg !== `d${eingangBeleg.id}` || !formular.contains(document.getElementById('invoice-modal'))) {
+        zeigeBeleg(currentDocuments.find(d => d.id === eingangBeleg.id));
+    }
+}
+
+// „Alle Rechnungen“: dieselben drei Spalten, die Liste zeigt jede Rechnung,
+// neueste zuerst; eine frisch hochgeladene Datei steht als „neu“ obenauf.
+function renderAlleRechnungen(liste, eingang) {
+    const datumVon = i => String(i.rechnungsdatum || i.end_date).slice(0, 10);
+    const sortiert = [...invoices].sort((a, b) => datumVon(b).localeCompare(datumVon(a)));
+    if (eingangRechnung !== 'neu' && !sortiert.some(i => i.id === eingangRechnung)) {
+        eingangRechnung = sortiert.length ? sortiert[0].id : null;
+    }
+    const neuZeileHtml = `<span class="beleg-text"><span class="beleg-name">${escapeHtml(neueDatei ? neueDatei.name : '')}</span>` +
+        '<span class="beleg-info">Neu hochgeladen · noch nicht übernommen</span></span><span class="chip chip-rot">neu</span>';
+    const neuHtml = neueDatei
+        ? `<button type="button" class="beleg-zeile" data-rechnung="neu" aria-pressed="${eingangRechnung === 'neu' ? 'true' : 'false'}">${neuZeileHtml}</button>`
+        : '';
+    liste.innerHTML = neuHtml + sortiert.map(i => {
+        const info = `${i.provider_name || 'ohne Anbieter'} · ${datumText(datumVon(i))}`;
+        const zeileHtml = `<span class="beleg-text"><span class="beleg-name">${escapeHtml(zaehlerArtName(i.category_name))}</span>` +
+            `<span class="beleg-betrag">${escapeHtml(euroText(i.amount))}</span>` +
+            `<span class="beleg-info">${escapeHtml(info)}</span></span>`;
+        return `<button type="button" class="beleg-zeile" data-rechnung="${i.id}" aria-pressed="${eingangRechnung === i.id ? 'true' : 'false'}">${zeileHtml}</button>`;
+    }).join('');
+    liste.querySelectorAll('.beleg-zeile').forEach(zeile => zeile.addEventListener('click', async () => {
+        const wahl = zeile.dataset.rechnung === 'neu' ? 'neu' : Number(zeile.dataset.rechnung);
+        if (wahl === eingangRechnung) return;
+        if (!(await darfDialogSchliessen(document.getElementById('invoice-modal')))) return;
+        if (eingangRechnung === 'neu') verwirfNeueDatei();
+        eingangRechnung = wahl;
+        renderDocuments();
+    }));
+
+    const vorschau = document.getElementById('eingang-vorschau');
+    eingang.classList.toggle('eingang-leer', !eingangRechnung);
+    if (!eingangRechnung) {
+        delete vorschau.dataset.beleg;
+        vorschau.innerHTML = leerzustand({
+            icon: 'ph-receipt',
+            titel: 'Noch keine Rechnungen erfasst',
+            text: 'Laden Sie den Beleg des Anbieters hoch und übernehmen Sie die Angaben daraus.',
+            aktion: { label: 'Beleg hochladen', fn: "document.getElementById('beleg-datei').click()", icon: 'ph-upload-simple' },
         });
         return;
     }
-    
-    let html = `<table style="width: 100%; border-collapse: collapse; text-align: left;">
-        <thead>
-            <tr style="border-bottom: 1px solid var(--border-color);">
-                <th style="padding: 12px;">Immobilie</th>
-                <th style="padding: 12px;">Beschreibung</th>
-                <th style="padding: 12px;">Upload-Datum</th>
-                <th style="padding: 12px; text-align: right;">Aktionen</th>
-            </tr>
-        </thead>
-        <tbody>`;
-        
-    currentDocuments.forEach(d => {
-        const imgUrl = dateiAdresse('dokument', d.id);
-        html += `
-            <tr style="border-bottom: 1px solid var(--border-color);">
-                <td style="padding: 12px;">${escapeHtml(d.property_name)}</td>
-                <td style="padding: 12px;">
-                    <a href="${imgUrl}" target="_blank" style="color: var(--primary-color); text-decoration: none; font-weight: bold;">
-                        <i class="ph ph-file-pdf"></i> ${escapeHtml(d.description)}
-                    </a>
-                </td>
-                <td style="padding: 12px;">${new Date(d.upload_date).toLocaleDateString('de-DE')}</td>
-                <td style="padding: 12px; text-align: right;">
-                    <button class="btn-secondary" style="padding: 6px 12px; font-size: 14px; margin-right: 8px;" onclick="openAddInvoiceForDoc(${d.id})">
-                        <i class="ph ph-plus"></i> Rechnung erfassen
-                    </button>
-                    <button class="btn-icon" title="Beleg bearbeiten" onclick="openAddDocumentModal(${d.id})" style="margin-right: 4px;"><i class="ph ph-pencil-simple"></i></button>
-                    <button class="btn-icon" title="Beleg löschen" onclick="deleteDocument(${d.id})"><i class="ph ph-trash"></i></button>
-                </td>
-            </tr>
-        `;
-    });
-    
-    html += `</tbody></table>`;
-    container.innerHTML = `<div class="glass-panel" style="padding: 24px;">${html}</div>`;
+    const schluessel = eingangRechnung === 'neu' ? 'neu' : `r${eingangRechnung}`;
+    const formular = document.getElementById('eingang-formular');
+    if (vorschau.dataset.beleg !== schluessel || !formular.contains(document.getElementById('invoice-modal'))) {
+        zeigeRechnung(eingangRechnung === 'neu' ? null : invoices.find(i => i.id === eingangRechnung));
+    }
 }
+
+// Kopf und Blatt der mittleren Spalte; PDF und Bild bleiben in der App,
+// der Knopf daneben öffnet dieselbe Datei in einem neuen Tab.
+function vorschauHtml({ titel, info, adresse, datei, knoepfeHtml = '' }) {
+    const istPdf = Boolean(adresse) && /\.pdf$/i.test(datei);
+    const blattHtml = !adresse
+        ? `<p class="beleg-ohne">${escapeHtml('Zu dieser Rechnung ist kein Beleg hinterlegt.')}</p>`
+        : istPdf
+            ? `<p class="beleg-ohne">${escapeHtml('PDF wird geladen …')}</p>`
+            : /\.(png|jpe?g|webp|gif)$/i.test(datei)
+                ? `<img class="beleg-bild" src="${escapeHtml(adresse)}" alt="${escapeHtml(titel)}">`
+                : `<p class="beleg-ohne">${escapeHtml('Für diese Datei gibt es keine Vorschau. Öffnen Sie sie in einem neuen Tab.')}</p>`;
+    const tabHtml = adresse
+        ? `<a class="btn-icon" href="${escapeHtml(adresse)}" target="_blank" rel="noopener" title="In neuem Tab öffnen" aria-label="In neuem Tab öffnen"><i class="ph ph-arrow-square-out" aria-hidden="true"></i></a>`
+        : '';
+    return `<div class="vorschau-kopf"><div class="vorschau-titel">` +
+        `<h3>${escapeHtml(titel)}</h3>` +
+        `<span class="beleg-info">${escapeHtml(info)}</span></div>` +
+        `${tabHtml}${knoepfeHtml}</div>` +
+        (istPdf
+            ? `<div class="vorschau-blatt beleg-pdf" data-pdf="${escapeHtml(adresse)}" data-titel="${escapeHtml(titel)}" role="region" aria-label="${escapeHtml(`Vorschau: ${titel}`)}">${blattHtml}</div>`
+            : `<div class="vorschau-blatt">${blattHtml}</div>`);
+}
+
+// PDF-Belege zeichnet pdf.js als Seiten auf das eigene Blatt. Der PDF-Viewer
+// des Browsers brachte im iframe einen zweiten Rahmen samt Werkzeugleiste mit.
+// Neue Uploads kommen als Datei (fetch auf blob: sperrt die CSP), sonst lädt
+// fetch die Datei. Scheitert pdf.js, zeigt der iframe wie bisher das PDF.
+// Die Leiste darüber bringt Seitenzahl und Zoom wie im Browser-Viewer zurück;
+// Prozent beziehen sich auf die echte Größe, 1 pt = 96/72 px.
+const PDF_STUFEN = [50, 75, 100, 125, 150, 200, 300];
+const PDF_LEISTE = '<div class="pdf-leiste" role="toolbar" aria-label="PDF-Ansicht">' +
+    '<button type="button" class="btn-icon" data-pdf-aktion="zurueck" title="Vorherige Seite zeigen" aria-label="Vorherige Seite zeigen"><i class="ph ph-caret-up" aria-hidden="true"></i></button>' +
+    '<span class="pdf-seitenzahl" aria-live="polite"></span>' +
+    '<button type="button" class="btn-icon" data-pdf-aktion="vor" title="Nächste Seite zeigen" aria-label="Nächste Seite zeigen"><i class="ph ph-caret-down" aria-hidden="true"></i></button>' +
+    '<span class="pdf-trenner" aria-hidden="true"></span>' +
+    '<button type="button" class="btn-icon" data-pdf-aktion="kleiner" title="Verkleinern" aria-label="Verkleinern"><i class="ph ph-minus" aria-hidden="true"></i></button>' +
+    '<span class="pdf-prozent"></span>' +
+    '<button type="button" class="btn-icon" data-pdf-aktion="groesser" title="Vergrößern" aria-label="Vergrößern"><i class="ph ph-plus" aria-hidden="true"></i></button>' +
+    '<span class="pdf-trenner" aria-hidden="true"></span>' +
+    '<button type="button" class="btn-icon" data-pdf-aktion="seite" title="Ganze Seite anzeigen" aria-label="Ganze Seite anzeigen"><i class="ph ph-frame-corners" aria-hidden="true"></i></button>' +
+    '<button type="button" class="btn-icon" data-pdf-aktion="breite" title="Seitenbreite anzeigen" aria-label="Seitenbreite anzeigen"><i class="ph ph-arrows-out-line-horizontal" aria-hidden="true"></i></button>' +
+    '</div>';
+let pdfjsLaden = null;
+let pdfOffen = null;   // Dokument der Vorschau, bleibt für Zoom offen bis zum nächsten Beleg
+async function zeichnePdf(blatt, datei = null) {
+    if (pdfOffen) { pdfOffen.destroy(); pdfOffen = null; }
+    if (!blatt) return;
+    const adresse = blatt.dataset.pdf;
+    let pdf = null;
+    try {
+        pdfjsLaden = pdfjsLaden || import('/static/vendor/pdfjs/pdf.min.js').then(pdfjs => {
+            pdfjs.GlobalWorkerOptions.workerSrc = '/static/vendor/pdfjs/pdf.worker.min.js';
+            return pdfjs;
+        });
+        const pdfjs = await pdfjsLaden;
+        let daten;
+        if (datei) {
+            daten = await datei.arrayBuffer();
+        } else {
+            const antwort = await fetch(adresse);
+            if (!antwort.ok) throw await serverFehler(antwort);
+            daten = await antwort.arrayBuffer();
+        }
+        pdf = await pdfjs.getDocument({ data: daten, isEvalSupported: false }).promise;
+        if (!blatt.isConnected) { pdf.destroy(); return; }   // inzwischen ein anderer Beleg
+        if (pdfOffen) pdfOffen.destroy();
+        pdfOffen = pdf;
+        const anzahl = pdf.numPages;
+        const seiten = [await pdf.getPage(1)];   // die übrigen lädt erst zeichnen(), Seite 1 steht so sofort
+        blatt.innerHTML = '';
+        blatt.insertAdjacentHTML('beforebegin', PDF_LEISTE);
+        const leiste = blatt.previousElementSibling;
+        const leinwaende = Array.from({ length: anzahl }, (_, i) => {
+            const leinwand = document.createElement('canvas');
+            leinwand.className = 'pdf-seite';
+            leinwand.setAttribute('role', 'img');
+            leinwand.setAttribute('aria-label', `Seite ${i + 1} von ${anzahl}`);
+            blatt.append(leinwand);
+            return leinwand;
+        });
+
+        let modus = 'seite';   // 'seite', 'breite' oder Prozent
+        let lauf = 0;
+        let aufgabe = null;
+        const prozentJetzt = () => {
+            if (typeof modus === 'number') return modus;
+            const stil = getComputedStyle(blatt);
+            const breite = blatt.clientWidth - parseFloat(stil.paddingLeft) - parseFloat(stil.paddingRight);
+            const hoehe = blatt.clientHeight - parseFloat(stil.paddingTop) - parseFloat(stil.paddingBottom);
+            const echt = seiten[0].getViewport({ scale: 96 / 72 });
+            if (breite <= 0 || hoehe <= 0) return 100;   // verstecktes Blatt hat keine Fläche
+            return 100 * (modus === 'breite' ? breite / echt.width : Math.min(breite / echt.width, hoehe / echt.height));
+        };
+        const seiteJetzt = () => {
+            if (blatt.scrollTop + blatt.clientHeight >= blatt.scrollHeight - 2) return anzahl;
+            const marke = blatt.scrollTop + blatt.clientHeight / 3;
+            return Math.max(1, leinwaende.filter(l => l.offsetTop <= marke).length);
+        };
+        const anzeigen = () => {
+            const nr = seiteJetzt();
+            leiste.querySelector('.pdf-seitenzahl').textContent = `Seite ${nr} von ${anzahl}`;
+            leiste.querySelector('[data-pdf-aktion="zurueck"]').disabled = nr <= 1;
+            leiste.querySelector('[data-pdf-aktion="vor"]').disabled = nr >= anzahl;
+        };
+        const springe = nr => {
+            blatt.scrollTop = leinwaende[nr - 1].offsetTop - leinwaende[0].offsetTop;
+        };
+        const zeichnen = async () => {
+            const meinLauf = ++lauf;
+            if (aufgabe) aufgabe.cancel();
+            const prozent = prozentJetzt();
+            leiste.querySelector('.pdf-prozent').textContent = `${Math.round(prozent)} %`;
+            for (const knopf of leiste.querySelectorAll('[data-pdf-aktion="seite"], [data-pdf-aktion="breite"]')) {
+                knopf.setAttribute('aria-pressed', String(knopf.dataset.pdfAktion === modus));
+            }
+            // Erst alle Größen setzen, damit Rollen und Seitenzahl sofort stimmen.
+            // Noch nicht geladene Seiten nehmen das Maß von Seite 1.
+            const massstab = prozent / 100 * 96 / 72;
+            const ansicht = i => (seiten[i] || seiten[0]).getViewport({ scale: massstab });
+            const anpassen = (l, a) => {
+                l.style.width = `${a.width}px`;
+                l.style.height = `${a.height}px`;
+            };
+            const anteil = blatt.scrollTop / (blatt.scrollHeight || 1);
+            leinwaende.forEach((l, i) => anpassen(l, ansicht(i)));
+            blatt.scrollTop = anteil * blatt.scrollHeight;
+            anzeigen();
+            for (let i = 0; i < anzahl; i++) {
+                if (meinLauf !== lauf || !blatt.isConnected) return;
+                try {
+                    seiten[i] = seiten[i] || await pdf.getPage(i + 1);
+                    if (meinLauf !== lauf || !blatt.isConnected) return;
+                    const groesse = ansicht(i);
+                    anpassen(leinwaende[i], groesse);
+                    // shortcut: höchstens 16 Mio. Bildpunkte je Seite, bei 300 % auf HiDPI sonst zu viel Speicher
+                    const dichte = Math.min(window.devicePixelRatio || 1,
+                        Math.sqrt(16e6 / (groesse.width * groesse.height)));
+                    const scharf = seiten[i].getViewport({ scale: groesse.scale * dichte });
+                    leinwaende[i].width = Math.floor(scharf.width);
+                    leinwaende[i].height = Math.floor(scharf.height);
+                    aufgabe = seiten[i].render({ canvasContext: leinwaende[i].getContext('2d'), viewport: scharf });
+                    await aufgabe.promise;
+                } catch (fehler) {
+                    if (meinLauf !== lauf || !blatt.isConnected) return;   // abgelöst von neuerem Zoom
+                    throw fehler;
+                }
+            }
+        };
+
+        blatt.addEventListener('scroll', anzeigen, { passive: true });
+        leiste.addEventListener('click', ereignis => {
+            const knopf = ereignis.target.closest('[data-pdf-aktion]');
+            if (!knopf) return;
+            const aktion = knopf.dataset.pdfAktion;
+            if (aktion === 'zurueck' || aktion === 'vor') {
+                springe(Math.min(anzahl, Math.max(1, seiteJetzt() + (aktion === 'vor' ? 1 : -1))));
+                return;
+            }
+            const prozent = prozentJetzt();
+            if (aktion === 'kleiner') modus = [...PDF_STUFEN].reverse().find(s => s < prozent - 1) || PDF_STUFEN[0];
+            else if (aktion === 'groesser') modus = PDF_STUFEN.find(s => s > prozent + 1) || PDF_STUFEN[PDF_STUFEN.length - 1];
+            else modus = aktion;
+            zeichnen().catch(fehler => console.warn('PDF-Zoom gescheitert', fehler));
+        });
+
+        const zielSeite = Number((adresse.match(/#page=(\d+)/) || [])[1]) || 1;
+        const fertig = zeichnen();
+        springe(Math.min(zielSeite, anzahl));
+        anzeigen();
+        await fertig;
+    } catch (fehler) {
+        console.warn('pdf.js-Vorschau gescheitert, zeige den Browser-Viewer', fehler);
+        if (pdf && pdfOffen === pdf) { pdf.destroy(); pdfOffen = null; }
+        if (!blatt.isConnected) return;
+        if (blatt.previousElementSibling && blatt.previousElementSibling.classList.contains('pdf-leiste')) {
+            blatt.previousElementSibling.remove();
+        }
+        blatt.classList.remove('beleg-pdf');
+        blatt.innerHTML = `<iframe class="beleg-blatt" src="${escapeHtml(adresse)}" title="${escapeHtml(`Vorschau: ${blatt.dataset.titel}`)}"></iframe>`;
+    }
+}
+
+async function zeigeBeleg(d) {
+    const vorschau = document.getElementById('eingang-vorschau');
+    vorschau.dataset.beleg = `d${d.id}`;
+    const datei = d.filename || d.document_path || '';
+    vorschau.innerHTML = vorschauHtml({
+        titel: d.description || datei,
+        info: `${d.property_name} · hochgeladen am ${datumText(String(d.upload_date).slice(0, 10))}`,
+        adresse: dateiAdresse('dokument', d.id),
+        datei,
+        knoepfeHtml: `<button type="button" class="btn-icon" title="Beleg bearbeiten" onclick="openAddDocumentModal(${d.id})"><i class="ph ph-pencil-simple"></i></button>` +
+            `<button type="button" class="btn-icon" title="Beleg löschen" onclick="deleteDocument(${d.id})"><i class="ph ph-trash"></i></button>`,
+    });
+    zeichnePdf(vorschau.querySelector('.beleg-pdf'));
+
+    await openAddInvoiceModal(null, document.getElementById('eingang-formular'));
+    if (vorschau.dataset.beleg !== `d${d.id}`) return;   // inzwischen ein anderer Beleg gewählt
+    document.getElementById('invoice-document-id').value = d.id;
+    toggleInvoiceFileUpload();
+    const haus = document.getElementById('invoice-property');
+    if (haus.value !== String(d.property_id)) {
+        haus.value = d.property_id;
+        await haus.onchange();
+    }
+    document.querySelector('#invoice-modal h2').textContent = 'Als Rechnung übernehmen';
+    document.getElementById('invoice-modal').dataset.geaendert = '';
+}
+
+// Ohne inv: die frisch hochgeladene Datei, das Formular legt die Rechnung an.
+async function zeigeRechnung(inv) {
+    const vorschau = document.getElementById('eingang-vorschau');
+    const schluessel = inv ? `r${inv.id}` : 'neu';
+    vorschau.dataset.beleg = schluessel;
+    let adresse = neueDateiAdresse;
+    let datei = neueDatei ? neueDatei.name : '';
+    if (inv) {
+        datei = inv.filename || inv.document_path || '';
+        adresse = inv.document_path ? dateiAdresse('rechnung', inv.id) : '';
+        const seite = String(inv.document_pages || '').match(/\d+/);
+        if (adresse && seite) adresse += `#page=${seite[0]}`;
+    }
+    vorschau.innerHTML = vorschauHtml({
+        titel: inv ? zaehlerArtName(inv.category_name) : datei,
+        info: inv
+            ? `${inv.provider_name || 'ohne Anbieter'} · ${inv.property_name} · ${euroText(inv.amount)}`
+            : 'Neu hochgeladen · noch nicht übernommen',
+        adresse,
+        datei,
+        knoepfeHtml: inv
+            ? `<button type="button" class="btn-icon" title="Rechnung löschen" aria-label="Rechnung löschen" onclick="deleteInvoice(${Number(inv.id)})"><i class="ph ph-trash" aria-hidden="true"></i></button>`
+            : '<button type="button" class="btn-icon" title="Datei verwerfen" aria-label="Datei verwerfen" onclick="verwirfNeueDatei(); renderDocuments();"><i class="ph ph-x" aria-hidden="true"></i></button>',
+    });
+    zeichnePdf(vorschau.querySelector('.beleg-pdf'), inv ? null : neueDatei);
+
+    await openAddInvoiceModal(inv ? inv.id : null, document.getElementById('eingang-formular'));
+    if (vorschau.dataset.beleg !== schluessel) return;   // inzwischen etwas anderes gewählt
+    const dialog = document.getElementById('invoice-modal');
+    dialog.dataset.geaendert = '';
+    if (inv || !neueDatei) return;
+    // Die gewählte Datei wandert in das Dateifeld, Speichern lädt sie mit hoch.
+    const uebergabe = new DataTransfer();
+    uebergabe.items.add(neueDatei);
+    document.getElementById('invoice-file').files = uebergabe.files;
+    document.getElementById('invoice-file-name').textContent = neueDatei.name;
+    document.querySelector('#invoice-modal h2').textContent = 'Als Rechnung übernehmen';
+    dialog.dataset.geaendert = '1';
+}
+
+function verwirfNeueDatei() {
+    if (neueDateiAdresse) URL.revokeObjectURL(neueDateiAdresse);
+    neueDatei = null;
+    neueDateiAdresse = '';
+    if (eingangRechnung === 'neu') eingangRechnung = null;
+}
+
+// „Beleg hochladen“ links: Datei zeigen, rechts gleich als Rechnung erfassen.
+async function belegGewaehlt(input) {
+    const datei = input.files[0];
+    input.value = '';
+    if (!datei || !(await darfDialogSchliessen(document.getElementById('invoice-modal')))) return;
+    verwirfNeueDatei();
+    neueDatei = datei;
+    neueDateiAdresse = huelle.vorschauAdresse(datei);
+    eingangRechnung = 'neu';
+    delete document.getElementById('eingang-vorschau').dataset.beleg;
+    zeigeKostenAnsicht('alle');
+}
+
+// J/K und die Pfeiltasten blättern durch die Liste, nur solange sie den Fokus
+// hat: Einzeltasten-Kürzel stören sonst Screenreader (WCAG 2.1.4).
+document.addEventListener('keydown', e => {
+    const richtung = { j: 1, k: -1, ArrowDown: 1, ArrowUp: -1 }[e.key];
+    const liste = document.getElementById('documents-container');
+    if (!richtung || e.ctrlKey || e.metaKey || e.altKey || !liste || !liste.offsetParent) return;
+    if (!liste.contains(e.target)) return;
+    if (document.querySelector('.modal-overlay.active')) return;
+    const zeilen = [...liste.querySelectorAll('.beleg-zeile')];
+    const jetzt = zeilen.findIndex(z => z.getAttribute('aria-pressed') === 'true');
+    const ziel = zeilen[Math.min(Math.max(jetzt + richtung, 0), zeilen.length - 1)];
+    if (!ziel || ziel === zeilen[jetzt]) return;
+    e.preventDefault();
+    ziel.focus();
+    ziel.click();
+});
 
 function openAddDocumentModal(editDocId = null) {
     const propSelect = document.getElementById('doc-property');
@@ -4073,7 +5363,12 @@ async function saveDocument() {
     }
 }
 
-function closeAddInvoiceModal() { document.getElementById('invoice-modal').classList.remove('active'); }
+function closeAddInvoiceModal() {
+    const dialog = document.getElementById('invoice-modal');
+    dialog.classList.remove('active');
+    // Im Eingang lädt die Spalte nach dem Speichern neu: nächster Beleg oder leeres Formular.
+    if (dialog.classList.contains('als-spalte')) delete document.getElementById('eingang-vorschau').dataset.beleg;
+}
 
 // NK-113: Die Bezeichnung gehört zu Nr. 17 (sonstige Betriebskosten) — erkannt
 // an der Katalognummer, nicht am Namen. Der alte Namensvergleich auf
@@ -4187,12 +5482,17 @@ async function saveInvoice() {
             body: formData
         });
         if(!res.ok) throw await serverFehler(res);
+        // In „Alle Rechnungen“ bleibt die neue Rechnung gewählt.
+        if (!invId && btn.closest('.als-spalte') && kostenAnsicht === 'alle') {
+            verwirfNeueDatei();
+            eingangRechnung = (await res.json()).id;
+        }
         closeAddInvoiceModal();
         fetchInvoices();
     } catch(e) { showError(meldungZu(e, 'Fehler beim Speichern.')); }
     finally {
         btn.disabled = false;
-        btn.textContent = 'Rechnung speichern';
+        btn.textContent = btn.closest('.als-spalte') && !invId ? 'Rechnung übernehmen' : 'Rechnung speichern';
     }
 }
 
@@ -4263,22 +5563,69 @@ function populateProviderSelects() {
     });
 }
 
+async function anbieterSpeichern(name) {
+    const res = await fetch('/api/providers', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({name: name})
+    });
+    if(!res.ok) throw await serverFehler(res);
+    return (await res.json()).id;
+}
+
 async function addProvider() {
     const input = document.getElementById('new-provider-name');
     const name = input.value.trim();
     if (!name) return;
-    
+
     try {
-        const res = await fetch('/api/providers', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({name: name})
-        });
-        if(!res.ok) throw await serverFehler(res);
+        await anbieterSpeichern(name);
         input.value = '';
         fetchProviders();
     } catch(e) { showError(meldungZu(e, 'Fehler beim Speichern des Anbieters.')); }
 }
+
+// Ohne Anbieter ließ sich keine Rechnung speichern, und angelegt
+// wurden Anbieter nur in den Einstellungen. Jetzt geht es im Formular.
+function anbieterFeldZeigen() {
+    const feld = document.getElementById('anbieter-neu');
+    feld.hidden = false;
+    document.getElementById('anbieter-neu-name').focus();
+}
+window.anbieterFeldZeigen = anbieterFeldZeigen;
+
+function anbieterHinweisAktualisieren() {
+    const leer = providers.length === 0;
+    document.getElementById('anbieter-leer-hinweis').hidden = !leer;
+    document.getElementById('anbieter-neu').hidden = !leer;
+}
+
+async function anbieterImFormularAnlegen() {
+    const input = document.getElementById('anbieter-neu-name');
+    const name = input.value.trim();
+    if (!name) {
+        input.focus();
+        return;
+    }
+    try {
+        const id = await anbieterSpeichern(name);
+        await fetchProviders();
+        document.getElementById('invoice-provider').value = String(id);
+        input.value = '';
+        document.getElementById('anbieter-neu').hidden = true;
+        document.getElementById('anbieter-leer-hinweis').hidden = true;
+        showSuccess(`Anbieter „${name}“ angelegt.`);
+    } catch(e) { showError(meldungZu(e, 'Fehler beim Speichern des Anbieters.')); }
+}
+window.anbieterImFormularAnlegen = anbieterImFormularAnlegen;
+
+document.addEventListener('keydown', ereignis => {
+    // Enter im Namensfeld legt an, statt das Rechnungsformular abzuschicken.
+    if (ereignis.key === 'Enter' && ereignis.target.id === 'anbieter-neu-name') {
+        ereignis.preventDefault();
+        anbieterImFormularAnlegen();
+    }
+});
 
 async function deleteProvider(id) {
     if(!await frageLoeschen('Anbieter wirklich löschen?')) return;
@@ -4473,9 +5820,9 @@ async function ladeSicherungsStatus() {
         const box = document.getElementById('sicherung-erinnerung');
         box.style.display = '';
         const stufen = {
-            rot:    { hintergrund: 'rgba(220, 53, 69, 0.14)', rand: 'rgba(220, 53, 69, 0.55)' },
-            gelb:   { hintergrund: 'rgba(255, 193, 7, 0.14)', rand: 'rgba(255, 193, 7, 0.55)' },
-            gruen:  { hintergrund: 'rgba(40, 167, 69, 0.14)', rand: 'rgba(40, 167, 69, 0.55)' },
+            rot:    { hintergrund: 'var(--danger-bg)', rand: 'var(--danger-border)' },
+            gelb:   { hintergrund: 'var(--warning-bg)', rand: 'var(--warning-color)' },
+            gruen:  { hintergrund: 'var(--success-bg)', rand: 'var(--success-border)' },
         };
         const farbe = stufen[status.erinnerung.stufe] || stufen.gruen;
         box.style.background = farbe.hintergrund;
@@ -4513,7 +5860,7 @@ async function ladeSicherungen(ziel) {
         if (!res.ok) throw await serverFehler(res);
         const liste = await res.json();
         if (!liste.sicherungen.length) {
-            tbody.innerHTML = '<tr><td colspan="5" style="padding: 8px; color: var(--text-muted);">Noch keine Sicherung im gewählten Verzeichnis.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="5" style="padding: 8px; color: var(--text-muted);">Hier liegt noch keine Sicherung. Mit „Sicherung erstellen“ legen Sie die erste an.</td></tr>';
             return;
         }
         tbody.innerHTML = liste.sicherungen.map(s => `<tr>
@@ -4548,7 +5895,7 @@ async function sicherungsordnerWaehlen() {
 }
 window.sicherungsordnerWaehlen = sicherungsordnerWaehlen;
 
-async function sicherungErstellen() {
+async function sicherungErstellen(knopf) {
     const ziel = document.getElementById('sicherung-ziel').value.trim();
     const auftrag = { ziel };
     if (document.getElementById('sicherung-verschluesseln').checked) {
@@ -4560,6 +5907,9 @@ async function sicherungErstellen() {
         }
         auftrag.passphrase = eins;
     }
+    // Gesperrt, damit ein zweiter Klick keine zweite Sicherung anstößt.
+    if (knopf) knopf.disabled = true;
+    zeigeArbeit(knopf, true);
     try {
         const res = await fetch('/api/backup/erstellen', {
             method: 'POST',
@@ -4574,6 +5924,9 @@ async function sicherungErstellen() {
         ladeSicherungsStatus();
     } catch (e) {
         showError(meldungZu(e, 'Die Sicherung konnte nicht erstellt werden.'));
+    } finally {
+        if (knopf) knopf.disabled = false;
+        zeigeArbeit(knopf, false);
     }
 }
 
@@ -5076,6 +6429,19 @@ document.addEventListener('keydown', ereignis => {
     if (ziel) ziel.querySelector(`[data-spalte="${feld.dataset.spalte}"]`).focus();
 });
 
+// In der Ablese-Runde springt Enter ins nächste Zählerfeld wie in
+// Excel; erst im letzten Feld speichert Enter die Runde.
+document.addEventListener('keydown', ereignis => {
+    const feld = ereignis.target;
+    if (ereignis.key !== 'Enter' || !(feld instanceof HTMLInputElement) || feld.type !== 'number'
+        || !feld.closest('#ablesen-liste')) return;
+    const felder = [...document.querySelectorAll('#ablesen-liste input[type="number"]')];
+    const naechstes = felder[felder.indexOf(feld) + 1];
+    if (!naechstes) return;
+    ereignis.preventDefault();
+    naechstes.focus();
+});
+
 function rtZeilenLesen() {
     const haus = document.getElementById('rt-immobilie');
     const name = haus.options[haus.selectedIndex] ? haus.options[haus.selectedIndex].text : '';
@@ -5357,7 +6723,9 @@ let jahrAktuell = 1;
 let jahrVorschau = {};
 
 const euroText = betrag => Number(betrag || 0).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
-const datumText = iso => iso ? new Date(`${iso}T00:00:00`).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—';
+// Ortszeit: new Date('2026-10-15') wäre UTC-Mitternacht, also nach heute 0 Uhr.
+const nachHeute = iso => String(iso || '').slice(0, 10) > new Date().toLocaleDateString('sv-SE');
+const datumText = iso => iso ? new Date(`${String(iso).slice(0, 10)}T00:00:00`).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—';
 
 // Warnungen kompakt (F-116): ohne Kennung vorn, gleiche Meldungen für
 // mehrere Kostenarten zu einer zusammengefasst, Einzelheiten zum Aufklappen.
@@ -5550,7 +6918,7 @@ function jahrFristZeigen() {
 
 async function jahrVorschauLaden() {
     const ziel = document.getElementById('jahr-vorschau');
-    ziel.innerHTML = '<p class="karten-text">Die Vorschau wird gerechnet …</p>';
+    ziel.innerHTML = '<p class="karten-text arbeitet" aria-busy="true">Die Vorschau wird gerechnet …</p>';
     jahrVorschau = {};
     const karten = [];
     for (const m of jahrStand.mieter) {
@@ -5749,7 +7117,9 @@ async function loescheAnschreibenVorlage() {
 async function fetchBillingSuggestions() {
     try {
         const res = await fetch('/api/billing/suggestions');
-        const suggestions = await res.json();
+        const suggestions = imHaus(await res.json());
+        abrechnungsVorschlaege = suggestions;
+        zeigeHeute();
         
         const container = document.getElementById('billing-suggestions-container');
         if (!container) return;
@@ -5765,7 +7135,7 @@ async function fetchBillingSuggestions() {
             if (!mieterDa) {
                 try {
                     const antwort = await fetch('/api/tenants');
-                    mieterDa = antwort.ok && (await antwort.json()).length > 0;
+                    mieterDa = antwort.ok && imHaus(await antwort.json()).length > 0;
                 } catch (e) {
                     console.error('Mieter nicht ladbar', e);
                 }
@@ -5791,14 +7161,14 @@ async function fetchBillingSuggestions() {
             const card = document.createElement('div');
             // NK-159: auf schmalen Fenstern rutschen die Knöpfe unter den Text
             // (Fund des Rundgangs mit der Beispielabrechnung, 390 px).
-            card.className = 'dashboard-card historie-zeile';
+            card.className = 'dashboard-card glass-panel historie-zeile';
             
-            const startFmt = new Date(s.suggested_start).toLocaleDateString('de-DE');
-            const endFmt = new Date(s.suggested_end).toLocaleDateString('de-DE');
+            const startFmt = datumText(s.suggested_start);
+            const endFmt = datumText(s.suggested_end);
             
             card.innerHTML = `
                 <div>
-                    <h3 style="margin:0; font-size: 1.1rem;">${escapeHtml(s.tenant_name)} <span style="font-size: 0.9rem; color: var(--text-muted); font-weight: normal;">(${escapeHtml(s.apartment_name)})</span></h3>
+                    <h3 style="margin:0; font-size: 18px;">${escapeHtml(s.tenant_name)} <span style="font-size: 13px; color: var(--text-muted); font-weight: normal;">(${escapeHtml(s.apartment_name)})</span></h3>
                     <p style="margin: 8px 0 0 0; color: var(--text-muted);">
                         Es liegen unberechnete Kosten vor.
                     </p>
@@ -5822,7 +7192,7 @@ async function fetchBillingHistory() {
     try {
         const res = await fetch('/api/billing/reports');
         if (!res.ok) throw await serverFehler(res);
-        const history = await res.json();
+        const history = imHaus(await res.json());
         anzahlAbrechnungen = history.length;
         abrechnungsHistorie = history;
         zeigeErsteSchritte();
@@ -5846,10 +7216,10 @@ async function fetchBillingHistory() {
             const card = document.createElement('div');
             // NK-159: auf schmalen Fenstern rutschen die Knöpfe unter den Text
             // (Fund des Rundgangs mit der Beispielabrechnung, 390 px).
-            card.className = 'dashboard-card historie-zeile';
+            card.className = 'dashboard-card glass-panel historie-zeile';
             
-            const startFmt = new Date(r.start_date).toLocaleDateString('de-DE');
-            const endFmt = new Date(r.end_date).toLocaleDateString('de-DE');
+            const startFmt = datumText(r.start_date);
+            const endFmt = datumText(r.end_date);
             // Der Server schickt das Datum schon deutsch formatiert (zeit.als_ortszeit);
             // new Date('25.09.2026') ergäbe „Invalid Date“ (Fund im Beispiel, NK-159).
             const createdFmt = r.created_at || '';
@@ -5857,20 +7227,20 @@ async function fetchBillingHistory() {
             // Build PDF link buttons dynamically
             let pdfButtons = '';
             if (r.document_path) {
-                pdfButtons += `<a href="${dateiAdresse('abrechnung', r.id)}" class="btn-secondary" target="_blank" style="text-decoration: none; display: flex; align-items: center; gap: 6px; font-size: 0.9rem;" title="Einfache PDF ansehen">
+                pdfButtons += `<a href="${dateiAdresse('abrechnung', r.id)}" class="btn-secondary" target="_blank" style="display: flex; align-items: center; gap: 8px;" title="Einfache PDF ansehen">
                     PDF ansehen (einfach)
                 </a>`;
             } else {
-                pdfButtons += `<button class="btn-secondary" onclick="generateMissingPdf(${r.tenant_id}, '${r.start_date}', '${r.end_date}', false, this)" style="font-size: 0.9rem; border-style: dashed;" title="Einfache PDF nachträglich erstellen">
+                pdfButtons += `<button class="btn-secondary" onclick="generateMissingPdf(${r.tenant_id}, '${r.start_date}', '${r.end_date}', false, this)" style="border-style: dashed;" title="Einfache PDF nachträglich erstellen">
                     PDF erstellen (einfach)
                 </button>`;
             }
             if (r.document_path_detailed) {
-                pdfButtons += `<a href="${dateiAdresse('abrechnung-detailliert', r.id)}" class="btn-secondary" target="_blank" style="text-decoration: none; display: flex; align-items: center; gap: 6px; background: rgba(79, 70, 229, 0.1); color: var(--primary); border: 1px solid rgba(79, 70, 229, 0.3); font-size: 0.9rem;" title="Detaillierte PDF ansehen">
+                pdfButtons += `<a href="${dateiAdresse('abrechnung-detailliert', r.id)}" class="btn-secondary btn-tint" target="_blank" style="display: flex; align-items: center; gap: 8px;" title="Detaillierte PDF ansehen">
                     PDF ansehen (detailliert)
                 </a>`;
             } else {
-                pdfButtons += `<button class="btn-secondary" onclick="generateMissingPdf(${r.tenant_id}, '${r.start_date}', '${r.end_date}', true, this)" style="font-size: 0.9rem; background: rgba(79, 70, 229, 0.05); color: var(--primary); border: 1px dashed rgba(79, 70, 229, 0.3);" title="Detaillierte PDF nachträglich erstellen">
+                pdfButtons += `<button class="btn-secondary btn-tint" onclick="generateMissingPdf(${r.tenant_id}, '${r.start_date}', '${r.end_date}', true, this)" style="border-style: dashed;" title="Detaillierte PDF nachträglich erstellen">
                     PDF erstellen (detailliert)
                 </button>`;
             }
@@ -5878,7 +7248,7 @@ async function fetchBillingHistory() {
             const regelstandBlock = r.veraltet ? regelstandHinweis(r.id, r.regelstand_aenderungen) : '';
             card.innerHTML = `
                 <div>
-                    <h3 style="margin:0; font-size: 1.1rem;">${escapeHtml(r.tenant_name)} <span style="font-size: 0.9rem; color: var(--text-muted); font-weight: normal;">(${escapeHtml(r.apartment_name)} - ${escapeHtml(r.property_name)})</span></h3>
+                    <h3 style="margin:0; font-size: 18px;">${escapeHtml(r.tenant_name)} <span style="font-size: 13px; color: var(--text-muted); font-weight: normal;">(${escapeHtml(r.apartment_name)} - ${escapeHtml(r.property_name)})</span></h3>
                     <p style="margin: 8px 0 0 0; color: var(--text-muted);">
                         Zeitraum: ${startFmt} - ${endFmt} | Erstellt am: ${createdFmt}
                     </p>
@@ -5919,6 +7289,7 @@ async function generateMissingPdf(tenantId, startDate, endDate, isDetailed, btnE
     const label = isDetailed ? 'Detaillierte' : 'Einfache';
     btnElement.disabled = true;
     btnElement.textContent = 'Generiert...';
+    zeigeArbeit(btnElement, true);
     
     try {
         const res = await fetch('/api/billing/finalize', {
@@ -5941,6 +7312,8 @@ async function generateMissingPdf(tenantId, startDate, endDate, isDetailed, btnE
         showError(meldungZu(e, 'Die PDF konnte nicht erstellt werden.'));
         btnElement.disabled = false;
         btnElement.textContent = `PDF ${isDetailed ? 'erstellen (detailliert)' : 'erstellen (einfach)'}`;
+    } finally {
+        zeigeArbeit(btnElement, false);
     }
 }
 
@@ -5950,7 +7323,7 @@ function vorauszahlungsBlock(v, tenantId) {
     "Der Vorschlag, oder warum es keinen gibt. Den Knopf gibt es nur mit Mieter (Details)."
     if (!v || (!v.grund && !v.aenderung)) return '';
     const kasten = inhalt => `
-        <div class="dashboard-card glass-panel vorauszahlung-vorschlag" style="margin-bottom: 20px; padding: 16px;">
+        <div class="dashboard-card glass-panel vorauszahlung-vorschlag" style="margin-bottom: 24px; padding: 16px;">
             <h4 style="margin: 0 0 8px 0; display: flex; align-items: center; gap: 8px;">
                 <i class="ph ph-calendar-check"></i> Vorauszahlung anpassen
             </h4>${inhalt}
@@ -5959,19 +7332,19 @@ function vorauszahlungsBlock(v, tenantId) {
         return kasten(`<p style="margin: 0; color: var(--text-muted);">Kein Vorschlag: ${escapeHtml(v.grund)}</p>`);
     }
     const euro = w => Number(w).toFixed(2).replace('.', ',') + ' €';
-    const ab = new Date(v.ab).toLocaleDateString('de-DE');
+    const ab = datumText(v.ab);
     const monate = String(v.monate).replace(/\.00$/, '').replace('.', ',');
     const warnung = v.kuenftige > 0
-        ? `<p style="margin: 0 0 12px 0; color: var(--warning-color);">Ab ${escapeHtml(ab)} sind schon ${Number(v.kuenftige)} Vorauszahlungen gebucht. Ändern Sie diese, statt doppelt zu buchen.</p>`
+        ? `<p style="margin: 0 0 12px 0; color: var(--warning-text);">Ab ${escapeHtml(ab)} sind schon ${Number(v.kuenftige)} Vorauszahlungen gebucht. Ändern Sie diese, statt doppelt zu buchen.</p>`
         : '';
     const knopf = tenantId
         ? `<button type="button" class="btn-secondary" onclick="serienbuchungAnlegen(${Number(tenantId)}, '${escapeHtml(v.neu)}', '${escapeHtml(v.ab)}', ${Number(v.kuenftige)})">
                 <i class="ph ph-repeat"></i> Serienbuchung anlegen
             </button>`
-        : `<p style="margin: 0; color: var(--text-muted); font-size: 0.9rem;">Nach der Festsetzung legen Sie die Serienbuchung in den Details an.</p>`;
+        : `<p style="margin: 0; color: var(--text-muted); font-size: 13px;">Nach der Festsetzung legen Sie die Serienbuchung in den Details an.</p>`;
     return kasten(`
             <p style="margin: 0 0 8px 0;">Ab ${escapeHtml(ab)}: ${escapeHtml(euro(v.neu))} im Monat statt ${escapeHtml(euro(v.bisher))}.</p>
-            <p style="margin: 0 0 12px 0; color: var(--text-muted); font-size: 0.9rem;">
+            <p style="margin: 0 0 12px 0; color: var(--text-muted); font-size: 13px;">
                 Grundlage: ${escapeHtml(euro(v.kosten))} Kosten über ${escapeHtml(monate)} Monate, ohne Zuschlag (§ 560 Abs. 4 BGB).
                 Erklären Sie die Anpassung im Anschreiben, zum Beispiel mit dem Platzhalter {vorauszahlung_anpassung}.
             </p>${warnung}${knopf}`);
@@ -5998,25 +7371,25 @@ function berichtZustellungsBlock(id, umschlag) {
     "Der Block zur Zustellung (R-FRIST-02): was gemeldet ist, oder der Weg dorthin."
     if (umschlag.zugestellt_am) {
         return `
-            <div class="dashboard-card glass-panel" style="margin-bottom: 20px; padding: 16px;">
+            <div class="dashboard-card glass-panel" style="margin-bottom: 24px; padding: 16px;">
                 <h4 style="margin: 0 0 8px 0; display: flex; align-items: center; gap: 8px;">
                     <i class="ph ph-check-circle" style="color: var(--success-color);"></i> Zustellung gemeldet
                 </h4>
                 <p style="margin: 0; color: var(--text-muted);">
-                    Zugestellt am ${new Date(umschlag.zugestellt_am).toLocaleDateString('de-DE')}
-                    · Einwendungsfrist des Mieters bis ${new Date(umschlag.einwendungsfrist_ende).toLocaleDateString('de-DE')}
-                    · Nachforderungsfrist endete ${new Date(umschlag.frist_ende).toLocaleDateString('de-DE')}
+                    Zugestellt am ${escapeHtml(datumText(umschlag.zugestellt_am))}
+                    · Einwendungsfrist des Mieters bis ${escapeHtml(datumText(umschlag.einwendungsfrist_ende))}
+                    · Nachforderungsfrist endete ${escapeHtml(datumText(umschlag.frist_ende))}
                 </p>
             </div>`;
     }
     // NK-221: das Feld startet leer; ein vorbelegtes Heute wurde
     // ungelesen gespeichert, und die Einwendungsfrist lief ab falschem Tag.
     return `
-        <div class="dashboard-card glass-panel" style="margin-bottom: 20px; padding: 16px;">
+        <div class="dashboard-card glass-panel" style="margin-bottom: 24px; padding: 16px;">
             <h4 style="margin: 0 0 8px 0; display: flex; align-items: center; gap: 8px;">
                 <i class="ph ph-clock-counter-clockwise"></i> Zustellung melden
             </h4>
-            <p style="margin: 0 0 12px 0; color: var(--text-muted); font-size: 0.9rem;">
+            <p style="margin: 0 0 12px 0; color: var(--text-muted); font-size: 13px;">
                 Tragen Sie nach, wann die Abrechnung beim Mieter war — massgeblich
                 ist der Zugang, nicht das Erstellungsdatum.
             </p>
@@ -6054,19 +7427,19 @@ function berichtVersionenBlock(id, umschlag) {
     const versionen = umschlag.versionen || [];
     let liste = '';
     if (versionen.length > 0) {
-        liste = `<p style="margin: 0 0 8px 0; color: var(--text-muted); font-size: 0.9rem;">`
+        liste = `<p style="margin: 0 0 8px 0; color: var(--text-muted); font-size: 13px;">`
             + versionen.map(v =>
-                `Version ${v.nummer} · ${new Date(v.erstellt_am).toLocaleDateString('de-DE')}`
+                `Version ${v.nummer} · ${datumText(v.erstellt_am)}`
             ).join(' · ')
             + `</p>`;
     }
     return `
-        <div class="dashboard-card glass-panel" style="margin-bottom: 20px; padding: 16px;">
+        <div class="dashboard-card glass-panel" style="margin-bottom: 24px; padding: 16px;">
             <h4 style="margin: 0 0 8px 0; display: flex; align-items: center; gap: 8px;">
                 <i class="ph ph-clock"></i> Versionen
             </h4>
             ${liste}
-            <p style="margin: 0 0 12px 0; color: var(--text-muted); font-size: 0.9rem;">
+            <p style="margin: 0 0 12px 0; color: var(--text-muted); font-size: 13px;">
                 Die Korrektur rechnet gegen die heutigen Daten, bleibt als neue
                 Version stehen und erzeugt die PDFs neu.
             </p>
@@ -6082,8 +7455,8 @@ function berichtVersionenBlock(id, umschlag) {
 function regelstandHinweis(id, aenderungen) {
     const punkteHtml = (aenderungen || []).map(t => `<li>${escapeHtml(t)}</li>`).join('');
     const erklaerungHtml = punkteHtml ? `<p style="margin: 8px 0 4px 0;">Seitdem rechnet die Software so:</p><ul style="margin: 0 0 8px 0;">${punkteHtml}</ul>` : '';
-    return `<details class="regelstand-hinweis" style="margin: 4px 0 0 0; font-size: 0.9rem;">
-        <summary style="color: var(--warning-color); cursor: pointer;"><i class="ph ph-warning" aria-hidden="true"></i> Nach älterem Regelstand erstellt</summary>
+    return `<details class="regelstand-hinweis" style="margin: 4px 0 0 0; font-size: 13px;">
+        <summary style="color: var(--warning-text); cursor: pointer;"><i class="ph ph-warning" aria-hidden="true"></i> Nach älterem Regelstand erstellt</summary>
         ${erklaerungHtml}
         <p style="margin: 0 0 8px 0;">Die Abrechnung bleibt gültig, ein neuer Regelstand allein verpflichtet nicht zur Korrektur. Sinnvoll ist sie, wenn der heutige Stand spürbar anders rechnet, vor allem zugunsten des Mieters. Zulasten des Mieters ist eine Korrektur nur bis zum Ende der Abrechnungsfrist durchsetzbar.</p>
         <button type="button" class="btn-secondary" onclick="korrekturErstellen(${Number(id)})">Unterschied ansehen</button>
@@ -6142,6 +7515,193 @@ async function korrekturErstellen(id) {
     }
 }
 
+// Eine Tabelle für „Abrechnungs-Details & Belege“ und die Vorschau.
+// Je Kostenart eine Zeile (Name, Zeitraum, Betrag, Beleg); die Aufschlüsselung
+// klappt per Klick auf. Stile stehen als abr-* in style.css.
+
+// Teilt „Name (Angaben)“ am ersten „ (“ in Titel und graue Angaben. Nur wenn
+// diese Klammer den Text abschließt; sonst bleibt der Text ganz (Wortlaut des
+// Rechenkerns, etwa „Eigenverbrauch (12,5 m³)“).
+function umlageTeile(text) {
+    const s = String(text ?? '');
+    const i = s.indexOf(' (');
+    if (i > 0 && s.endsWith(')')) {
+        let tiefe = 0;
+        for (let k = i + 1; k < s.length; k++) {
+            if (s[k] === '(') tiefe++;
+            else if (s[k] === ')' && --tiefe === 0) {
+                if (k === s.length - 1) return { titel: s.slice(0, i), info: s.slice(i + 2, -1) };
+                break;
+            }
+        }
+    }
+    return { titel: s, info: '' };
+}
+
+function umlageTextHtml(text) {
+    const { titel, info } = umlageTeile(text);
+    return `<span class="abr-text-titel">${escapeHtml(titel)}</span>`
+        + (info ? ` <span class="abr-text-info">${escapeHtml(info)}</span>` : '');
+}
+
+// Etikett statt „~“ und Rechner: der Tooltip erklärt die Schätzung, mit
+// Zähler und Zeitraum öffnet ein Klick den Rechenweg.
+function geschaetztHtml(infoObj) {
+    const klickAttr = interpolationsKlickAttr(infoObj);
+    const etikettHtml = klickAttr
+        ? `<button type="button" class="abr-geschaetzt" ${klickAttr}>geschätzt<span class="sr-only"> – Rechenweg ansehen</span></button>`
+        : `<span class="abr-geschaetzt" tabindex="0">geschätzt</span>`;
+    return `<span class="interpolated-wrapper">${etikettHtml}<span class="glass-tooltip" role="tooltip">${interpolationsTooltip(infoObj)}</span></span>`;
+}
+
+const formatiereVerbrauch = w => Number(w).toLocaleString('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+
+function saldoText(balance) {
+    const b = Number(balance || 0);
+    return b > 0 ? 'Nachzahlung des Mieters' : (b < 0 ? 'Guthaben des Mieters' : 'Saldobetrag');
+}
+
+// Ergebnis zuerst: was der Mieter zahlt oder zurückbekommt.
+function abrechnungsErgebnis(data) {
+    const b = Number(data.balance || 0);
+    const saldoAttr = b < 0 ? 'abr-guthaben' : '';
+    return `<div class="abr-ergebnis">
+        <div class="abr-ergebnis-feld"><span class="abr-ergebnis-name">Gesamtkosten</span><span class="abr-ergebnis-wert">${escapeHtml(euroText(data.total_amount))}</span></div>
+        <div class="abr-ergebnis-feld"><span class="abr-ergebnis-name">Vorauszahlungen</span><span class="abr-ergebnis-wert">− ${escapeHtml(euroText(data.prepaid_amount))}</span></div>
+        <div class="abr-ergebnis-feld abr-ergebnis-saldo ${saldoAttr}"><span class="abr-ergebnis-name">${escapeHtml(saldoText(b))}</span><span class="abr-ergebnis-wert">${escapeHtml(euroText(Math.abs(b)))}</span></div>
+    </div>`;
+}
+
+function abrPostenUmschalten(knopf) {
+    const offen = knopf.getAttribute('aria-expanded') !== 'true';
+    knopf.setAttribute('aria-expanded', String(offen));
+    document.getElementById(knopf.getAttribute('aria-controls')).hidden = !offen;
+}
+
+let abrDetailNr = 0;
+
+// Die Zeilen der Aufschlüsselung einer Kostenart, über die volle Breite.
+// Wann „geschätzt“ erscheint, ist dieselbe Regel wie zuvor am ~-Wert.
+function abrechnungsDetailZeilen(item) {
+    const md = item.meter_details || null;
+    const tm = md && md.tenant_meter;
+    const mm = md && md.main_meter;
+    const zeile = (symbolHtml, textHtml, betragHtml) => `<tr class="abr-unter">
+            <td><div class="abr-unter-text">${symbolHtml}<span>${textHtml}</span></div></td>
+            <td class="abr-zahl abr-unter-betrag">${betragHtml}</td>
+            <td></td>
+        </tr>`;
+    let zeilenHtml = '';
+    const hasSub = item.sub_items && item.sub_items.length > 0;
+    // Heizkosten: die Zeile nennt Vorschrift, Verteilschlüssel und einen
+    // Ersatzmaßstab (§ 9b); das steht in keinem Unterposten.
+    if (!hasSub || item.billing_type === 'heizkosten') {
+        let schaetzungHtml = '';
+        if (!hasSub && item.billing_type === 'direkt' && tm && tm.is_interpolated) schaetzungHtml = geschaetztHtml(tm);
+        else if (!hasSub && item.billing_type === 'nur_allgemein' && mm && mm.is_interpolated) schaetzungHtml = geschaetztHtml(mm);
+        zeilenHtml += zeile('', `${umlageTextHtml(item.description)} ${schaetzungHtml}`, '');
+    }
+    (hasSub ? item.sub_items : []).forEach(sub => {
+        const eigen = sub.type === 'eigenverbrauch';
+        let schaetzungHtml = '';
+        if (eigen && tm && tm.is_interpolated) schaetzungHtml = geschaetztHtml(tm);
+        else if (sub.type === 'allgemein' && mm && (mm.is_interpolated || (tm && tm.is_interpolated))) schaetzungHtml = geschaetztHtml(mm);
+        const symbolHtml = eigen
+            ? '<i class="ph ph-door abr-symbol abr-symbol-eigen" aria-hidden="true"></i>'
+            : '<i class="ph ph-house abr-symbol" aria-hidden="true"></i>';
+        zeilenHtml += zeile(symbolHtml, `${umlageTextHtml(sub.description)} ${schaetzungHtml}`, escapeHtml(euroText(sub.cost)));
+    });
+    if (md) {
+        // Ohne Verbrauchswert steht „keine Angabe“, wie früher „N/A“.
+        const verbrauchHtml = (wert, schaetzung) => wert == null
+            ? 'keine Angabe'
+            : `${escapeHtml(formatiereVerbrauch(wert))} ${escapeHtml(md.unit || '')} ${schaetzung ? geschaetztHtml(schaetzung) : ''}`;
+        const angaben = [];
+        if (tm && tm.status !== 'no_data') {
+            angaben.push(['Ihr Wohnungszähler', verbrauchHtml(md.tenant_consumption, tm.is_interpolated && tm)]);
+        }
+        if (mm && mm.status !== 'no_data') {
+            // Haus und Allgemein gelten für die ganze Rechnung (NK-213).
+            const hzZeitraum = mm.target_start_date && mm.target_end_date
+                ? ` (${datumText(mm.target_start_date)} bis ${datumText(mm.target_end_date)})`
+                : '';
+            const allgGeschaetzt = mm.is_interpolated || (tm && tm.is_interpolated);
+            angaben.push([`Hauptzähler${hzZeitraum}`, verbrauchHtml(md.main_consumption, mm.is_interpolated && mm)]);
+            angaben.push(['Allgemeinverbrauch', verbrauchHtml(md.allgemein_consumption, allgGeschaetzt && mm)]);
+            // NK-209: der Anteil, mit dem gerechnet wurde (Personentage)
+            if (md.allgemein_quote != null && md.allgemein_anteil != null) {
+                const prozent = (Number(md.allgemein_quote) * 100).toLocaleString('de-DE',
+                    { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                angaben.push(['Ihr Anteil am Allgemeinverbrauch', `${verbrauchHtml(md.allgemein_anteil, null)} (${escapeHtml(prozent)} %${md.preis_ht != null ? ', nach den Kosten von HT und NT gewichtet' : ''})`]);
+            }
+        }
+        if (angaben.length > 0) {
+            const angabenHtml = angaben.map(([name, wertHtml]) =>
+                `<div><dt>${escapeHtml(name)}</dt><dd>${wertHtml}</dd></div>`).join('');
+            zeilenHtml += `<tr class="abr-zaehler"><td colspan="3"><dl class="abr-zaehlerkasten">${angabenHtml}</dl></td></tr>`;
+        }
+    }
+    return zeilenHtml;
+}
+
+function abrechnungsTabelle(data) {
+    const posten = data.line_items || [];
+    const postenHtml = posten.map(item => {
+        const nr = ++abrDetailNr;
+        const belegHtml = item.doc_path && item.doc_name && item.invoice_id
+            ? `<a class="abr-beleg-link" href="${dateiAdresse('rechnung', item.invoice_id)}" target="_blank" rel="noopener" title="Beleg ansehen: ${escapeHtml(item.doc_name)}" aria-label="Beleg ansehen: ${escapeHtml(item.doc_name)}"><i class="ph ph-file-pdf" aria-hidden="true"></i></a>`
+            : '<span class="abr-ohne-beleg" aria-label="kein Beleg">–</span>';
+        return `<tbody class="abr-posten">
+            <tr class="abr-haupt">
+                <td>
+                    <button type="button" class="abr-umschalter" aria-expanded="false" aria-controls="abr-d-${nr}" onclick="abrPostenUmschalten(this)">
+                        <i class="ph ph-caret-right abr-pfeil" aria-hidden="true"></i>
+                        <span class="abr-kostenart">
+                            <span class="abr-name">${escapeHtml(item.category)}</span>
+                            <span class="abr-zeitraum">${escapeHtml(item.period)}</span>
+                        </span>
+                    </button>
+                </td>
+                <td class="abr-zahl">${escapeHtml(euroText(item.tenant_cost))}</td>
+                <td class="abr-beleg">${belegHtml}</td>
+            </tr>
+        </tbody>
+        <tbody class="abr-details" id="abr-d-${nr}" hidden>${abrechnungsDetailZeilen(item)}</tbody>`;
+    }).join('');
+    const leerHtml = posten.length === 0
+        ? '<tbody><tr><td colspan="3" class="abr-leer">Keine Kosten in diesem Zeitraum gefunden.</td></tr></tbody>'
+        : '';
+    return `<div class="data-table-container abr-rahmen">
+        <table class="data-table abr-tabelle">
+            <thead>
+                <tr>
+                    <th scope="col">Kostenart</th>
+                    <th scope="col" class="abr-zahl">Betrag</th>
+                    <th scope="col" class="abr-beleg">Beleg</th>
+                </tr>
+            </thead>
+            ${postenHtml}${leerHtml}
+            <tfoot>
+                <tr class="abr-summe">
+                    <th scope="row">Gesamtkosten der Periode</th>
+                    <td class="abr-zahl">${escapeHtml(euroText(data.total_amount))}</td>
+                    <td></td>
+                </tr>
+                <tr>
+                    <th scope="row">Abzüglich geleistete Vorauszahlungen</th>
+                    <td class="abr-zahl abr-minus">− ${escapeHtml(euroText(data.prepaid_amount))}</td>
+                    <td></td>
+                </tr>
+                <tr class="abr-saldo">
+                    <th scope="row">${escapeHtml(saldoText(data.balance))}</th>
+                    <td class="abr-zahl">${escapeHtml(euroText(Math.abs(Number(data.balance || 0))))}</td>
+                    <td></td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>`;
+}
+
 async function openReportDetails(id) {
     try {
         const res = await fetch(`/api/billing/reports/${id}/details`);
@@ -6150,10 +7710,6 @@ async function openReportDetails(id) {
         // NK-124: das Ergebnis steckt im Schnappschuss ("ergebnis"); beim
         // Altbestand ohne Version ist die Antwort selbst das Ergebnis.
         const data = umschlag.ergebnis || umschlag;
-        // Der Schnappschuss hält Beträge als Text ("828.32", json_sicher),
-        // damit sie exakt bleiben; .toFixed gibt es nur an Zahlen.
-        const formatiereBetrag = w => Number(w || 0).toFixed(2).replace('.', ',');
-        
         const modal = document.getElementById('report-details-modal');
         const body = document.getElementById('report-details-body');
         
@@ -6164,13 +7720,14 @@ async function openReportDetails(id) {
         const regelstandBlock = umschlag.veraltet ? regelstandHinweis(id, umschlag.regelstand_aenderungen) : '';
         
         let html = `
-            <div style="margin-bottom: 24px;">
-                <h3 style="margin: 0 0 8px 0; font-size: 1.25rem;">Details zur Abrechnung</h3>
-                <p style="color: var(--text-muted); margin: 0;">Zeitraum: ${new Date(umschlag.start_date || data.start_date).toLocaleDateString('de-DE')} - ${new Date(umschlag.end_date || data.end_date).toLocaleDateString('de-DE')}</p>
-                ${umschlag.version ? `<p style="color: var(--text-muted); margin: 4px 0 0 0; font-size: 0.9rem;">Version ${umschlag.version} · erstellt mit Software ${escapeHtml(umschlag.software_version || '')}, Regelstand ${escapeHtml(umschlag.regel_version || '')}</p>` : ''}
+            <div class="abr-kopf">
+                <h3>Details zur Abrechnung</h3>
+                <p>Zeitraum: ${escapeHtml(datumText(umschlag.start_date || data.start_date))} - ${escapeHtml(datumText(umschlag.end_date || data.end_date))}</p>
+                ${umschlag.version ? `<p class="abr-kopf-klein">Version ${umschlag.version} · erstellt mit Software ${escapeHtml(umschlag.software_version || '')}, Regelstand ${escapeHtml(umschlag.regel_version || '')}</p>` : ''}
                 ${regelstandBlock}
             </div>
-            <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px;">
+            ${abrechnungsErgebnis(data)}
+            <div class="abr-aktionen">
                 <a class="btn-secondary" href="/api/billing/reports/${id}/belege" download
                    title="Abrechnung, Rechenweg, Belege und Ablesefotos der eigenen Zähler als ZIP für den Mieter (§ 556 Abs. 4 BGB)">
                     <i class="ph ph-file-zip"></i> Belege herunterladen
@@ -6183,102 +7740,7 @@ async function openReportDetails(id) {
             ${zustellungsBlock}
             ${vorauszahlungsBlock(umschlag.vorauszahlung, umschlag.tenant_id)}
             ${versionenBlock}
-            <table class="data-table" style="width: 100%; border-collapse: collapse; text-align: left;">
-                <thead>
-                    <tr style="background-color: var(--bg-hover);">
-                        <th style="padding: 12px 8px; font-weight: 600; font-size: 0.9rem;">Kostenart</th>
-                        <th style="padding: 12px 8px; font-weight: 600; font-size: 0.9rem;">Rechnungszeitraum</th>
-                        <th style="padding: 12px 8px; font-weight: 600; font-size: 0.9rem;">Umlage-Details</th>
-                        <th style="padding: 12px 8px; font-weight: 600; font-size: 0.9rem; text-align: right;">Betrag (€)</th>
-                        <th style="padding: 12px 8px; font-weight: 600; font-size: 0.9rem; text-align: center;">Belege</th>
-                    </tr>
-                </thead>
-                <tbody>
-        `;
-        
-        data.line_items.forEach(item => {
-            let belegHtml = '-';
-            if (item.doc_path && item.doc_name && item.invoice_id) {
-                belegHtml = `<a href="${dateiAdresse('rechnung', item.invoice_id)}" target="_blank" style="color: var(--primary-color); text-decoration: underline;" title="${escapeHtml(item.doc_name)}">Beleg ansehen</a>`;
-            }
-            
-            const hasSub = item.sub_items && item.sub_items.length > 0;
-            
-            let itemDesc = escapeHtml(item.description);
-            if (!hasSub && item.meter_details) {
-                const md = item.meter_details;
-                if (item.billing_type === 'direkt' && md.tenant_meter && md.tenant_meter.is_interpolated) {
-                    itemDesc = window.wrapInterpolated(itemDesc, true, md.tenant_meter);
-                } else if (item.billing_type === 'nur_allgemein' && md.main_meter && md.main_meter.is_interpolated) {
-                    itemDesc = window.wrapInterpolated(itemDesc, true, md.main_meter);
-                }
-            }
-            
-            html += `
-                <tr style="border-bottom: ${hasSub ? 'none' : '1px solid var(--border-color)'};">
-                    <td style="font-weight: 500; padding: 12px 8px;">${escapeHtml(item.category)}</td>
-                    <td style="color: var(--text-muted); font-size: 0.9rem; white-space: nowrap; padding: 12px 8px;">${escapeHtml(item.period)}</td>
-                    <td style="color: var(--text-muted); font-size: 0.875rem; padding: 12px 8px;">${hasSub ? '' : itemDesc}</td>
-                    <td style="font-weight: 600; text-align: right; white-space: nowrap; padding: 12px 8px;">${formatiereBetrag(item.tenant_cost)} €</td>
-                    <td style="text-align: center; padding: 12px 8px;">${belegHtml}</td>
-                </tr>
-            `;
-            
-            if (hasSub) {
-                item.sub_items.forEach((sub, idx) => {
-                    const isLast = idx === item.sub_items.length - 1;
-                    const icon = sub.type === 'eigenverbrauch' ? '<i class="ph ph-door" style="margin-right: 6px; font-size: 1.1em; color: var(--primary);"></i>' : '<i class="ph ph-house" style="margin-right: 6px; font-size: 1.1em; color: var(--text-muted);"></i>';
-                    
-                    let subDesc = escapeHtml(sub.description);
-                    if (item.meter_details) {
-                        const md = item.meter_details;
-                        if (sub.type === 'eigenverbrauch' && md.tenant_meter && md.tenant_meter.is_interpolated) {
-                            subDesc = window.wrapInterpolated(subDesc, true, md.tenant_meter);
-                        } else if (sub.type === 'allgemein') {
-                            const isAllg = (md.main_meter && md.main_meter.is_interpolated) || (md.tenant_meter && md.tenant_meter.is_interpolated);
-                            if (isAllg && md.main_meter) {
-                                subDesc = window.wrapInterpolated(subDesc, true, md.main_meter);
-                            }
-                        }
-                    }
-                    
-                    html += `
-                        <tr style="border-bottom: ${isLast ? '1px solid var(--border-color)' : 'none'}; background-color: var(--bg-hover);">
-                            <td colspan="2" style="padding: 4px 8px;"></td>
-                            <td style="color: var(--text-muted); font-size: 0.85rem; padding: 4px 8px; padding-left: 24px;">
-                                <div style="display: flex; align-items: center;">
-                                    ${icon} ${subDesc}
-                                </div>
-                            </td>
-                            <td style="color: var(--text-muted); font-size: 0.85rem; text-align: right; padding: 4px 8px;">${formatiereBetrag(sub.cost)} €</td>
-                            <td></td>
-                        </tr>
-                    `;
-                });
-            }
-        });
-        
-        html += `
-                <tr style="border-top: 2px solid var(--text-color);">
-                    <td colspan="3" style="font-weight: 700; text-align: right; padding: 12px 8px;">Gesamtkosten der Periode:</td>
-                    <td style="font-weight: 700; text-align: right; padding: 12px 8px;">${formatiereBetrag(data.total_amount)} €</td>
-                    <td></td>
-                </tr>
-                <tr>
-                    <td colspan="3" style="font-weight: 700; text-align: right; padding: 12px 8px;">Abzüglich geleistete Vorauszahlungen:</td>
-                    <td style="font-weight: 700; text-align: right; padding: 12px 8px; color: var(--danger-color);">- ${formatiereBetrag(data.prepaid_amount)} €</td>
-                    <td></td>
-                </tr>
-                <tr style="background: var(--bg-hover);">
-                    <td colspan="3" style="font-weight: 800; text-align: right; padding: 16px 8px; font-size: 1.1em;">
-                        ${data.balance > 0 ? 'Nachzahlung des Mieters:' : (data.balance < 0 ? 'Guthaben des Mieters:' : 'Saldobetrag:')}
-                    </td>
-                    <td style="font-weight: 800; text-align: right; padding: 16px 8px; font-size: 1.1em; color: var(--primary-color);">
-                        ${formatiereBetrag(data.balance)} €
-                    </td>
-                    <td></td>
-                </tr>
-            </tbody></table>
+            ${abrechnungsTabelle(data)}
         `;
         html += mieterErklaerungHtml(data);
         
@@ -6416,16 +7878,16 @@ function openBillingSelectionModal(suggestion) {
     let html = `<p style="margin-bottom: 16px;">Bitte wählen Sie die Kategorien aus, die in diese Abrechnung einfließen sollen:</p>`;
     
     suggestion.categories.forEach(cat => {
-        const startFmt = new Date(cat.suggested_start).toLocaleDateString('de-DE');
-        const endFmt = new Date(cat.suggested_end).toLocaleDateString('de-DE');
+        const startFmt = datumText(cat.suggested_start);
+        const endFmt = datumText(cat.suggested_end);
         
         html += `
             <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px; border: 1px solid var(--border-color); border-radius: 8px; margin-bottom: 8px; background: var(--bg-hover);">
                 <label style="display: flex; align-items: center; gap: 12px; cursor: pointer; flex: 1;">
                     <input type="checkbox" class="category-select-cb" value="${cat.category_id}" checked style="width: 18px; height: 18px;">
                     <div>
-                        <div style="font-weight: bold;">${escapeHtml(cat.category_name)}</div>
-                        <div style="font-size: 0.85rem; color: var(--text-muted);">${startFmt} - ${endFmt} (${cat.invoice_count} Rechnungen)</div>
+                        <div style="font-weight: 600;">${escapeHtml(cat.category_name)}</div>
+                        <div style="font-size: 13px; color: var(--text-muted);">${startFmt} - ${endFmt} (${cat.invoice_count} ${cat.invoice_count === 1 ? 'Rechnung' : 'Rechnungen'})</div>
                     </div>
                 </label>
             </div>
@@ -6508,11 +7970,12 @@ async function generateBillPreview(tenantId, startDate, endDate, categoryIds = n
         const body = document.getElementById('billing-preview-body');
         
         let html = `
-            <div style="margin-bottom: 24px;">
-                <h3 style="margin:0;">Abrechnung für ${escapeHtml(data.tenant_name)}</h3>
-                <p style="color: var(--text-muted); margin: 4px 0;">${escapeHtml(data.property)} - ${escapeHtml(data.apartment)}</p>
-                <p style="color: var(--text-muted); margin: 4px 0;">Zeitraum: ${escapeHtml(datumText(data.start_date))} bis ${escapeHtml(datumText(data.end_date))}</p>
+            <div class="abr-kopf">
+                <h3>Abrechnung für ${escapeHtml(data.tenant_name)}</h3>
+                <p>${escapeHtml(data.property)} - ${escapeHtml(data.apartment)}</p>
+                <p>Zeitraum: ${escapeHtml(datumText(data.start_date))} bis ${escapeHtml(datumText(data.end_date))}</p>
             </div>
+            ${abrechnungsErgebnis(data)}
         `;
         
         // Preflight Panel: nur echte Zaehler. Kacheln ohne Zaehler (Zeitraum,
@@ -6526,27 +7989,27 @@ async function generateBillPreview(tenantId, startDate, endDate, categoryIds = n
             let pfColor = 'var(--success-color)';
             let pfIcon = 'ph-check-circle';
             let pfTitle = 'Zählerstände: Ausgezeichnet (Alle Ablesungen innerhalb von 7 Tagen zum Stichtag)';
-            let pfBg = 'rgba(16, 185, 129, 0.1)';
-            let pfBorder = 'rgba(16, 185, 129, 0.3)';
+            let pfBg = 'var(--success-bg)';
+            let pfBorder = 'var(--success-border)';
             
             if (zaehlerStatus === 'warning') {
                 pfColor = 'var(--danger-color)';
                 pfIcon = 'ph-warning-circle';
                 pfTitle = 'Zählerstände: Warnung (Große Lücken oder fehlende Daten)';
                 pfBg = 'var(--danger-bg)';
-                pfBorder = 'rgba(220, 38, 38, 0.3)';
+                pfBorder = 'var(--danger-border)';
             } else if (zaehlerStatus === 'acceptable') {
-                pfColor = 'var(--warning-color)';
+                pfColor = 'var(--warning-text)';
                 pfIcon = 'ph-info';
                 pfTitle = 'Zählerstände: Akzeptabel (Einige Ablesungen bis zu 14 Tage Toleranz)';
                 pfBg = 'var(--warning-bg)';
-                pfBorder = 'rgba(217, 119, 6, 0.3)';
+                pfBorder = 'var(--warning-border)';
             }
             
             html += `
             <div style="background: ${pfBg}; border: 1px solid ${pfBorder}; border-radius: 8px; padding: 12px; margin-bottom: 24px;">
                 <details>
-                    <summary style="cursor: pointer; font-weight: bold; color: ${pfColor}; margin-bottom: 4px; display: flex; align-items: center; gap: 8px;">
+                    <summary style="cursor: pointer; font-weight: 600; color: ${pfColor}; margin-bottom: 4px; display: flex; align-items: center; gap: 8px;">
                         <i class="ph ${pfIcon}" style="font-size: 1.2rem;"></i>
                         ${pfTitle} [Details einblenden]
                     </summary>
@@ -6568,15 +8031,15 @@ async function generateBillPreview(tenantId, startDate, endDate, categoryIds = n
                             <div class="glass-tooltip">${ttStr}</div>
                         </span>`;
                     }
-                    valStr = `<div style="font-size: 0.85rem; color: var(--text-muted); display: flex; align-items: center; margin-top: 4px;">Abweichung: Start ${c.start_offset_days}T, Ende ${c.end_offset_days}T ${interpTag}</div>`;
+                    valStr = `<div style="font-size: 13px; color: var(--text-muted); display: flex; align-items: center; margin-top: 4px;">Abweichung: Start ${c.start_offset_days}T, Ende ${c.end_offset_days}T ${interpTag}</div>`;
                 } else {
-                    valStr = `<div style="font-size: 0.85rem; color: var(--danger-color); margin-top: 4px;">Keine ausreichenden Daten</div>`;
+                    valStr = `<div style="font-size: 13px; color: var(--danger-color); margin-top: 4px;">Keine ausreichenden Daten</div>`;
                 }
                 
                 html += `
-                        <div style="background: white; border: 1px solid var(--border-color); padding: 8px; border-radius: 4px;">
+                        <div style="background: var(--surface); border: 1px solid var(--border-color); padding: 8px; border-radius: 4px;">
                             <div style="display: flex; justify-content: space-between; align-items: center;">
-                                <div style="font-weight: 500; font-size: 0.9rem;">${escapeHtml(zaehlerArtName(c.category))} (${escapeHtml(c.meter_type)})</div>
+                                <div style="font-weight: 500; font-size: 13px;">${escapeHtml(zaehlerArtName(c.category))} (${escapeHtml(c.meter_type)})</div>
                                 ${statusIcon}
                             </div>
                             <div style="font-size: 13px; color: var(--text-muted); margin-top: 4px;">Zähler: ${escapeHtml(c.meter_number || 'N/A')}</div>
@@ -6596,98 +8059,13 @@ async function generateBillPreview(tenantId, startDate, endDate, categoryIds = n
         const hinweise = hinweisTexte.concat((data.warnings || []).filter(w =>
             typeof w !== 'string' || (!w.includes('interpoliert') && !hinweisTexte.includes(w))));
         if (hinweise.length > 0) {
-            html += `<div style="background: var(--warning-bg); border: 1px solid rgba(217, 119, 6, 0.3); border-radius: 8px; padding: 12px; margin-bottom: 24px;">
-                <div style="font-weight: bold; color: var(--warning-color); margin-bottom: 6px;">Hinweise zur Abrechnung</div>
+            html += `<div style="background: var(--warning-bg); border: 1px solid var(--warning-border); border-radius: 8px; padding: 12px; margin-bottom: 24px;">
+                <div style="font-weight: 600; color: var(--warning-text); margin-bottom: 8px;">Hinweise zur Abrechnung</div>
                 <ul class="jahr-warnungen" style="margin: 0;">${warnungenHtml(hinweise)}</ul>
             </div>`;
         }
         html += vorauszahlungsBlock(data.vorauszahlung, null);
-        
-        html += `
-            <table class="data-table" style="width: 100%;">
-                <thead>
-                    <tr>
-                        <th>Kostenart</th>
-                        <th>Rechnungszeitraum</th>
-                        <th>Umlage-Details</th>
-                        <th style="text-align: right;">Betrag</th>
-                    </tr>
-                </thead>
-                <tbody>
-        `;
-        
-        if (data.line_items.length === 0) {
-            html += `<tr><td colspan="4" style="text-align: center;">Keine Kosten in diesem Zeitraum gefunden.</td></tr>`;
-        }
-        
-        data.line_items.forEach(item => {
-            let detailsHtml = escapeHtml(item.description);
-            
-            // Inject meter details if available
-            if (item.meter_details) {
-                const md = item.meter_details;
-                let mdStr = `<div style="margin-top: 8px; font-size: 13px; background: var(--bg-color); padding: 8px; border-radius: 4px; border: 1px dashed #d1d5db;">`;
-                if (md.tenant_meter && md.tenant_meter.status !== 'no_data') {
-                    let tCons = md.tenant_consumption !== null ? md.tenant_consumption.toFixed(1) : 'N/A';
-                    if (tCons !== 'N/A') tCons = window.wrapInterpolated(tCons, md.tenant_meter.is_interpolated, md.tenant_meter);
-                    mdStr += `<div><span style="font-weight:bold;">Ihr Wohnungszähler:</span> ${tCons} ${escapeHtml(md.unit)}</div>`;
-                }
-                if (md.main_meter && md.main_meter.status !== 'no_data') {
-                    let mCons = md.main_consumption !== null ? md.main_consumption.toFixed(1) : 'N/A';
-                    if (mCons !== 'N/A') mCons = window.wrapInterpolated(mCons, md.main_meter.is_interpolated, md.main_meter);
-                    
-                    let aCons = md.allgemein_consumption !== null ? md.allgemein_consumption.toFixed(1) : 'N/A';
-                    const isAllgInterpolated = md.main_meter.is_interpolated || (md.tenant_meter && md.tenant_meter.is_interpolated);
-                    if (aCons !== 'N/A') aCons = window.wrapInterpolated(aCons, isAllgInterpolated, md.main_meter);
-                    
-                    // Haus und Allgemein gelten fuer die ganze Rechnung (NK-213).
-                    const mm = md.main_meter;
-                    const hzZeitraum = mm.target_start_date && mm.target_end_date
-                        ? ` (${datumText(mm.target_start_date)} bis ${datumText(mm.target_end_date)})`
-                        : '';
-                    mdStr += `<div><span style="font-weight:bold;">Hauptzähler${escapeHtml(hzZeitraum)}:</span> ${mCons} ${escapeHtml(md.unit)}</div>`;
-                    mdStr += `<div><span style="font-weight:bold;">Allgemeinverbrauch:</span> ${aCons} ${escapeHtml(md.unit)}</div>`;
-                    // NK-209: der Anteil, mit dem gerechnet wurde (Personentage)
-                    if (md.allgemein_quote != null && md.allgemein_anteil != null) {
-                        const prozent = (md.allgemein_quote * 100).toLocaleString('de-DE',
-                            { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                        mdStr += `<div><span style="font-weight:bold;">Ihr Anteil am Allgemeinverbrauch:</span> ${md.allgemein_anteil.toFixed(1)} ${escapeHtml(md.unit)} (${prozent} %${md.preis_ht != null ? ', nach den Kosten von HT und NT gewichtet' : ''})</div>`;
-                    }
-                }
-                mdStr += `</div>`;
-                detailsHtml += mdStr;
-            }
-            
-            html += `
-                <tr style="border-bottom: 1px solid var(--border-color);">
-                    <td style="font-weight: 500; padding: 12px 8px; vertical-align: top;">${escapeHtml(item.category)}</td>
-                    <td style="color: var(--text-muted); font-size: 0.9rem; white-space: nowrap; padding: 12px 8px; vertical-align: top;">${escapeHtml(item.period)}</td>
-                    <td style="color: var(--text-muted); font-size: 0.875rem; padding: 12px 8px; vertical-align: top;">${detailsHtml}</td>
-                    <td style="text-align: right; font-weight: 500; padding: 12px 8px; vertical-align: top;">${escapeHtml(euroText(item.tenant_cost))}</td>
-                </tr>
-            `;
-        });
-        
-        html += `
-                </tbody>
-                <tfoot>
-                    <tr style="border-top: 2px solid var(--border-color);">
-                        <td colspan="3" style="text-align: right; padding: 12px 8px;">Gesamtkosten der Periode:</td>
-                        <td style="text-align: right; font-weight: bold; padding: 12px 8px;">${escapeHtml(euroText(data.total_amount))}</td>
-                    </tr>
-                    <tr>
-                        <td colspan="3" style="text-align: right; padding: 12px 8px;">Abzüglich geleistete Vorauszahlungen:</td>
-                        <td style="text-align: right; color: var(--danger-color); padding: 12px 8px;">- ${escapeHtml(euroText(data.prepaid_amount))}</td>
-                    </tr>
-                    <tr style="background: var(--bg-hover);">
-                        <td colspan="3" style="text-align: right; font-size: 1.1rem; font-weight: bold; padding: 16px 8px;">
-                            ${data.balance > 0 ? 'Nachzahlung des Mieters' : (data.balance < 0 ? 'Guthaben des Mieters' : 'Saldobetrag')}
-                        </td>
-                        <td style="text-align: right; font-size: 1.1rem; font-weight: bold; color: var(--primary-color); padding: 16px 8px;">${escapeHtml(euroText(data.balance))}</td>
-                    </tr>
-                </tfoot>
-            </table>
-        `;
+        html += abrechnungsTabelle(data);
         html += mieterErklaerungHtml(data);
         
         body.innerHTML = html;
@@ -6728,6 +8106,7 @@ async function finalizeBill(tenantId, startDate, endDate, categoryIds = null, is
     allBtns.forEach(b => { if(b) b.disabled = true; });
     
     btn.textContent = 'PDF wird erstellt...';
+    zeigeArbeit(btn, true);
     
     try {
         const payload = { 
@@ -6771,6 +8150,8 @@ async function finalizeBill(tenantId, startDate, endDate, categoryIds = null, is
         // Restore buttons on error
         allBtns.forEach(b => { if(b) b.disabled = false; });
         btn.innerHTML = originalText;
+    } finally {
+        zeigeArbeit(btn, false);
     }
 }
 
@@ -6785,7 +8166,7 @@ let currentAnalyticsView = 'general';
 
 function populateAnalyticsPropertySelect() {
     const sel = document.getElementById('analytics-property-select');
-    if (sel.options.length === properties.length) return;
+    if ([...sel.options].map(o => o.value).join() === properties.map(p => String(p.id)).join()) return;
     
     const gewaehlt = sel.value;
     sel.replaceChildren();
@@ -6843,35 +8224,21 @@ async function fetchAnalytics() {
     const navContainer = document.getElementById('analytics-nav');
     navContainer.replaceChildren();
     
-    const btnGen = document.createElement('button');
-    btnGen.className = currentAnalyticsView === 'general' ? 'btn-primary' : 'btn-secondary';
-    btnGen.textContent = 'Gebäudeübersicht';
-    btnGen.onclick = () => { currentAnalyticsView = 'general'; fetchAnalytics(); };
-    navContainer.appendChild(btnGen);
-    
-    const apts = allApartments.filter(a => a.property_id === propId);
-    apts.forEach(apt => {
-        const btnApt = document.createElement('button');
-        btnApt.className = currentAnalyticsView === apt.id ? 'btn-primary' : 'btn-secondary';
-        btnApt.textContent = apt.name;
-        btnApt.onclick = () => { currentAnalyticsView = apt.id; fetchAnalytics(); };
-        navContainer.appendChild(btnApt);
-    });
-    
-    // Finanzen pill
-    const btnFin = document.createElement('button');
-    btnFin.className = currentAnalyticsView === 'finanzen' ? 'btn-primary' : 'btn-secondary';
-    btnFin.innerHTML = '<i class="ph ph-coins" aria-hidden="true"></i> Finanzen';
-    btnFin.onclick = () => { currentAnalyticsView = 'finanzen'; fetchAnalytics(); };
-    navContainer.appendChild(btnFin);
-    
-    // Datenqualität pill
-    const btnDQ = document.createElement('button');
-    btnDQ.className = currentAnalyticsView === 'dataquality' ? 'btn-primary' : 'btn-secondary';
-    btnDQ.innerHTML = '<i class="ph ph-clipboard-text" aria-hidden="true"></i> Datenqualität';
-    btnDQ.onclick = () => { currentAnalyticsView = 'dataquality'; fetchAnalytics(); };
-    navContainer.appendChild(btnDQ);
-    
+    // Die Ansichtswahl sind Filterpillen; die gewählte trägt Tinte.
+    const pille = (ansicht, inhalt) => {
+        const knopf = document.createElement('button');
+        knopf.type = 'button';
+        knopf.className = currentAnalyticsView === ansicht ? 'filter-pill active' : 'filter-pill';
+        knopf.setAttribute('aria-pressed', String(currentAnalyticsView === ansicht));
+        knopf.innerHTML = inhalt;
+        knopf.onclick = () => { currentAnalyticsView = ansicht; fetchAnalytics(); };
+        navContainer.appendChild(knopf);
+    };
+    pille('general', 'Gebäudeübersicht');
+    allApartments.filter(a => a.property_id === propId).forEach(apt => pille(apt.id, escapeHtml(apt.name)));
+    pille('finanzen', '<i class="ph ph-coins" aria-hidden="true"></i> Finanzen');
+    pille('dataquality', '<i class="ph ph-clipboard-text" aria-hidden="true"></i> Datenqualität');
+
     const viewGen = document.getElementById('analytics-view-general');
     const viewApt = document.getElementById('analytics-view-apartment');
     const viewDQ = document.getElementById('analytics-view-dataquality');
@@ -6925,12 +8292,12 @@ function renderMehrjahresblick(jahre) {
     }
     const wert = w => (w === null || w === undefined ? '–' : euroText(w));
     const zeile = (titel, werte, starkAttr = '') => {
-        const werteHtml = werte.map(w => `<td style="padding: 6px 8px; text-align: right;">${escapeHtml(w)}</td>`).join('');
-        return `<tr${starkAttr}><th scope="row" style="text-align: left; padding: 6px 8px; font-weight: inherit;">${escapeHtml(titel)}</th>${werteHtml}</tr>`;
+        const werteHtml = werte.map(w => `<td style="padding: 8px; text-align: right;">${escapeHtml(w)}</td>`).join('');
+        return `<tr${starkAttr}><th scope="row" style="text-align: left; padding: 8px; font-weight: inherit;">${escapeHtml(titel)}</th>${werteHtml}</tr>`;
     };
     const arten = [...new Set(jahre.flatMap(j => Object.keys(j.je_qm)))].sort();
-    const jahreHtml = jahre.map(j => `<th scope="col" style="text-align: right; padding: 6px 8px;">${escapeHtml(j.jahr)}</th>`).join('');
-    kopf.innerHTML = `<th scope="col" style="text-align: left; padding: 6px 8px;">€ je m² und Jahr</th>${jahreHtml}`;
+    const jahreHtml = jahre.map(j => `<th scope="col" style="text-align: right; padding: 8px;">${escapeHtml(j.jahr)}</th>`).join('');
+    kopf.innerHTML = `<th scope="col" style="text-align: left; padding: 8px;">€ je m² und Jahr</th>${jahreHtml}`;
     zeilen.innerHTML = arten.map(a => zeile(a, jahre.map(j => wert(j.je_qm[a])))).join('')
         + zeile('Gesamt', jahre.map(j => wert(j.je_qm_gesamt)), ' style="font-weight: 600;"')
         + zeile('Vorauszahlungen im Jahr', jahre.map(j => (j.belegte_tage ? euroText(j.vorauszahlung) : '–')))
@@ -7029,11 +8396,12 @@ function renderConsumptionTrend(timeseries_data) {
         const empty = document.createElement('div');
         empty.style.cssText = 'text-align: center; color: var(--text-muted);';
         const emptyIcon = document.createElement('i');
-        emptyIcon.className = 'ph ph-chart-line-up';
-        emptyIcon.style.cssText = 'font-size: 48px; opacity: 0.4; display: block; margin-bottom: 12px;';
+        emptyIcon.className = 'ph ph-chart-line-up leer-icon';
+        emptyIcon.setAttribute('aria-hidden', 'true');
+        emptyIcon.style.marginInline = 'auto';
         empty.appendChild(emptyIcon);
         const emptyText = document.createElement('p');
-        emptyText.textContent = 'Noch keine Verbrauchsdaten vorhanden.';
+        emptyText.textContent = 'Noch kein Verbrauch zu sehen. Er erscheint, sobald Zählerstände eingetragen sind.';
         empty.appendChild(emptyText);
         container.appendChild(empty);
         return;
@@ -7084,13 +8452,13 @@ function renderConsumptionTrend(timeseries_data) {
     
     // Header with date range
     const header = document.createElement('div');
-    header.style.cssText = 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;';
+    header.style.cssText = 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;';
     
     const title = document.createElement('div');
     title.className = 'dq-meter-title';
     title.style.display = 'flex';
     title.style.alignItems = 'center';
-    title.style.gap = '6px';
+    title.style.gap = '8px';
     const calIcon = document.createElement('i');
     calIcon.className = 'ph ph-calendar';
     calIcon.style.color = 'var(--primary)';
@@ -7105,14 +8473,14 @@ function renderConsumptionTrend(timeseries_data) {
     
     // Consumption metrics
     const metricsGrid = document.createElement('div');
-    metricsGrid.style.cssText = 'display: flex; flex-direction: column; gap: 10px;';
+    metricsGrid.style.cssText = 'display: flex; flex-direction: column; gap: 12px;';
     
     ['Strom', 'Gas', 'Wasser'].forEach(cat => {
         const cfg = categoryConfig[cat];
         const catData = data[cat];
         
         const row = document.createElement('div');
-        row.style.cssText = 'display: flex; align-items: center; gap: 10px;';
+        row.style.cssText = 'display: flex; align-items: center; gap: 12px;';
         
         // Icon
         const iconWrap = document.createElement('div');
@@ -7204,7 +8572,7 @@ async function renderTenantOverview(propId) {
     propTenants.forEach((tenant, idx) => {
         const card = document.createElement('div');
         card.className = 'dq-meter-card';
-        card.style.borderLeftColor = tenant.move_out_date ? DIAGRAMM_FARBE.grau : DIAGRAMM_FARBE.gruen;
+        card.style.borderLeftColor = tenant.move_out_date ? 'var(--field-border)' : 'var(--primary)';
         
         // Header
         const header = document.createElement('div');
@@ -7216,7 +8584,7 @@ async function renderTenantOverview(propId) {
         name.className = 'dq-meter-title';
         name.style.display = 'flex';
         name.style.alignItems = 'center';
-        name.style.gap = '6px';
+        name.style.gap = '8px';
         const icon = document.createElement('i');
         icon.className = 'ph ph-user';
         icon.style.color = 'var(--primary)';
@@ -7285,7 +8653,7 @@ async function renderTenantOverview(propId) {
         
         if (profileKeys.length > 0) {
             const pillContainer = document.createElement('div');
-            pillContainer.style.cssText = 'display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-color);';
+            pillContainer.style.cssText = 'display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-color);';
             
             profileKeys.forEach(catId => {
                 const bt = profiles[catId];
@@ -7294,10 +8662,10 @@ async function renderTenantOverview(propId) {
                 const pill = document.createElement('span');
                 pill.style.cssText = `
                     display: inline-flex; align-items: center; gap: 4px;
-                    padding: 3px 8px; border-radius: 12px; font-size: 13px; font-weight: 500;
-                    background: ${billingTypeColors[bt] || DIAGRAMM_FARBE.grau}15;
-                    color: ${billingTypeColors[bt] || DIAGRAMM_FARBE.grau};
-                    border: 1px solid ${billingTypeColors[bt] || DIAGRAMM_FARBE.grau}30;
+                    padding: 4px 8px; border-radius: var(--radius-chip); font-size: 13px; font-weight: 600; line-height: 1.2;
+                    background: var(--surface);
+                    color: var(--text-main);
+                    border: 1px solid ${billingTypeColors[bt] || DIAGRAMM_FARBE.grau};
                 `;
                 pill.textContent = `${catName}: ${billingTypeLabels[bt] || bt}`;
                 pillContainer.appendChild(pill);
@@ -7430,7 +8798,7 @@ function renderDataQuality(data) {
         const iconClass = categoryIcons[artName] || 'ph-gauge';
         const titleIcon = document.createElement('i');
         titleIcon.className = `ph ${iconClass}`;
-        titleIcon.style.marginRight = '6px';
+        titleIcon.style.marginRight = '8px';
         title.appendChild(titleIcon);
         const titleText = document.createTextNode(artName);
         title.appendChild(titleText);
@@ -7476,10 +8844,7 @@ function renderDataQuality(data) {
         };
         
         if (m.last_reading_date) {
-            const dateStr = new Date(m.last_reading_date).toLocaleDateString('de-DE', {
-                day: '2-digit', month: '2-digit', year: 'numeric'
-            });
-            addDetail('Letzte Ablesung', dateStr);
+            addDetail('Letzte Ablesung', datumText(m.last_reading_date));
             addDetail('Tage seitdem', `${m.days_since_reading} Tage`);
         } else {
             addDetail('Letzte Ablesung', '—');
@@ -7552,7 +8917,7 @@ function renderFinanceCharts(cashflowData) {
                 {
                     label: 'Einnahmen (ausstehend)',
                     data: cashflowData.map(d => d.in_forecast || 0),
-                    backgroundColor: "rgba(16, 185, 129, 0.35)",
+                    backgroundColor: DIAGRAMM_FARBE.gruen + '59',
                     borderColor: DIAGRAMM_FARBE.gruen,
                     borderWidth: 1,
                     borderDash: [4, 4],
@@ -7567,7 +8932,7 @@ function renderFinanceCharts(cashflowData) {
                 {
                     label: 'Ausgaben (ausstehend)',
                     data: cashflowData.map(d => d.out_forecast || 0),
-                    backgroundColor: "rgba(239, 68, 68, 0.35)",
+                    backgroundColor: DIAGRAMM_FARBE.rot + '59',
                     borderColor: DIAGRAMM_FARBE.rot,
                     borderWidth: 1,
                     borderDash: [4, 4],
@@ -7671,7 +9036,7 @@ function showKpiHistoryModal(title, historyData, unit) {
     const content = document.getElementById('kpi-history-modal-content');
     
     if (!historyData || historyData.length === 0) {
-        content.innerHTML = '<p style="color: var(--text-muted); text-align: center;">Keine historischen Daten vorhanden.</p>';
+        content.innerHTML = '<p style="color: var(--text-muted); text-align: center;">Für diese Kennzahl gibt es noch keine Werte aus früheren Jahren.</p>';
         modal.classList.add('active');
         return;
     }
@@ -7679,7 +9044,7 @@ function showKpiHistoryModal(title, historyData, unit) {
     let rows = '';
     historyData.forEach((entry, idx) => {
         const isLast = idx === historyData.length - 1;
-        const bgColor = isLast ? 'background: rgba(99, 102, 241, 0.08);' : '';
+        const bgColor = isLast ? 'background: var(--primary-tint);' : '';
         const fontWeight = isLast ? 'font-weight: 600;' : '';
         const valueStr = unit === '€'
             ? entry.value.toLocaleString('de-DE', {style: 'currency', currency: 'EUR'})
@@ -7687,20 +9052,20 @@ function showKpiHistoryModal(title, historyData, unit) {
         const period = entry.period || entry.year;
         rows += `
             <tr style="${bgColor}">
-                <td style="padding: 10px 12px; ${fontWeight}">${escapeHtml(entry.year)}</td>
-                <td style="padding: 10px 12px; color: var(--text-muted); font-size: 0.85em;">${escapeHtml(period)}</td>
-                <td style="padding: 10px 12px; text-align: right; ${fontWeight}">${escapeHtml(valueStr)}</td>
+                <td class="zelle" style="${fontWeight}">${escapeHtml(entry.year)}</td>
+                <td class="zelle" style="color: var(--text-muted); font-size: 13px;">${escapeHtml(period)}</td>
+                <td class="zelle" style="text-align: right; font-family: var(--font-mono); ${fontWeight}">${escapeHtml(valueStr)}</td>
             </tr>
         `;
     });
     
     content.innerHTML = `
-        <table style="width: 100%; border-collapse: collapse;">
+        <table class="tabelle">
             <thead>
-                <tr style="border-bottom: 2px solid var(--border-color);">
-                    <th style="padding: 8px 12px; text-align: left; font-size: 0.85em; color: var(--text-muted);">Jahr</th>
-                    <th style="padding: 8px 12px; text-align: left; font-size: 0.85em; color: var(--text-muted);">Zeitraum</th>
-                    <th style="padding: 8px 12px; text-align: right; font-size: 0.85em; color: var(--text-muted);">Wert</th>
+                <tr class="tabellen-kopfzeile">
+                    <th class="zelle">Jahr</th>
+                    <th class="zelle">Zeitraum</th>
+                    <th class="zelle" style="text-align: right;">Wert</th>
                 </tr>
             </thead>
             <tbody>${rows}</tbody>
@@ -7942,7 +9307,7 @@ function renderAptConsumptionChart(ownConsumptionData) {
     container.innerHTML = '';
     
     if (!ownConsumptionData || ownConsumptionData.length === 0) {
-        container.innerHTML = '<div style="color: var(--text-muted); text-align: center; width: 100%; grid-column: 1 / -1; padding: 20px;">Keine Verbrauchsdaten vorhanden.</div>';
+        container.innerHTML = '<div style="color: var(--text-muted); text-align: center; width: 100%; grid-column: 1 / -1; padding: 24px;">Noch kein Verbrauch zu sehen. Er erscheint, sobald Zählerstände eingetragen sind.</div>';
         return;
     }
     
@@ -7980,14 +9345,15 @@ function renderAptConsumptionChart(ownConsumptionData) {
     
     Object.values(groupedData).forEach(group => {
         const card = document.createElement('div');
-        card.style.cssText = 'background-color: white; border-radius: 12px; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); border: 1px solid var(--border-color); padding: 20px; display: flex; flex-direction: column; justify-content: center;';
+        card.style.cssText = 'background-color: var(--surface); border-radius: 12px; border: 1px solid var(--border-color); padding: 24px; display: flex; flex-direction: column; justify-content: center;';
         
         const header = document.createElement('div');
-        header.style.cssText = 'color: var(--text-muted); font-weight: 500; font-size: 14px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;';
+        header.style.cssText = 'color: var(--text-muted); font-weight: 500; font-size: 13px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;';
         header.innerHTML = `<span class="verbrauch-symbol">${getIcon(group.category)}</span><span>${escapeHtml(group.category)}</span>`;
         
         const valueDiv = document.createElement('div');
-        valueDiv.style.cssText = 'color: var(--text-main); font-size: 30px; font-weight: 700; text-align: center; margin: 10px 0;';
+        valueDiv.className = 'kpi-wert';
+        valueDiv.style.cssText = 'text-align: center; margin: 12px 0;';
         const latestValue = group.periods[group.periods.length - 1].value;
         valueDiv.innerText = `${latestValue.toLocaleString('de-DE')} ${escapeHtml(group.unit)}`;
         
@@ -7999,7 +9365,7 @@ function renderAptConsumptionChart(ownConsumptionData) {
         } else {
             let periodsHtml = '<div style="font-weight: 500; margin-bottom: 4px;">Zeiträume:</div>';
             group.periods.forEach(p => {
-                periodsHtml += `<div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 2px;">
+                periodsHtml += `<div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 4px;">
                     <span>${escapeHtml(p.period)}</span>
                     <span style="font-weight: 500;">${p.value.toLocaleString('de-DE')} ${escapeHtml(group.unit)}</span>
                 </div>`;
@@ -8192,7 +9558,7 @@ async function fetchPayments() {
     try {
         const res = await fetch('/api/payments');
         if (!res.ok) throw await serverFehler(res);
-        payments = await res.json();
+        payments = imHaus(await res.json());
         renderPayments();
         updateDashboard();
     } catch (e) {
@@ -8248,14 +9614,14 @@ function renderPayments() {
         const zeile = (zahlungen, text, betrag) => zahlungen.length === 0 ? '' : `
                 <div style="display: flex; justify-content: space-between; width: 100%;">
                     <span>${text}:</span>
-                    <strong>${betrag.toLocaleString('de-DE', {style: 'currency', currency: 'EUR'})}</strong>
+                    <strong class="tabular-nums">${betrag.toLocaleString('de-DE', {style: 'currency', currency: 'EUR'})}</strong>
                 </div>`;
         const mieteHtml = zeile(mietePayments, 'Miete', group.latestMiete);
         const nkHtml = zeile(nkPayments, 'Nebenkosten', group.latestNK);
         const gesamtHtml = mietePayments.length + nkPayments.length === 0 ? '' : `<hr style="width: 100%; border: 0; border-top: 1px solid var(--border-color); margin: 4px 0;">
                 <div style="display: flex; justify-content: space-between; width: 100%; color: var(--text-color);">
                     <span><strong>Gesamt (mtl.):</strong></span>
-                    <strong style="color: var(--primary-color);">${totalMonthly.toLocaleString('de-DE', {style: 'currency', currency: 'EUR'})}</strong>
+                    <strong class="tabular-nums" style="color: var(--primary-color);">${totalMonthly.toLocaleString('de-DE', {style: 'currency', currency: 'EUR'})}</strong>
                 </div>`;
         
         const card = document.createElement('div');
@@ -8275,7 +9641,7 @@ function renderPayments() {
                 ${group.kaution > 0 ? `
                 <div style="display: flex; justify-content: space-between; width: 100%; color: var(--text-muted); font-size: 13px;">
                     <span>Kaution:</span>
-                    <span>${group.kaution.toLocaleString('de-DE', {style: 'currency', currency: 'EUR'})}</span>
+                    <span class="tabular-nums">${group.kaution.toLocaleString('de-DE', {style: 'currency', currency: 'EUR'})}</span>
                 </div>
                 ` : ''}
                 ${gesamtHtml}
@@ -8298,11 +9664,20 @@ function openPaymentDetailsModal(tenantId) {
     }
     
     paymentDetailsList.replaceChildren();
+    // Neu geöffnet gilt wieder die Ausgangsfolge (neueste zuerst).
+    paymentDetailsList.closest('table').querySelectorAll('th[aria-sort]').forEach(th => {
+        th.removeAttribute('aria-sort');
+        th.querySelector('.sortier-knopf i').className = 'ph ph-caret-up-down';
+    });
+    document.getElementById('payment-details-fuss').hidden = tenantPayments.length === 0;
+    document.getElementById('payment-details-summe').textContent = euroText(tenantPayments
+        .filter(p => p.payment_date && !nachHeute(p.payment_date))
+        .reduce((summe, p) => summe + Number(p.amount || 0), 0));
     document.getElementById('payment-select-all').checked = false;
     toggleDeleteSelectedButton();
     
     if (tenantPayments.length === 0) {
-        paymentDetailsList.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 24px;">Keine Zahlungen vorhanden.</td></tr>';
+        paymentDetailsList.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 24px;">Für diesen Mieter ist noch keine Zahlung eingetragen.</td></tr>';
     } else {
         tenantPayments.forEach(p => {
             const tr = document.createElement('tr');
@@ -8319,10 +9694,7 @@ function openPaymentDetailsModal(tenantId) {
                 }
             };
 
-            const pDate = new Date(p.payment_date);
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            const isFuture = pDate > today;
+            const isFuture = nachHeute(p.payment_date);
             
             if (isFuture) {
                 tr.style.opacity = '0.6';
@@ -8330,12 +9702,12 @@ function openPaymentDetailsModal(tenantId) {
                 tr.title = 'Diese Einnahme liegt in der Zukunft (Prognose)';
             }
 
-            const dateStr = p.payment_date ? new Date(p.payment_date).toLocaleDateString('de-DE') : '-';
+            const dateStr = p.payment_date ? datumText(p.payment_date) : '-';
             tr.innerHTML = `
                 <td style="text-align: center;"><input type="checkbox" class="payment-row-cb" value="${p.id}" onchange="toggleDeleteSelectedButton()"></td>
-                <td style="padding: 12px 16px;">${dateStr}${isFuture ? ' <i class="ph ph-clock text-secondary" style="font-size: 0.9em; margin-left: 4px;" title="Zukunft"></i>' : ''}</td>
-                <td><span class="badge ${p.type === 'Miete' ? 'badge-primary' : (p.type === 'Nebenkostenvorauszahlung' ? 'badge-info' : 'badge-secondary')}" style="font-size: 0.85em; padding: 4px 8px;">${escapeHtml(p.type)}</span></td>
-                <td style="text-align: right; font-weight: 500;">${p.amount.toLocaleString('de-DE', {style: 'currency', currency: 'EUR'})}</td>
+                <td data-wert="${escapeHtml(p.payment_date || '')}">${dateStr}${isFuture ? ' <i class="ph ph-clock text-secondary" style="font-size: 13px; margin-left: 4px;" title="Zukunft"></i>' : ''}</td>
+                <td><span class="badge ${p.type === 'Miete' ? 'badge-primary' : (p.type === 'Nebenkostenvorauszahlung' ? 'badge-info' : 'badge-secondary')}" style="font-size: 13px; padding: 4px 8px;">${escapeHtml(p.type)}</span></td>
+                <td class="text-right" data-wert="${Number(p.amount)}" style="font-weight: 500;">${p.amount.toLocaleString('de-DE', {style: 'currency', currency: 'EUR'})}</td>
                 <td style="text-align: center; width: 60px;">
                     <button class="btn-icon" onclick="deletePayment(${p.id})" title="Löschen"><i class="ph ph-trash" style="color: var(--danger-color);"></i></button>
                 </td>
@@ -8628,7 +10000,7 @@ async function openInterpolationAudit(meter_id, start_date, end_date) {
                     const pct = getPct(r.date);
                     return `
                     <div class="timeline-marker" style="left: ${pct}%;">
-                        <div>${new Date(r.date).toLocaleDateString('de-DE')}</div>
+                        <div>${escapeHtml(datumText(r.date))}</div>
                         <div style="font-weight:600;">${r.total.toFixed(1)} ${escapeHtml(data.unit)}</div>
                     </div>`;
                 }).join('')}
@@ -8639,11 +10011,11 @@ async function openInterpolationAudit(meter_id, start_date, end_date) {
                 <!-- Target Span Marker -->
                 <div class="timeline-marker" style="left: ${targetStartPct}%; top: 60px; color: var(--primary);">
                     <div>Start Abrechnung</div>
-                    <div style="font-weight:600;">${new Date(data.target_start_date).toLocaleDateString('de-DE')}</div>
+                    <div style="font-weight:600;">${escapeHtml(datumText(data.target_start_date))}</div>
                 </div>
                 <div class="timeline-marker" style="left: ${targetEndPct}%; top: 60px; color: var(--primary);">
                     <div>Ende Abrechnung</div>
-                    <div style="font-weight:600;">${new Date(data.target_end_date).toLocaleDateString('de-DE')}</div>
+                    <div style="font-weight:600;">${escapeHtml(datumText(data.target_end_date))}</div>
                 </div>
                 
                 <!-- Overlaps -->
@@ -8685,9 +10057,9 @@ async function openInterpolationAudit(meter_id, start_date, end_date) {
                 
                 tableRows += `
                 <tr>
-                    <td>${stepCount++}. Intervall<br><span style="font-size:0.85em;color:var(--text-muted);">${d1.toLocaleDateString('de-DE')} bis ${d2.toLocaleDateString('de-DE')}</span></td>
+                    <td>${stepCount++}. Intervall<br><span style="font-size: 13px;color:var(--text-muted);">${d1.toLocaleDateString('de-DE')} bis ${d2.toLocaleDateString('de-DE')}</span></td>
                     <td>${intervalConsumption.toFixed(2)} ${escapeHtml(data.unit)} / ${intervalDays} Tage<br><b>= ${dailyRate.toFixed(4)} ${escapeHtml(data.unit)}/Tag</b></td>
-                    <td>${overlapDays} Tage<br><span style="font-size:0.85em;color:var(--text-muted);">(${overlapStart.toLocaleDateString('de-DE')} - ${(new Date(overlapEnd.getTime() - (1000 * 60 * 60 * 24))).toLocaleDateString('de-DE')})</span></td>
+                    <td>${overlapDays} Tage<br><span style="font-size: 13px;color:var(--text-muted);">(${overlapStart.toLocaleDateString('de-DE')} - ${(new Date(overlapEnd.getTime() - (1000 * 60 * 60 * 24))).toLocaleDateString('de-DE')})</span></td>
                     <td style="font-weight:600; text-align:right;">${partConsumption.toFixed(2)} ${escapeHtml(data.unit)}</td>
                 </tr>
                 `;
@@ -8709,10 +10081,10 @@ async function openInterpolationAudit(meter_id, start_date, end_date) {
                 
                 tableRows += `
                 <tr style="background:var(--warning-bg);">
-                    <td>Fallback-Schätzung<br><span style="font-size:0.85em;color:var(--text-muted);">Für Randtage</span></td>
+                    <td>Fallback-Schätzung<br><span style="font-size: 13px;color:var(--text-muted);">Für Randtage</span></td>
                     <td>Globale Rate<br><b>= ${globalRate.toFixed(4)} ${escapeHtml(data.unit)}/Tag</b></td>
                     <td>${missingDays} fehlende Tage</td>
-                    <td style="font-weight:600; text-align:right; color:var(--warning-color);">+ ${fallbackConsumption.toFixed(2)} ${escapeHtml(data.unit)}</td>
+                    <td style="font-weight:600; text-align:right; color:var(--warning-text);">+ ${fallbackConsumption.toFixed(2)} ${escapeHtml(data.unit)}</td>
                 </tr>
                 `;
             }
@@ -8720,11 +10092,11 @@ async function openInterpolationAudit(meter_id, start_date, end_date) {
         
         timelineHtml += `
             </div>
-            <div style="margin-top: 60px; font-size: 0.85em; color: var(--text-muted);">
+            <div style="margin-top: 48px; font-size: 13px; color: var(--text-muted);">
                 <b>Legende:</b> 
-                <span style="display:inline-block; width:12px; height:12px; background:#d1d5db; margin-left:8px; border-radius:2px;"></span> Ablesezeitraum
+                <span style="display:inline-block; width:12px; height:12px; background:var(--control-border); margin-left:8px; border-radius:2px;"></span> Ablesezeitraum
                 <span style="display:inline-block; width:12px; height:12px; background:var(--primary); margin-left:8px; border-radius:2px;"></span> Abrechnungszeitraum
-                <span style="display:inline-block; width:12px; height:12px; border: 1px solid var(--secondary); background: repeating-linear-gradient(45deg, rgba(16,185,129,0.4), rgba(16,185,129,0.4) 3px, rgba(16,185,129,0.7) 3px, rgba(16,185,129,0.7) 6px); margin-left:8px; border-radius:2px;"></span> Verrechnete Überlappung
+                <span style="display:inline-block; width:12px; height:12px; border: 1px solid var(--warning-text); background: repeating-linear-gradient(45deg, var(--warning-bg), var(--warning-bg) 3px, var(--warning-color) 3px, var(--warning-color) 6px); margin-left:8px; border-radius:2px;"></span> Verrechnete Überlappung
             </div>
         </div>`;
         
@@ -8741,7 +10113,7 @@ async function openInterpolationAudit(meter_id, start_date, end_date) {
             </thead>
             <tbody>
                 ${tableRows}
-                <tr style="background:var(--bg-color); font-size: 1.1em;">
+                <tr style="background:var(--bg-color);">
                     <td colspan="3" style="text-align:right; font-weight:600;">Gesamtsumme (Interpoliert):</td>
                     <td style="font-weight:600; color:var(--primary); text-align:right;">${totalConsumption.toFixed(2)} ${escapeHtml(data.unit)}</td>
                 </tr>

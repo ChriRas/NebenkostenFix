@@ -51,7 +51,7 @@ RECHNUNGEN = (
     ('Grundsteuer', '460.00', 'Grundsteuerbescheid', 'BSP-GS'),
     ('Straßenreinigung und Müllbeseitigung', '540.00', 'Müllabfuhr und Straßenreinigung', 'BSP-MUELL'),
     ('Sach- und Haftpflichtversicherung', '610.00', 'Gebäudeversicherung', 'BSP-VERS'),
-    ('Beleuchtung (Allgemeinstrom)', '190.00', 'Strom für Treppenhaus und Keller', 'BSP-STROM'),
+    ('Allgemeinstrom', '190.00', 'Strom für Treppenhaus und Keller', 'BSP-STROM'),
 )
 VORAUSZAHLUNG = '60.00'
 

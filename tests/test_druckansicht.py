@@ -36,7 +36,7 @@ def _print_block() -> str:
 def test_druck_haelt_die_anwendung_zurueck():
     block = _print_block()
     for selektor in ('.sidebar', '.top-header', '.toast-stapel',
-                     '.modal-overlay', '.kopf-aktionen', '.background-blobs'):
+                     '.modal-overlay', '.kopf-aktionen'):
         # Der Selektor steht im Block und wird dort ausgeblendet.
         zeile = next(z for z in block.splitlines() if selektor in z
                      and 'display' not in z)

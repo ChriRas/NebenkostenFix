@@ -153,8 +153,8 @@ def test_der_wechsel_ist_kein_rueckwaerts_laufender_stand():
 
 def test_die_umlage_rechnet_mit_beiden_zaehlern():
     """Allgemeinstrom direkt nach Verbrauch (wie NK-105): 1000 → 1100, Tausch, 0 → 150."""
-    kat = kategorie(id=11, name='Beleuchtung (Allgemeinstrom)', braucht_zaehler=False)
-    name = 'Beleuchtung (Allgemeinstrom)'
+    kat = kategorie(id=11, name='Allgemeinstrom', braucht_zaehler=False)
+    name = 'Allgemeinstrom'
     alt = _z(1, (date(2024, 1, 1), 1000, None), (WECHSEL, 1100, None), kat=11, name=name)
     neu = _z(2, (WECHSEL, 0, None), (date(2025, 1, 1), 150, None), ersetzt=1, kat=11, name=name)
     v = vorgang([rechnung('100.00', kat=kat)], profile={11: 'direkt'}, zaehler=[alt, neu])

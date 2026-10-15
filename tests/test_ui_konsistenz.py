@@ -103,8 +103,8 @@ def test_index_nutzt_die_designklassen_statt_inline_farben():
     assert 'class="btn-gefahr"' in html
     assert 'btn-secondary btn-tint' in html
     # NK-144: zwei Auswahlpillen im Rechnungen-Tab (Liste / Zeitleiste);
-    # NK-156: fünf Gruppen der Einstellungen (K8).
-    assert len(re.findall(r'class="filter-pill', html)) == 12
+    # NK-156: fünf Gruppen der Einstellungen; Rechnungen: Eingang / Alle / Nach Kostenart.
+    assert len(re.findall(r'class="filter-pill', html)) == 15
 
 
 def test_kein_off_palette_farbliteral_in_inline_styles():
@@ -127,7 +127,7 @@ def test_diagramm_farbe_ist_einzige_stelle_fuer_kategorienfarben():
     assert "const DIAGRAMM_FARBE = {" in app
     # Chart-Konfigurationen und Karten nutzen die Palette, keine Literale;
     # erlaubt sind nur die Definitionszeilen der Palette selbst.
-    verboten = re.compile(r"'(?:#3B82F6|#10B981|#F59E0B|#8B5CF6|#EF4444|#9CA3AF)'")
+    verboten = re.compile(r"'(?:#4F46E5|#2E7D6B|#C27A12|#8E4FB8|#A3312A|#8C8FA6)'")
     definition = re.compile(r"^\s*(blau|gruen|gelb|lila|rot|grau):", re.UNICODE)
     treffer = [z for z in app.splitlines()
                if verboten.search(z)
@@ -369,7 +369,8 @@ def test_kopfaktionen_am_handy_im_menue():
     assert "initKopfMenues();" in start[:start.index("\n}\n")]
     menue = app[app.index("function initKopfMenues("):]
     menue = menue[:menue.index("\n}\n")]
-    assert "querySelectorAll('.section-header > .kopf-aktionen')" in menue
+    assert "querySelectorAll('.section-header > .kopf-aktionen, .top-header > .kopf-aktionen')" in menue
+    assert "if (aktionen.parentElement.classList.contains('top-header')) aktionen.before(knopf);" in menue
     for merkmal in ("'btn-secondary kopf-menue-knopf'", "'aria-haspopup'", "'aria-expanded'",
                     "'aria-label', 'Aktionen'", "classList.add('mit-menue')", "'Escape'"):
         assert merkmal in menue, merkmal
@@ -381,3 +382,8 @@ def test_kopfaktionen_am_handy_im_menue():
     zu = re.search(r"\.kopf-aktionen\.mit-menue \{([^}]*)\}", schmal)
     assert zu and "display: none" in zu.group(1) and "position: absolute" in zu.group(1)
     assert re.search(r"\.kopf-aktionen\.mit-menue\.offen \{\s*display: flex;", schmal)
+    # Der Titel muss schrumpfen dürfen, sonst rutscht der Knopf bei langen
+    # Titeln (Mieter, Abrechnungen) unter ihn statt daneben.
+    titel = re.search(r"\.section-header > div:first-child \{([^}]*)\}", schmal)
+    assert titel and "min-width: 0" in titel.group(1) and "flex: 1 1 0" in titel.group(1)
+    assert re.search(r"\.kopf-menue-knopf \{\s*display: inline-flex;\s*align-self: flex-start;", schmal)

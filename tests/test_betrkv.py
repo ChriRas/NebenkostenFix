@@ -92,7 +92,7 @@ def test_niederschlagswasser_ist_eigener_eintrag_nach_flaeche():
     ('Niederschlagswasser', 'Niederschlagswasser'),
     ('Regenwasser', 'Niederschlagswasser'),
     ('Oberflächenwasser', 'Niederschlagswasser'),
-    ('Strom', 'Beleuchtung (Allgemeinstrom)'),
+    ('Strom', 'Allgemeinstrom'),
     ('Wasser', 'Wasserversorgung'),
     ('Dachterrasse', 'Sonstige Betriebskosten'),
 ])
@@ -288,3 +288,17 @@ def test_die_verbundene_anlage_geht_nicht_an_warmwasser():
     assert zuordnung('Verbundene Anlage') == 6
     assert zuordnung('Warmwasser') == 5
     assert zuordnung('Heizung') == 4
+
+
+def test_nr_11_heisst_in_der_oberflaeche_allgemeinstrom():
+    """Der Name "Beleuchtung (Allgemeinstrom)" stand im Katalog und damit in
+    jeder Abrechnung. Der Name ist jetzt "Allgemeinstrom"; das Wort
+    "Beleuchtung" bleibt nur als amtliche Kurzform in BEZEICHNUNGEN und als
+    Erkennungswort fuer den Import."""
+    from pathlib import Path
+
+    assert katalogeintrag('Strom')['name'] == 'Allgemeinstrom'
+    assert not [e['name'] for e in betrkv.KATALOG if 'Beleuchtung' in e['name']]
+    static = Path(__file__).resolve().parent.parent / 'static'
+    for datei in ('index.html', 'app.js'):
+        assert 'Beleuchtung' not in (static / datei).read_text(encoding='utf-8'), datei

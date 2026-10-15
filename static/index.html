@@ -14,47 +14,58 @@
          Kein Code aus dem Internet -- ohne Internet funktioniert alles,
          und keine IP-Adresse geht an Google oder ein CDN (F-54).
          Feste Versionen, Lizenzen liegen neben den Dateien. -->
-    <link rel="stylesheet" href="/static/vendor/fonts/outfit/outfit.css">
+    <link rel="stylesheet" href="/static/vendor/fonts/geist/geist.css">
+    <link rel="stylesheet" href="/static/vendor/fonts/geist-mono/geist-mono.css">
     <link rel="stylesheet" href="/static/vendor/phosphor/regular/style.css">
     <link rel="stylesheet" href="/static/vendor/phosphor/fill/style.css">
-    <link rel="stylesheet" href="/static/style.css?v=12">
+    <link rel="stylesheet" href="/static/style.css?v=13">
+    <!-- Einflug: kommt die Seite frisch von der Anmeldung
+         (formular.js, höchstens 15 s alt), zieht style.css die Indigo-Fläche weg. -->
+    <script>try { if (Date.now() - Number(sessionStorage.getItem('nk-einflug')) < 15000) document.documentElement.classList.add('einflug'); sessionStorage.removeItem('nk-einflug'); } catch (e) { /* ohne Speicher kein Einflug */ }</script>
+    <!-- Thema vor dem ersten Bild setzen, sonst blitzt es hell auf. -->
+    <script>(function () { var t = null; try { t = localStorage.getItem('nk-thema'); } catch (e) { /* ohne Speicher gilt das System */ } if (t !== 'dark' && t !== 'light') t = window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'; document.documentElement.dataset.theme = t; })();</script>
     <script src="/static/vendor/chartjs/chart.umd.min.js"></script>
 </head>
 
 <body>
-    <div class="background-blobs">
-        <div class="blob blob-1"></div>
-        <div class="blob blob-2"></div>
-    </div>
-
     <div class="app-container">
-        <!-- Sidebar -->
-        <aside class="sidebar glass-panel">
-            <div class="logo">
-                <img class="logo-zeichen" src="/static/marke/zeichen.svg" alt="" width="36" height="36">
-                <h2>Nebenkosten<span class="logo-fix">Fix</span></h2>
-            </div>
-            <nav class="nav-menu">
-                <a href="#" class="nav-item active" data-tab="dashboard"><i class="ph ph-squares-four"></i>
-                    Übersicht</a>
-                <a href="#" class="nav-item" data-tab="properties"><i class="ph ph-house"></i> Immobilien</a>
-                <a href="#" class="nav-item" data-tab="tenants"><i class="ph ph-users"></i> Mieter</a>
-                <a href="#" class="nav-item" data-tab="meters"><i class="ph ph-gauge"></i> Zähler &amp; Ablesungen</a>
-                <a href="#" class="nav-item" data-tab="invoices"><i class="ph ph-receipt"></i> Rechnungen &amp; Belege</a>
-                <a href="#" class="nav-item" data-tab="billing"><i class="ph ph-file-text"></i> Abrechnungen</a>
-                <a href="#" class="nav-item" data-tab="payments"><i class="ph ph-coins"></i> Zahlungen</a>
-                <a href="#" class="nav-item" data-tab="reports"><i class="ph ph-chart-line-up"></i> Statistiken</a>
-                <a href="#" class="nav-item" data-tab="settings"><i class="ph ph-gear"></i> Einstellungen</a>
+        <!-- Leiste: vier Bereiche und die Einstellungen. Jeder
+             Bereich hat seine Seiten als Reiter im Seitenkopf (.unter-reiter);
+             initTabs() hält Leiste und Reiter gleich. -->
+        <aside class="sidebar">
+            <a class="logo" href="#" data-gruppe="heute" aria-label="NebenkostenFix, zu Heute">
+                <img class="logo-zeichen" src="/static/marke/zeichen.svg" alt="" width="40" height="40">
+                <h2 class="sr-only">Nebenkosten<span class="logo-fix">Fix</span></h2>
+            </a>
+            <nav class="leiste" aria-label="Bereiche">
+                <a href="#" class="leiste-eintrag active" data-gruppe="heute"><i class="ph ph-tray" aria-hidden="true"></i>Heute<span id="heute-zahl" class="leiste-zahl tabular-nums" hidden></span></a>
+                <a href="#" class="leiste-eintrag" data-gruppe="haus"><i class="ph ph-house" aria-hidden="true"></i>Haus</a>
+                <a href="#" class="leiste-eintrag" data-gruppe="kosten"><i class="ph ph-file-text" aria-hidden="true"></i>Kosten</a>
+                <a href="#" class="leiste-eintrag" data-gruppe="abrechnung"><i class="ph ph-receipt" aria-hidden="true"></i>Abrechnung</a>
+                <span class="leiste-luecke"></span>
+                <button type="button" class="thema-knopf" onclick="themaWechseln()" aria-label="Dunkelmodus einschalten" title="Dunkelmodus einschalten"><i class="ph ph-moon" aria-hidden="true"></i></button>
+                <a href="#" class="leiste-eintrag" data-gruppe="einstellungen"><i class="ph ph-gear" aria-hidden="true"></i>Einstellungen</a>
             </nav>
         </aside>
 
         <!-- Main Content -->
         <main class="main-content">
             <header class="top-header">
-                <div class="greeting">
-                    <h1 id="begruessung">Willkommen bei NebenkostenFix!</h1>
-                    <p>Verwalten Sie Ihre Immobilien und Nebenkostenabrechnungen.</p>
-                </div>
+                <!-- Befehlsfeld: springt zu Seiten, Mietern, Zählern,
+                     Rechnungen und Zahlungen; Strg+K öffnet es überall. -->
+                <button type="button" class="befehl-knopf" id="befehl-oeffnen" onclick="befehlOeffnen()"
+                    aria-haspopup="dialog" aria-keyshortcuts="Control+K">
+                    <i class="ph ph-magnifying-glass" aria-hidden="true"></i>
+                    <span class="befehl-text">Suchen nach Seite, Mieter, Zähler …</span>
+                    <span class="befehl-tasten" aria-hidden="true"><kbd>Strg</kbd><kbd>K</kbd></span>
+                </button>
+                <span class="kopf-luecke"></span>
+                <label class="haus-wahl form-group" id="haus-wahl-feld" hidden>
+                    <span class="sr-only">Nach Immobilie filtern</span>
+                    <select id="haus-wahl" onchange="hausWaehlen(this)"></select>
+                </label>
+                <a class="chip-anmeldung" id="kopf-anmeldung-aus" href="/einrichtung" hidden
+                    title="Die Anmeldung ist ausgeschaltet. Jeder in Ihrem Netz kann alle Daten sehen.">Anmeldung aus</a>
                 <div class="kopf-aktionen">
                     <!-- Angemeldeter Benutzer und Abmelden (NK-021). Der Name
                          wird von zeigeAngemeldetenBenutzer() aus /api/auth/me
@@ -67,6 +78,14 @@
                     <button class="btn-secondary" onclick="zeigeHilfe()"
                         title="Grundlagen, Checkliste, Begriffe und Kurzanleitung">
                         <i class="ph ph-question"></i> Hilfe öffnen
+                    </button>
+                    <!-- Schnellschalter für größere Schrift (wie unter Einstellungen). -->
+                    <button class="btn-secondary" id="kopf-schrift" onclick="schriftgroesseWechseln()"
+                        title="Schrift in drei Stufen vergrößern: 100, 115 und 130 %">
+                        <i class="ph ph-text-aa"></i> <span id="kopf-schrift-text">Größere Schrift einschalten</span>
+                    </button>
+                    <button class="btn-secondary" id="kopf-thema" onclick="themaWechseln()">
+                        <i class="ph ph-moon" aria-hidden="true"></i> <span class="thema-text">Dunkelmodus einschalten</span>
                     </button>
                     <button class="btn-secondary" onclick="huelle.drucken()"
                         title="Die aktive Ansicht über den Druckdialog des Browsers drucken">
@@ -82,6 +101,23 @@
                 </div>
             </header>
 
+            <!-- Seiten eines Bereichs als Reiter. initTabs() hängt die
+                 Leiste unter den Kopf der offenen Seite; ein Bereich mit nur einer
+                 Seite zeigt keine Reiter. Ziel, Beschriftung und Icon wie im
+                 Glossar § 5. -->
+            <nav class="nav-menu unter-reiter" aria-label="Seiten des Bereichs" hidden>
+                <a href="#" class="nav-item active" data-tab="dashboard" data-gruppe="heute"><i class="ph ph-squares-four"></i>
+                    Übersicht</a>
+                <a href="#" class="nav-item" data-tab="properties" data-gruppe="haus"><i class="ph ph-house"></i> Immobilien</a>
+                <a href="#" class="nav-item" data-tab="tenants" data-gruppe="haus"><i class="ph ph-users"></i> Mieter</a>
+                <a href="#" class="nav-item" data-tab="meters" data-gruppe="haus"><i class="ph ph-gauge"></i> Zähler &amp; Ablesungen</a>
+                <a href="#" class="nav-item" data-tab="invoices" data-gruppe="kosten"><i class="ph ph-receipt"></i> Rechnungen &amp; Belege</a>
+                <a href="#" class="nav-item" data-tab="billing" data-gruppe="abrechnung"><i class="ph ph-file-text"></i> Abrechnungen</a>
+                <a href="#" class="nav-item" data-tab="payments" data-gruppe="kosten"><i class="ph ph-coins"></i> Zahlungen</a>
+                <a href="#" class="nav-item" data-tab="reports" data-gruppe="abrechnung"><i class="ph ph-chart-line-up"></i> Statistiken</a>
+                <a href="#" class="nav-item" data-tab="settings" data-gruppe="einstellungen"><i class="ph ph-gear"></i> Einstellungen</a>
+            </nav>
+
             <!-- NK-201: Warnung im offenen Modus, sichtbar nur in Docker. NK-214:
                  unter dem Kopf im Fluss, nicht schwebend über Kopf und Dialogen. -->
             <div id="ohne-anmeldung-hinweis" class="hinweis-leiste hinweis-band" role="status" hidden>
@@ -93,14 +129,26 @@
             <!-- TAB: DASHBOARD -->
             <section class="content-section tab-content active" id="tab-dashboard">
                 <div class="section-header">
-                    <h2>Übersicht</h2>
+                    <div>
+                        <h2>Heute</h2>
+                        <!-- NK-156: „zurück“ nur, wenn es schon etwas gibt. -->
+                        <p class="section-untertitel"><span id="begruessung">Willkommen bei NebenkostenFix!</span>
+                            <span id="heute-stand"></span></p>
+                    </div>
                 </div>
+                <!-- Aufgaben: was jetzt zu tun ist, gebaut von
+                     zeigeHeute() aus den geladenen Daten. -->
+                <div id="heute-aufgaben" class="aufgaben" hidden></div>
                 <!-- Erste Schritte (NK-072): die Führung bei leerer Anwendung.
                      Verschwindet, sobald alle Pflichtschritte erledigt sind;
                      gezeichnet wird sie von zeigeErsteSchritte() in app.js. -->
                 <div id="erste-schritte" class="erste-schritte glass-panel" hidden>
                     <div class="erste-schritte-kopf">
-                        <h2>Erste Schritte</h2>
+                        <div class="erste-schritte-titel">
+                            <h2>Erste Schritte</h2>
+                            <button type="button" class="btn-tint btn-klein" onclick="tourStarten()">
+                                <i class="ph ph-signpost" aria-hidden="true"></i> Einführung ansehen</button>
+                        </div>
                         <p>Fünf Schritte bis zur ersten Abrechnung, dazu zwei optionale: vorher ausprobieren und Zähler.</p>
                         <div class="erste-schritte-fortschritt">
                             <span id="erste-schritte-stand" class="erste-schritte-stand">0 von 5 erledigt</span>
@@ -143,7 +191,10 @@
             <!-- TAB: METERS -->
             <section class="content-section tab-content" id="tab-meters">
                 <div class="section-header">
-                    <h2>Zähler &amp; Ablesungen</h2>
+                    <div>
+                        <h2>Zähler &amp; Ablesungen</h2>
+                        <p class="section-untertitel">Zähler der Wohnungen und ihre abgelesenen Stände</p>
+                    </div>
                     <div class="kopf-aktionen">
                         <button class="btn-secondary" onclick="oeffneImport('zaehlerstaende')"><i class="ph ph-file-xls" aria-hidden="true"></i>
                             Aus Excel importieren</button>
@@ -154,24 +205,54 @@
                             erfassen</button>
                     </div>
                 </div>
-                <div class="spalte" id="meters-container">
-                    <!-- Grouped by property / apartment -->
+                <!-- Liste links, Detail des gewählten Zählers rechts (app.js zeigeZaehlerDetail). -->
+                <div class="zaehler-ansicht">
+                    <div class="spalte" id="meters-container"><div class="skelett" role="status" aria-label="Wird geladen"><span></span><span></span><span></span></div></div>
+                    <aside class="zaehler-detail glass-panel" id="zaehler-detail" aria-label="Gewählter Zähler"></aside>
                 </div>
             </section>
 
             <!-- TAB: INVOICES -->
             <section class="content-section tab-content" id="tab-invoices">
                 <div class="section-header">
-                    <h2>Belege &amp; Sammelrechnungen <button type="button" class="begriff-hilfe" aria-label="Begriff erklären" data-begriff="sammelrechnung"><i class="ph ph-question" aria-hidden="true"></i></button></h2>
-                    <button class="btn-primary" onclick="openAddDocumentModal()"><i class="ph ph-upload-simple"></i>
-                        Beleg hochladen</button>
-                </div>
-                <div id="documents-container" style="margin-bottom: 48px;">
-                    <!-- Document table -->
+                    <div>
+                        <h2>Rechnungen &amp; Belege <button type="button" class="begriff-hilfe" aria-label="Begriff erklären" data-begriff="sammelrechnung"><i class="ph ph-question" aria-hidden="true"></i></button></h2>
+                        <!-- Kopfzahl: Summe und Zahl der Rechnungen, per JS (zeigeKopfzahl). -->
+                        <p class="section-untertitel" id="kosten-kopfzahl">Belege hochladen und als Rechnung übernehmen</p>
+                    </div>
+                    <!-- Drei Ansichten einer Seite. Eingang und „Alle Rechnungen“
+                         zeigen links die Liste, in der Mitte den Beleg, rechts das Formular. -->
+                    <div class="zeile-eng knopf-zeile" role="group" aria-label="Ansicht">
+                        <button class="filter-pill" id="pill-eingang"
+                            onclick="zeigeKostenAnsicht('eingang')">Eingang <span class="pill-zahl" id="eingang-zahl" hidden></span></button>
+                        <button class="filter-pill active" id="pill-alle"
+                            onclick="zeigeKostenAnsicht('alle')">Alle Rechnungen</button>
+                        <button class="filter-pill" id="pill-kostenart"
+                            onclick="zeigeKostenAnsicht('kostenart')">Nach Kostenart</button>
+                    </div>
+                    <div class="kopf-aktionen">
+                        <button class="btn-secondary" onclick="openAddDocumentModal()"><i class="ph ph-stack" aria-hidden="true"></i>
+                            Sammelbeleg hochladen</button>
+                    </div>
                 </div>
 
-                <div class="section-header section-header-getrennt">
-                    <h2>Alle Rechnungen</h2>
+                <!-- Links Liste und Hochladen, Mitte Beleg, rechts Rechnung.
+                     Das Rechnungsformular ist #invoice-modal, als Spalte eingehängt. -->
+                <div class="eingang" id="kosten-eingang" hidden>
+                    <div class="eingang-links">
+                        <button type="button" class="btn-primary" onclick="document.getElementById('beleg-datei').click()"><i class="ph ph-upload-simple" aria-hidden="true"></i>
+                            Beleg hochladen</button>
+                        <input type="file" id="beleg-datei" accept=".pdf,.jpg,.jpeg,.png,.webp,.heic,.heif,application/pdf,image/jpeg,image/png,image/webp,image/heic" hidden onchange="belegGewaehlt(this)">
+                        <div class="eingang-liste" id="documents-container"><div class="skelett" role="status" aria-label="Wird geladen"><span></span><span></span><span></span></div></div>
+                        <p class="eingang-hinweis"><kbd>J</kbd> <kbd>K</kbd> blättern</p>
+                    </div>
+                    <div class="eingang-vorschau" id="eingang-vorschau"></div>
+                    <div class="eingang-formular" id="eingang-formular"></div>
+                </div>
+
+                <div id="kosten-rechnungen">
+                <div class="section-header">
+                    <h2>Rechnungen nach Kostenart</h2>
                     <!-- Zeitleiste (NK-144): chronologisch nach Ausstellungsdatum,
                          statt die Auffistung nach Erfassung. Auswahl-Pille wie in
                          den Statistiken -- keine Schalter, also ohne Verb. -->
@@ -192,11 +273,11 @@
                     </div>
                 </div>
                 <div class="controls-bar" id="invoice-filter">
-                    <div class="form-group" style="flex: 2;">
+                    <div class="form-group">
                         <input type="text" id="invoice-search" placeholder="Suche nach Rechnungsnr. oder Anbieter..."
                             oninput="renderInvoices()">
                     </div>
-                    <div class="form-group feld-breit">
+                    <div class="form-group">
                         <select id="invoice-category-filter" onchange="renderInvoices()">
                             <option value="">Alle Kategorien</option>
                             <!-- populated dynamically in js -->
@@ -204,17 +285,21 @@
                     </div>
                 </div>
                 <div class="spalte" id="invoices-container">
-                    <!-- Grouped by property -->
+                    <div class="skelett" role="status" aria-label="Wird geladen"><span></span><span></span><span></span></div>
                 </div>
                 <div id="invoices-zeitleiste" style="display: none;">
                     <!-- NK-144: per JS gefuellt (renderInvoiceZeitleiste) -->
+                </div>
                 </div>
             </section>
 
             <!-- TAB: PROPERTIES -->
             <section class="content-section tab-content" id="tab-properties">
                 <div class="section-header">
-                    <h2>Immobilien</h2>
+                    <div>
+                        <h2>Immobilien</h2>
+                        <p class="section-untertitel">Häuser und Wohnungen, die Sie abrechnen</p>
+                    </div>
                     <div class="kopf-aktionen">
                         <button class="btn-secondary" onclick="oeffneImport('wohnungen')"><i class="ph ph-file-xls" aria-hidden="true"></i>
                             Aus Excel importieren</button>
@@ -223,7 +308,7 @@
                     </div>
                 </div>
                 <div class="properties-grid" id="properties-grid">
-                    <div class="loading-state"><i class="ph ph-spinner ph-spin"></i> Lade Immobilien...</div>
+                    <div class="skelett" role="status" aria-label="Wird geladen"><span></span><span></span><span></span></div>
                 </div>
 
                 <!-- Property Details View (hidden by default) -->
@@ -233,7 +318,7 @@
                             <div>
                                 <h3 id="detail-prop-title">Wohnungen in Immobilien-Name</h3>
                                 <p id="detail-prop-sqm"
-                                    style="color: var(--text-muted); font-size: 14px; margin-top: 4px;">Gesamtfläche: 0
+                                    style="color: var(--text-muted); font-size: 13px; margin-top: 4px;">Gesamtfläche: 0
                                     m²</p>
                             </div>
                             <div class="zeile-eng">
@@ -260,7 +345,10 @@
             <!-- TAB: TENANTS -->
             <section class="content-section tab-content" id="tab-tenants">
                 <div class="section-header">
-                    <h2>Mieter</h2>
+                    <div>
+                        <h2>Mieter</h2>
+                        <p class="section-untertitel">Wer in welcher Wohnung wohnt und seit wann</p>
+                    </div>
                     <div class="kopf-aktionen">
                         <button class="btn-secondary" onclick="oeffneImport('mieter')"><i class="ph ph-file-xls" aria-hidden="true"></i>
                             Aus Excel importieren</button>
@@ -269,7 +357,7 @@
                     </div>
                 </div>
                 <div class="spalte" id="tenants-container">
-                    <!-- Grouped tenant tables injected here -->
+                    <div class="skelett" role="status" aria-label="Wird geladen"><span></span><span></span><span></span></div>
                 </div>
             </section>
 
@@ -295,7 +383,7 @@
                 </div>
 
                 <div class="properties-grid raster-einspaltig" id="billing-suggestions-container">
-                    <!-- Suggestions rendered here -->
+                    <div class="skelett" role="status" aria-label="Wird geladen"><span></span><span></span><span></span></div>
                 </div>
 
                 <!-- Wie „Alle Rechnungen“: Abstand, Trennlinie, dann die Überschrift. -->
@@ -306,7 +394,7 @@
                     </div>
                 </div>
                 <div class="properties-grid raster-einspaltig" id="billing-history-container">
-                    <!-- History rendered here -->
+                    <div class="skelett" role="status" aria-label="Wird geladen"><span></span><span></span><span></span></div>
                 </div>
             </section>
 
@@ -509,7 +597,7 @@
                             <button class="btn-primary" id="btn-update-installieren" style="display: none;"
                                 onclick="updateInstallieren()">Update installieren</button>
                         </div>
-                        <p id="update-stand" style="margin: 12px 0 0; line-height: 1.5; font-size: 0.9rem;"></p>
+                        <p id="update-stand" style="margin: 12px 0 0; line-height: 1.5; font-size: 13px;"></p>
                     </div>
 
                     <!-- NK-153 (D-89): geloeschte Mietverhaeltnisse, deren
@@ -518,7 +606,7 @@
                         <div class="abstand-unten-klein">
                             <h3>Gesperrte Mietverhältnisse</h3>
                         </div>
-                        <p style="margin: 0 0 12px; color: var(--text-muted); line-height: 1.5; font-size: 0.9rem;">
+                        <p style="margin: 0 0 12px; color: var(--text-muted); line-height: 1.5; font-size: 13px;">
                             Gelöschte Mieter, deren festgesetzte Abrechnungen und Zahlungen der
                             Aufbewahrungspflicht unterliegen (§ 147 AO, § 257 HGB). Sie sind überall
                             ausgeblendet und werden nach dem genannten Tag automatisch gelöscht.
@@ -575,13 +663,13 @@
                                     <input type="password" id="sicherung-passphrase2" autocomplete="new-password"
                                         minlength="12" placeholder="Passphrase wiederholen" style="flex: 1; min-width: 200px;">
                                 </div>
-                                <p style="font-size: 13px; color: var(--text-muted); margin: 6px 0 0;">
+                                <p style="font-size: 13px; color: var(--text-muted); margin: 8px 0 0;">
                                     Ohne die Passphrase lässt sich die Sicherung nicht mehr öffnen — niemand
                                     kann sie wiederherstellen. Bewahren Sie sie getrennt von der Sicherung auf.
                                 </p>
                             </div>
                         </div>
-                        <div id="sicherung-festplatte" style="display: none; font-size: 13px; padding: 10px 14px; border-radius: 8px; margin-bottom: 16px; line-height: 1.5; background: var(--bg-hover);"></div>
+                        <div id="sicherung-festplatte" style="display: none; font-size: 13px; padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; line-height: 1.5; background: var(--bg-hover);"></div>
                         <div class="form-group feld-zeile">
                             <input class="feld-breit" type="text" id="sicherung-ziel" placeholder="Verzeichnis für die Sicherung"
                                 list="sicherung-ziele">
@@ -590,7 +678,7 @@
                             <button class="btn-secondary" id="btn-sicherung-ordner" style="display: none;"
                                 onclick="sicherungsordnerWaehlen()">Ordner auswählen</button>
                             <button class="btn-primary" id="btn-sicherung-erstellen"
-                                onclick="sicherungErstellen()">Sicherung erstellen</button>
+                                onclick="sicherungErstellen(this)">Sicherung erstellen</button>
                         </div>
                         <!-- NK-156: der Belegexport aus dem globalen Kopf; er ist keine Sicherung,
                              gehört aber zum selben Gedanken „Daten heraus“. Der JSON-Export
@@ -744,6 +832,8 @@
                             dorthin kommen</p>
                     </div>
                     <div class="kopf-aktionen">
+                        <button type="button" class="btn-secondary" onclick="tourStarten()">
+                            <i class="ph ph-signpost" aria-hidden="true"></i> Einführung ansehen</button>
                         <a class="btn-primary" href="/api/hilfe/kurzanleitung.pdf" target="_blank">
                             <i class="ph ph-file-pdf" aria-hidden="true"></i> Kurzanleitung öffnen (PDF)</a>
                     </div>
@@ -776,7 +866,7 @@
                             <li>Straßenreinigung und Müllbeseitigung</li>
                             <li>Gebäudereinigung und Ungezieferbekämpfung</li>
                             <li>Gartenpflege</li>
-                            <li>Beleuchtung (Allgemeinstrom)</li>
+                            <li>Allgemeinstrom</li>
                             <li>Schornsteinreinigung</li>
                             <li>Sach- und Haftpflichtversicherung</li>
                             <li>Hauswart</li>
@@ -885,7 +975,7 @@
                 <div id="analytics-leer" hidden></div>
 
                 <!-- Dynamische Navigation (Pills) -->
-                <div id="analytics-nav" style="display: flex; gap: 12px; margin-bottom: 32px; flex-wrap: wrap;">
+                <div id="analytics-nav" class="zeile-eng" style="margin-bottom: 32px; flex-wrap: wrap;">
                     <!-- Injected by JS -->
                 </div>
 
@@ -918,7 +1008,7 @@
 
                     <!-- Zone 3: Mieterübersicht -->
                     <div class="dashboard-card glass-panel">
-                        <h3 style="margin-bottom: 20px; display: flex; align-items: center; gap: 8px;">
+                        <h3 style="margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">
                             <i class="ph ph-users-three text-primaer"></i>
                             Mieterübersicht
                         </h3>
@@ -959,8 +1049,8 @@
                                 <canvas id="chart-apt-costs"></canvas>
                                 <div id="chart-apt-costs-empty"
                                     style="display: none; text-align: center; color: var(--text-muted);">
-                                    <i class="ph ph-chart-pie-slice"
-                                        style="font-size: 48px; margin-bottom: 16px; opacity: 0.5;"></i>
+                                    <i class="ph ph-chart-pie-slice leer-icon" aria-hidden="true"
+                                        style="margin-inline: auto;"></i>
                                     <p>Noch keine Abrechnung erstellt.<br>Sobald die erste Nebenkostenabrechnung
                                         abgeschlossen ist, sehen Sie hier die Kostenverteilung.</p>
                                 </div>
@@ -993,7 +1083,7 @@
                                     <i class="ph ph-house-line text-primaer"></i>
                                     Noch nichts zu sehen?
                                 </h3>
-                                <p style="margin: 0; color: var(--text-muted); font-size: 0.92em;">
+                                <p style="margin: 0; color: var(--text-muted); font-size: 13px;">
                                     Legen Sie eine Beispielimmobilie an: ein kleines Haus mit zwei Wohnungen,
                                     Zählern in allen vier Zuständen der Aktualität und einer Warnung.
                                     Sie können sie danach wie jede andere Immobilie bearbeiten oder löschen.
@@ -1034,7 +1124,7 @@
                                 <i class="ph ph-warning" style="color: var(--danger-color);"></i>
                                 Warnungen
                             </h3>
-                            <p style="margin: 0 0 16px 0; color: var(--text-muted); font-size: 0.92em;">
+                            <p style="margin: 0 0 16px 0; color: var(--text-muted); font-size: 13px;">
                                 Diese Warnungen zeigen, wo eine Abrechnung ins Wanken gerät: Wer nach Verbrauch
                                 abrechnet, braucht einen Zähler, der die Wohnung misst. Ohne ihn lassen sich diese
                                 Kosten nicht nach Verbrauch verteilen: Heizkosten gehen dann ganz nach Wohnfläche,
@@ -1059,7 +1149,7 @@
                                 <!-- Summary counts injected by JS -->
                             </div>
                         </div>
-                        <p style="margin: 0 0 20px 0; color: var(--text-muted); font-size: 0.92em;">
+                        <p style="margin: 0 0 24px 0; color: var(--text-muted); font-size: 13px;">
                             Die Farbe sagt, wie alt die letzte Ablesung ist: <strong>grün</strong> unter 90 Tagen,
                             <strong>gelb</strong> unter 180, <strong>rot</strong> 180 Tage und mehr —
                             <strong>ohne Punkt</strong> heißt nie gelesen. Ohne aktuellen Stand rechnet die
@@ -1118,7 +1208,10 @@
             <!-- TAB: PAYMENTS -->
             <section class="content-section tab-content" id="tab-payments">
                 <div class="section-header">
-                    <h2>Zahlungen</h2>
+                    <div>
+                        <h2>Zahlungen</h2>
+                        <p class="section-untertitel">Miete, Vorauszahlungen und Nachzahlungen der Mieter</p>
+                    </div>
                     <div class="kopf-aktionen">
                         <button class="btn-secondary" onclick="oeffneImport('zahlungen')"><i class="ph ph-file-xls" aria-hidden="true"></i>
                             Aus Excel importieren</button>
@@ -1140,6 +1233,26 @@
     <!-- NK-160: „Jahr abrechnen“ in fünf Schritten. Früh im Dokument, damit
          Rechnungs-, Ablese- und Anschreibendialog darüber liegen. Gerechnet
          wird über die vorhandenen Routen (generate, finalize). -->
+    <!-- Befehlspalette: Strg+K, siehe initBefehl() in app.js. -->
+    <div class="modal-overlay befehl-overlay" id="befehl-dialog">
+        <div class="modal befehl">
+            <h2 class="sr-only">Springen und suchen</h2>
+            <div class="befehl-eingabe">
+                <i class="ph ph-magnifying-glass" aria-hidden="true"></i>
+                <input type="text" id="befehl-feld" role="combobox" aria-expanded="true"
+                    aria-controls="befehl-liste" aria-autocomplete="list" autocomplete="off"
+                    aria-label="Seite, Mieter, Zähler oder Rechnung suchen"
+                    placeholder="z. B. „Stand Strom“ oder ein Mietername">
+            </div>
+            <div id="befehl-liste" class="befehl-liste" role="listbox" aria-label="Treffer"></div>
+            <div class="befehl-fuss" aria-hidden="true">
+                <span><kbd>↑</kbd><kbd>↓</kbd> wählen</span>
+                <span><kbd>Enter</kbd> öffnen</span>
+                <span><kbd>Esc</kbd> schließen</span>
+            </div>
+        </div>
+    </div>
+
     <div class="modal-overlay" id="jahr-modal">
         <div class="modal glass-panel dialog-breit">
             <div class="modal-header">
@@ -1397,15 +1510,27 @@
                             <tr>
                                 <th style="width: 40px; text-align: center;"><input type="checkbox"
                                         id="payment-select-all" onchange="toggleAllPaymentSelection(this)"></th>
-                                <th>Datum</th>
-                                <th>Typ</th>
-                                <th style="text-align: right; width: 100px;">Betrag</th>
+                                <th data-sort="text">Datum<button type="button" class="sortier-knopf" onclick="tabelleSortieren(this)"
+                                        title="Nach „Datum“ sortieren" aria-label="Nach „Datum“ sortieren"><i class="ph ph-caret-up-down" aria-hidden="true"></i></button></th>
+                                <th data-sort="text">Typ<button type="button" class="sortier-knopf" onclick="tabelleSortieren(this)"
+                                        title="Nach „Typ“ sortieren" aria-label="Nach „Typ“ sortieren"><i class="ph ph-caret-up-down" aria-hidden="true"></i></button></th>
+                                <th class="text-right" data-sort="zahl">Betrag<button type="button" class="sortier-knopf" onclick="tabelleSortieren(this)"
+                                        title="Nach „Betrag“ sortieren" aria-label="Nach „Betrag“ sortieren"><i class="ph ph-caret-up-down" aria-hidden="true"></i></button></th>
                                 <th style="text-align: center; width: 60px;">Aktion</th>
                             </tr>
                         </thead>
                         <tbody id="payment-details-list">
                             <!-- Injected via JS -->
                         </tbody>
+                        <!-- Summe wie in Excel; Prognosen (Zukunft) zählen nicht mit. -->
+                        <tfoot id="payment-details-fuss">
+                            <tr class="summenzeile">
+                                <td></td>
+                                <td colspan="2">Eingegangen bis heute</td>
+                                <td class="text-right" id="payment-details-summe"></td>
+                                <td></td>
+                            </tr>
+                        </tfoot>
                     </table>
                 </div>
             </div>
@@ -1620,9 +1745,9 @@
                     <div class="form-group feld-breit">
                         <label for="tenant-move-out">Auszugsdatum (Optional)</label>
                         <input type="date" id="tenant-move-out">
-                        <small class="feld-hilfe">Der letzte Miettag. Er wird noch berechnet, der Nachmieter zieht am Tag danach ein.</small>
                     </div>
                 </div>
+                <small class="feld-hilfe hilfe-unter-zeile">Auszugsdatum ist der letzte Miettag. Er wird noch berechnet, der Nachmieter zieht am Tag danach ein.</small>
                 <div class="form-group abstand-oben">
                     <label for="tenant-last-billed">Zuletzt abgerechnet bis einschließlich (Optional)
                         <i class="ph ph-question feld-hilfe" title="Das Datum der letzten Ablesung, die in einer Abrechnung enthalten ist — der Anfangspunkt der nächsten Abrechnung. Leer lassen, wenn noch nie abgerechnet wurde."></i></label>
@@ -1638,7 +1763,7 @@
                             <span id="tenant-contract-name">Datei auswählen...</span>
                         </label>
                     </div>
-                    <div id="tenant-contract-info" style="font-size: 0.85rem; color: var(--text-muted); margin-top: 4px; display: none;"></div>
+                    <div id="tenant-contract-info" style="font-size: 13px; color: var(--text-muted); margin-top: 4px; display: none;"></div>
                 </div>
             </div>
             <div class="modal-footer">
@@ -1717,7 +1842,7 @@
     <div class="modal-overlay" id="vorauszahlung-modal">
         <div class="modal glass-panel dialog-vorauszahlung">
             <div class="modal-header">
-                <h2>Vorauszahlungen: <span id="vz-tenant-name"></span></h2>
+                <h2>Vorauszahlungen <button type="button" class="begriff-hilfe" aria-label="Begriff erklären" data-begriff="vorauszahlung"><i class="ph ph-question" aria-hidden="true"></i></button>: <span id="vz-tenant-name"></span></h2>
                 <button class="btn-icon" aria-label="Schließen" onclick="closeVorauszahlungModal()"><i class="ph ph-x"></i></button>
             </div>
             <div class="modal-body">
@@ -1985,7 +2110,7 @@
                             style="display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none;">
                             <input type="checkbox" id="reading-is-official" style="width: 16px; height: 16px;"
                                 onchange="document.getElementById('group-reading-provider').style.display = this.checked ? 'block' : 'none';">
-                            <span style="font-size: 14px; font-weight: 500; color: var(--text-color);">Ablesung stammt aus
+                            <span style="font-size: 15px; font-weight: 500; color: var(--text-color);">Ablesung stammt aus
                                 offizieller Rechnung</span>
                         </label>
                     </div>
@@ -1994,7 +2119,7 @@
                         <select id="reading-provider"></select>
                     </div>
                     <div id="plausibility-alert"
-                        style="display: none; padding: 12px; border-radius: 8px; margin-top: 16px; font-size: 14px; font-weight: 500;">
+                        style="display: none; padding: 12px; border-radius: 8px; margin-top: 16px; font-size: 15px; font-weight: 500;">
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -2138,8 +2263,21 @@
                         <input type="text" id="invoice-number">
                     </div>
                     <div class="form-group">
-                        <label>Anbieter</label>
-                        <select id="invoice-provider" required></select>
+                        <label for="invoice-provider">Anbieter</label>
+                        <div class="anbieter-zeile">
+                            <select id="invoice-provider" required></select>
+                            <button type="button" class="btn-secondary" onclick="anbieterFeldZeigen()">Anbieter anlegen</button>
+                        </div>
+                        <!-- Anbieter direkt hier anlegen, nicht erst in den Einstellungen. -->
+                        <div id="anbieter-neu" class="anbieter-zeile" hidden>
+                            <input type="text" id="anbieter-neu-name" maxlength="200" placeholder="z. B. Stadtwerke"
+                                aria-label="Name des neuen Anbieters">
+                            <button type="button" class="btn-primary" onclick="anbieterImFormularAnlegen()">Speichern</button>
+                        </div>
+                        <small id="anbieter-leer-hinweis" class="text-muted" hidden>
+                            Noch kein Anbieter angelegt. Tragen Sie ein, wer die Rechnung geschickt hat,
+                            zum Beispiel die Stadtwerke.
+                        </small>
                     </div>
                     <div class="felder-nebeneinander">
                         <div class="form-group feld-breit">
@@ -2260,7 +2398,7 @@
             </div>
             <div class="modal-body rollbereich">
                 <!-- Abrechnungszeitraum frei wählbar, vorbelegt aus den Kategorien (NK-119) -->
-                <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                <div class="zeitraum-felder">
                     <div class="form-group feld-breit feld-min">
                         <label for="billing-period-start">Beginn des Abrechnungszeitraums</label>
                         <input type="date" id="billing-period-start" required>
@@ -2326,13 +2464,13 @@
                 <div class="form-group">
                     <label for="frei-mieter">Mieter</label>
                     <select id="frei-mieter" class="form-control"></select>
-                    <p style="margin: 8px 0 0 0; color: var(--text-muted); font-size: 14px;">
+                    <p style="margin: 8px 0 0 0; color: var(--text-muted); font-size: 13px;">
                         Abgerechnet wird auf das Mietverhältnis dieser Person; liegt der
                         gewählte Zeitraum vor dem Einzug oder nach dem Auszug, stutzt die
                         Abrechnung ihn auf den Mietzeitraum.
                     </p>
                 </div>
-                <div style="display: flex; gap: 12px; flex-wrap: wrap; margin-top: 8px;">
+                <div class="zeitraum-felder" style="margin-top: 8px;">
                     <div class="form-group feld-breit feld-min">
                         <label for="frei-period-start">Beginn des Abrechnungszeitraums</label>
                         <input type="date" id="frei-period-start" required>
@@ -2343,7 +2481,7 @@
                     </div>
                 </div>
                 <div id="frei-zeitraumvorschlag" class="zeitraumvorschlag" hidden></div>
-                <p style="margin-bottom: 0; color: var(--text-muted); font-size: 14px;">
+                <p style="margin-bottom: 0; color: var(--text-muted); font-size: 13px;">
                     In die Abrechnung fließen alle Kostenarten ein, für die im gewählten
                     Zeitraum Rechnungen vorliegen. Vorbelegt ist der Vorschlag der App, ohne
                     Vorschlag das vergangene Kalenderjahr. Sie können beide Daten frei ändern.
@@ -2410,14 +2548,14 @@
                         class="ph ph-x"></i></button>
             </div>
             <div class="modal-body">
-                <p id="anschreiben-status" style="margin: 0 0 12px 0; color: var(--text-muted); font-size: 0.9rem;"></p>
+                <p id="anschreiben-status" style="margin: 0 0 12px 0; color: var(--text-muted); font-size: 13px;"></p>
                 <div class="form-group">
                     <label for="anschreiben-text">Der Text des Anschreibens. Platzhalter füllt die Software aus.</label>
                     <textarea id="anschreiben-text" rows="12" style="width: 100%; font-family: inherit;"></textarea>
                 </div>
                 <div class="form-group">
                     <label>Platzhalter</label>
-                    <p id="anschreiben-platzhalter" style="margin: 0; color: var(--text-muted); font-size: 0.9rem;"></p>
+                    <p id="anschreiben-platzhalter" style="margin: 0; color: var(--text-muted); font-size: 13px;"></p>
                 </div>
             </div>
             <div class="modal-footer">
@@ -2520,7 +2658,7 @@
             <div class="modal-header">
                 <div>
                     <h2 style="margin-bottom: 4px;">Berechnungsprotokoll</h2>
-                    <p style="color: var(--text-muted); font-size: 0.9em; margin: 0;">Der Dreisatz hinter den Kulissen: Transparente Darstellung der Stückweise-Interpolation</p>
+                    <p style="color: var(--text-muted); font-size: 13px; margin: 0;">Der Dreisatz hinter den Kulissen: Transparente Darstellung der Stückweise-Interpolation</p>
                 </div>
                 <button class="btn-icon no-print"
                     onclick="document.getElementById('interpolation-audit-modal').classList.remove('active')" aria-label="Schließen"><i
@@ -2533,7 +2671,7 @@
                 <button type="button" class="btn-secondary"
                     onclick="document.getElementById('interpolation-audit-modal').classList.remove('active')">Schließen</button>
                 <button type="button" class="btn-primary" onclick="huelle.drucken()">
-                    <i class="ph ph-printer" style="margin-right: 6px;"></i> Drucken / als PDF speichern
+                    <i class="ph ph-printer" style="margin-right: 8px;"></i> Drucken / als PDF speichern
                 </button>
             </div>
         </div>
@@ -2602,6 +2740,25 @@
         <button type="button" class="btn-secondary" onclick="entwurfVerwerfen()">Entwurf löschen</button>
     </div>
 
+    <!-- Die Einführung als Sprechblasen-Tour. Der Ring hebt die
+         Stelle hervor, auf die die Blase zeigt; gezeichnet von tourZeigen(). -->
+    <div id="tour-ring" class="tour-ring" hidden></div>
+    <div id="tour" class="tour-blase" role="dialog" aria-modal="false"
+         aria-labelledby="tour-titel" aria-describedby="tour-text" hidden>
+        <div class="tour-kopf">
+            <span id="tour-stand" class="tour-stand"></span>
+            <button type="button" class="tour-zu" onclick="tourBeenden()" aria-label="Einführung schließen">
+                <i class="ph ph-x" aria-hidden="true"></i></button>
+        </div>
+        <strong id="tour-titel" class="tour-titel"></strong>
+        <p id="tour-text"></p>
+        <div class="tour-fuss">
+            <span id="tour-punkte" class="tour-punkte" aria-hidden="true"></span>
+            <button type="button" class="btn-secondary btn-klein" id="tour-zurueck" onclick="tourSchritt(-1)">Zurück</button>
+            <button type="button" class="btn-primary btn-klein" id="tour-weiter" onclick="tourSchritt(1)">Weiter</button>
+        </div>
+    </div>
+
     <!-- NK-158: die Erklärung hinter einem „?“ an einem Fachbegriff. -->
     <div id="begriff-blase" class="begriff-blase" role="dialog" aria-live="polite" hidden>
         <strong id="begriff-blase-titel"></strong>
@@ -2610,7 +2767,7 @@
     </div>
     <script src="/static/formular.js?v=2"></script>
     <script src="/static/umzug.js?v=1"></script>
-    <script src="/static/app.js?v=28"></script>
+    <script src="/static/app.js?v=29"></script>
 </body>
 
 </html>

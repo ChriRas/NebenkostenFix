@@ -44,6 +44,7 @@ from pathlib import Path
 
 from sqlalchemy.exc import SQLAlchemyError
 
+from nebenkostenfix import betrkv
 from nebenkostenfix.geld import GeldFehler, runde
 
 MAX_ZEILEN = 5000
@@ -74,9 +75,9 @@ KOSTENART_ALIASE = {
     'abwasser': 'Entwässerung',
     'kanal': 'Entwässerung',
     'regenwasser': 'Niederschlagswasser',
-    'allgemeinstrom': 'Beleuchtung (Allgemeinstrom)',
-    'hausstrom': 'Beleuchtung (Allgemeinstrom)',
-    'treppenhausbeleuchtung': 'Beleuchtung (Allgemeinstrom)',
+    'allgemeinstrom': 'Allgemeinstrom',
+    'hausstrom': 'Allgemeinstrom',
+    'treppenhausbeleuchtung': 'Allgemeinstrom',
     'versicherung': 'Sach- und Haftpflichtversicherung',
     'gebaeudeversicherung': 'Sach- und Haftpflichtversicherung',
     'hausmeister': 'Hauswart',
@@ -547,7 +548,13 @@ class _Aufloeser:
         treffer = self.kostenarten.get(schluessel)
         if treffer is None:
             ziel = KOSTENART_ALIASE.get(schluessel)
-            treffer = self.kostenarten.get(normiert(ziel)) if ziel else None
+            # Ein früherer Katalogname im Bestand ist die Katalog-Kostenart
+            # (Migration übersprungen); ein gleichnamiger Eintrag daneben ist eigener.
+            for kandidat in ([f for f, h in betrkv.FRUEHERE_NAMEN.items() if h == ziel] + [ziel]
+                             if ziel else []):
+                treffer = self.kostenarten.get(normiert(kandidat))
+                if treffer is not None:
+                    break
             if treffer is None and len(schluessel) >= 4:
                 teil = [k for n, k in self.kostenarten.items() if schluessel in n]
                 treffer = teil[0] if len(teil) == 1 else None

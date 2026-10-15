@@ -29,7 +29,7 @@ def category(name: str) -> CostCategory:
     """Die Kostenart, die hier „name" heisst -- oder die, die es geworden ist.
 
     Seit NK-044 heisst der Seed nach dem Katalog aus § 2 BetrKV: aus „Strom"
-    wurde Nr. 11 „Beleuchtung (Allgemeinstrom)", aus „Gebaeudeversicherung"
+    wurde Nr. 11 „Allgemeinstrom", aus „Gebaeudeversicherung"
     Nr. 13 „Sach- und Haftpflichtversicherung". Die Tests hier reden aber vom
     Fall, nicht vom Etikett, und der Fall ist derselbe geblieben. Der Umweg
     ueber die Nummer haelt sie lesbar und ueberlebt die naechste

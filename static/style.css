@@ -1,27 +1,87 @@
-:root {
-    /* Colors */
-    --primary: #4F46E5;
-    --primary-hover: #4338CA;
-    --secondary: #10B981;
-    --bg-color: #F3F4F6;
-    --text-main: #111827;
-    /* NK-162: #6B7280 lag auf dem Seitengrund und auf Tönungen unter
-       4,5 : 1; #4B5563 hält den Kontrast überall (wie anmeldung.css). */
-    --text-muted: #4B5563;
-    
-    /* Glassmorphism */
-    --glass-bg: rgba(255, 255, 255, 0.7);
-    --glass-border: rgba(255, 255, 255, 0.5);
-    --glass-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.07);
-    
-    /* Spacing & Borders */
-    --radius-lg: 24px;
-    --radius-md: 16px;
-    --radius-sm: 8px;
-    --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+/* =====================================================================
+   Aufgaben: dunkle Leiste links, weiße Arbeitsfläche,
+   Indigo aus dem Logo; Ocker heißt „zu tun“, Ziegel „Fehler/Löschen“,
+   Grün „erledigt“.
 
-    /* Abstands- und Massraster (K6, NK-100): jede Regel, die die
-       Design-Nacharbeit anfasst, nimmt Abstände nur aus diesen Tokens. */
+   Jede Farbe, Schrift, Rundung und jeder Abstand steht hier als Token.
+   Komponenten nennen keine Farbliterale, sondern nur var(--…). Ein
+   anderes Farbschema (etwa ein Dunkelmodus) überschreibt deshalb nur
+   diesen Block, siehe die Vorlage am Ende des Blocks.
+   anmeldung.css spiegelt --primary, --primary-hover und --text-main
+   wortgleich (tests/test_design_einheit.py).
+   ===================================================================== */
+:root {
+    /* Flächen */
+    --bg-color: #FAFAFB;
+    --surface: #FFFFFF;
+    --surface-alt: #FAFAFB;
+    --bg-hover: #F4F4F8;
+    --overlay: rgba(23, 24, 43, 0.4);
+    --vorschau: #F1F1F5;
+
+    /* Schrift. NK-162: --text-muted hält 4,5 : 1 auf Weiß, auf dem
+       Papier und auf den Tönungen der Primärfarbe. */
+    --text-main: #17182B;
+    --text-muted: #5B5D72;
+
+    /* Linien */
+    --border-color: #ECEDF2;
+    --divider: #ECEDF2;
+    --control-border: #D4D5E0;
+    --field-border: #8C8FA6;
+
+    /* Indigo aus dem Logo */
+    --primary: #4F46E5;
+    --primary-hover: #2F289E;
+    --primary-text: #3E36C2;
+    --link-hover: #4038CC;
+    --primary-tint: #EEEDFD;
+    --on-primary: #FFFFFF;
+
+    /* Zustände: erledigt ist Grün, zu tun Ocker, Ziegel nur Löschen und
+       Fehler. */
+    --success-color: #2F7D5B;
+    --success-bg: #E3F1EA;
+    --success-border: #B3D9C5;
+    --warning-color: #C27A12;
+    --warning-text: #8A5300;
+    --warning-bg: #FAEED8;
+    --warning-border: #EBCB94;
+    --warning-strong: #5E3A00;
+    --danger-color: #A3312A;
+    --danger-hover: #82261F;
+    --danger-bg: #F7E4E2;
+    --danger-border: #E3B7B2;
+
+    /* Leiste links */
+    --leiste: #16172A;
+    --leiste-text: #A9ABC4;
+    --leiste-hover: #22233A;
+    --leiste-aktiv: #2A2B45;
+    --leiste-hell: #FFFFFF;
+    --leiste-breite: 96px;
+
+    /* Alte Namen, die app.js und ältere Regeln noch lesen. */
+    --primary-color: var(--primary);
+    --text-color: var(--text-main);
+    --text-secondary: var(--text-muted);
+    --secondary: var(--primary-text);
+
+    /* Schriften (gebündelt unter static/vendor/fonts, OFL) */
+    --font-sans: 'Geist', 'Segoe UI', system-ui, sans-serif;
+    --font-mono: 'Geist Mono', ui-monospace, monospace;
+
+    /* Rundungen: Flächen 12, Befehlsfeld und Leiste 10, Bedienelemente 8,
+       Belegmarken 4, Chips rund */
+    --radius-lg: 12px;
+    --radius-md: 8px;
+    --radius-sm: 4px;
+    --radius-feld: 10px;
+    --radius-chip: 999px;
+    --transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease;
+
+    /* Abstands- und Massraster (K6, NK-100): jede Regel nimmt Abstände
+       nur aus diesen Tokens. */
     --space-1: 4px;
     --space-2: 8px;
     --space-3: 12px;
@@ -31,7 +91,52 @@
     --space-7: 48px;
     --knopf-hoehe: 44px;
     --knopf-hoehe-klein: 32px;
-    --primary-tint: rgba(79, 70, 229, 0.08);
+    /* Seitenrand der Arbeitsfläche: 32 px, auf schmalen Fenstern 16 px */
+    --seiten-rand: clamp(16px, 3vw, 32px);
+}
+
+/* Dunkelmodus. Das Skript im <head> setzt data-theme vor dem ersten
+   Bild, aus der Wahl in nk-thema oder sonst aus der Systemeinstellung. Nur
+   auf dem Bildschirm, gedruckt wird immer hell. Primär- und Gefahrknöpfe
+   werden hell mit dunkler Schrift (--on-primary). Die Kontraste rechnet
+   tests/test_design_einheit.py nach. */
+@media screen {
+    :root[data-theme="dark"] {
+        color-scheme: dark;
+        --bg-color: #0F1020;
+        --surface: #171828;
+        --surface-alt: #141526;
+        --bg-hover: #1F2034;
+        --overlay: rgba(0, 0, 0, 0.6);
+        --vorschau: #1B1C2E;
+        --text-main: #ECECF4;
+        --text-muted: #A3A5BD;
+        --border-color: #26283D;
+        --divider: #26283D;
+        --control-border: #3A3C55;
+        --field-border: #7A7D9A;
+        --primary: #8E88F8;
+        --primary-hover: #AFAAFB;
+        --primary-text: #ABA6FB;
+        --link-hover: #C2BEFC;
+        --primary-tint: #25244A;
+        --on-primary: #10111F;
+        --success-color: #5CC497;
+        --success-bg: #15302A;
+        --success-border: #285C46;
+        --warning-color: #E0A447;
+        --warning-text: #EDB866;
+        --warning-bg: #33270F;
+        --warning-border: #63491A;
+        --warning-strong: #F5D08A;
+        --danger-color: #F08A82;
+        --danger-hover: #F6ABA5;
+        --danger-bg: #3A1C1A;
+        --danger-border: #6B2F2A;
+        --leiste: #0A0B16;
+        --leiste-hover: #17182B;
+        --leiste-aktiv: #202238;
+    }
 }
 
 /* NK-156: ``hidden`` gilt immer. Klassen wie .btn-secondary setzen display und
@@ -47,7 +152,9 @@
 }
 
 body {
-    font-family: 'Outfit', sans-serif;
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.5;
     background-color: var(--bg-color);
     color: var(--text-main);
     min-height: 100vh;
@@ -55,58 +162,36 @@ body {
     position: relative;
 }
 
-/* Background Blobs for aesthetics */
-.background-blobs {
-    position: fixed;
-    top: 0; left: 0; right: 0; bottom: 0;
-    z-index: -1;
-    overflow: hidden;
-    pointer-events: none;
+h1, h2, h3, h4 {
+    line-height: 1.25;
+    text-wrap: balance;
 }
 
-.blob {
-    position: absolute;
-    border-radius: 50%;
-    filter: blur(80px);
-    opacity: 0.6;
+/* Kartentitel stehen auf der Abschnittsstufe (18 px), mit
+   und ohne .karten-kopf. Kleinere Stufen nur über eigene Klassen. */
+h3 {
+    font-size: 18px;
+    font-weight: 600;
 }
 
-.blob-1 {
-    top: -10%;
-    left: -10%;
-    width: 50vw;
-    height: 50vw;
-    background: #A78BFA;
-    animation: float 10s ease-in-out infinite alternate;
+a {
+    color: var(--primary-text);
 }
 
-.blob-2 {
-    bottom: -10%;
-    right: -10%;
-    width: 60vw;
-    height: 60vw;
-    background: #6EE7B7;
-    animation: float 12s ease-in-out infinite alternate-reverse;
+a:hover {
+    color: var(--primary-hover);
 }
 
-@keyframes float {
-    0% { transform: translate(0, 0) scale(1); }
-    100% { transform: translate(5%, 10%) scale(1.1); }
-}
-
-/* Glass Panel Utility */
+/* Fläche: weiß, eine Linie, Rundung 12. Kein Glas, kein Schatten. */
 .glass-panel {
-    background: var(--glass-bg);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border: 1px solid var(--glass-border);
+    background: var(--surface);
+    border: 1px solid var(--border-color);
     border-radius: var(--radius-lg);
-    box-shadow: var(--glass-shadow);
 }
 
 /* Kartenkörper (NK-067): ein Innenabstand fuer alle, keiner im Markup. */
 .dashboard-card {
-    padding: 24px;
+    padding: var(--space-5);
 }
 
 /* KPI-Kacheln der Übersicht (NK-260): vorher Inline-Styles und onmouseenter. */
@@ -121,33 +206,40 @@ body {
     align-items: center;
 }
 .kpi-titel {
-    font-size: 0.9em;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
     color: var(--text-muted);
-    margin-bottom: 8px;
+    margin-bottom: var(--space-2);
 }
-.kpi-kopf .kpi-titel { margin-bottom: 4px; }
+.kpi-kopf .kpi-titel { margin-bottom: var(--space-1); }
 .kpi-verlauf {
     color: var(--text-muted);
-    font-size: 1.1em;
+    font-size: 18px;
 }
 .kpi-zeitraum {
     font-size: 13px;
     color: var(--text-muted);
-    margin-bottom: 8px;
+    margin-bottom: var(--space-2);
 }
 .kpi-wert {
-    font-size: 1.8em;
-    font-weight: 600;
-    color: var(--text-color);
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-size: 26px;
+    font-weight: 500;
+    line-height: 1.2;
+    color: var(--text-main);
 }
 .kpi-wert--zeile {
     display: flex;
     align-items: baseline;
-    gap: 8px;
+    gap: var(--space-2);
 }
 .kpi-wert--offen { color: var(--danger-color); }
 .kpi-wert--erledigt { color: var(--success-color); }
 .kpi-einheit {
+    font-family: var(--font-sans);
     font-size: 13px;
     font-weight: 400;
 }
@@ -157,121 +249,340 @@ body {
 .kpi-trend--gleich { color: var(--text-muted); }
 .kpi-clickable {
     cursor: pointer;
-    transition: transform 0.15s, box-shadow 0.15s;
+    transition: var(--transition);
 }
 .kpi-clickable:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    background: var(--surface-alt);
+    border-top-color: var(--field-border);
+    border-right-color: var(--field-border);
+    border-bottom-color: var(--field-border);
 }
 
-/* Layout */
+/* Layout: dunkle Leiste links über die volle Höhe,
+   daneben Kopfleiste und Arbeitsfläche über die ganze Breite. */
 .app-container {
     display: flex;
     min-height: 100vh;
-    padding: 24px;
-    gap: 24px;
 }
 
-/* Sidebar */
+/* Leiste: vier Bereiche und die Einstellungen, Symbol über dem Namen. */
 .sidebar {
-    width: 260px;
-    padding: 32px 24px;
+    width: var(--leiste-breite);
+    flex-shrink: 0;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
     display: flex;
     flex-direction: column;
-    gap: 40px;
-    position: sticky;
-    top: 24px;
-    height: calc(100vh - 48px);
+    align-items: center;
+    gap: var(--space-4);
+    padding: var(--space-4) 0;
+    background: var(--leiste);
+}
+
+/* Auf Dunkel reicht Indigo nicht für 3 : 1; der Fokus nimmt den Leistentext. */
+.sidebar :focus-visible {
+    outline-color: var(--leiste-text);
 }
 
 .logo {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    color: var(--primary);
+    display: grid;
+    place-items: center;
+    width: 56px;
+    height: 56px;
+    border-radius: var(--radius-feld);
 }
 
 .logo-zeichen {
-    width: 36px;
-    height: 36px;
-    flex-shrink: 0;
+    width: 40px;
+    height: 40px;
 }
 
-.logo h2 {
-    font-weight: 600;
-    font-size: 22px;
-    letter-spacing: -0.5px;
-    color: var(--text-main);
-}
-
-/* NK-155: „Fix“ in der Primärfarbe, wie auf den Anmeldeseiten. */
-.logo-fix {
-    color: var(--primary);
-    font-weight: 700;
-}
-
-.nav-menu {
+.leiste {
+    flex: 1;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    align-items: center;
+    gap: var(--space-1);
+}
+
+.leiste-luecke {
+    flex: 1;
+}
+
+/* Sonne/Mond über den Einstellungen. Auf dem Handy steht der
+   Schalter im Kopfmenü (#kopf-thema), die Fußleiste bleibt bei fünf. */
+.thema-knopf {
+    width: 40px;
+    height: 40px;
+    display: grid;
+    place-items: center;
+    border: none;
+    border-radius: var(--radius-feld);
+    background: none;
+    color: var(--leiste-text);
+    font-size: 22px;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.thema-knopf:hover {
+    background: var(--leiste-hover);
+    color: var(--leiste-hell);
+}
+
+#kopf-thema {
+    display: none;
+}
+
+.leiste-eintrag {
+    position: relative;
+    /* 72 px aus dem Entwurf reichen für „Einstellungen“ in 13 px nicht. */
+    width: 88px;
+    padding: var(--space-3) 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-1);
+    border-radius: var(--radius-feld);
+    color: var(--leiste-text);
+    font-size: 13px;
+    font-weight: 500;
+    text-decoration: none;
+    transition: var(--transition);
+}
+
+.leiste-eintrag i {
+    font-size: 24px;
+}
+
+.leiste-eintrag:hover {
+    background: var(--leiste-hover);
+    color: var(--leiste-hell);
+}
+
+.leiste-eintrag.active {
+    background: var(--leiste-aktiv);
+    color: var(--leiste-hell);
+    font-weight: 600;
+}
+
+/* Zahl der offenen Aufgaben an „Heute“. */
+.leiste-zahl {
+    position: absolute;
+    top: var(--space-1);
+    left: calc(50% + 6px);
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    border-radius: var(--radius-chip);
+    background: var(--primary);
+    color: var(--on-primary);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 20px;
+    text-align: center;
+}
+
+/* Arbeitsfläche: volle Breite; Kopfleiste und Seitenband laufen bis zum
+   Rand, die Inhalte halten --seiten-rand. */
+.main-content {
+    flex: 1;
+    min-width: 0;  /* B6 (NK-100): breite Tabellen drücken die Spalte nicht auf */
+}
+
+/* Kopfleiste: Befehlsfeld, Immobilie, Hinweis und die globalen Knöpfe. */
+.top-header {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-4) var(--seiten-rand);
+    background: var(--surface);
+    border-bottom: 1px solid var(--border-color);
+}
+
+/* Die Suche gibt Platz ab; erst unter 1100 px bricht der Kopf um. */
+.befehl-knopf {
+    flex: 0 1 640px;
+    min-width: 0;
+    max-width: 640px;
+    height: var(--knopf-hoehe);
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: 0 var(--space-3) 0 var(--space-4);
+    border: 1px solid var(--control-border);
+    border-radius: var(--radius-feld);
+    background: var(--surface-alt);
+    color: var(--text-muted);
+    font-family: inherit;
+    font-size: 15px;
+    text-align: left;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+@media (min-width: 1101px) {
+    .top-header > .kopf-aktionen {
+        flex-shrink: 0;
+    }
+}
+
+@media (max-width: 1100px) {
+    .top-header {
+        flex-wrap: wrap;
+    }
+
+    /* Kleine Basis, damit Suche, Hauswahl und Kontomenü bis 721 px in einer Zeile bleiben. */
+    .befehl-knopf {
+        flex: 1 1 160px;
+    }
+}
+
+.befehl-knopf:hover {
+    border-color: var(--field-border);
+}
+
+.befehl-knopf > i {
+    font-size: 18px;
+}
+
+.befehl-text {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.befehl-tasten {
+    display: flex;
+    gap: var(--space-1);
+}
+
+.kopf-luecke {
+    flex: 1;
+}
+
+/* Feldstil aus .form-group; der Kopf braucht nur Breite und Abstand. */
+.top-header .haus-wahl {
+    margin: 0;
+}
+
+.top-header .haus-wahl select {
+    width: auto;
+    max-width: 240px;
+    font-weight: 500;
+}
+
+/* Gewählte Immobilie: der Filter gilt für die ganze App und bleibt sichtbar. */
+.top-header .haus-wahl.gefiltert select {
+    border-color: var(--primary);
+    background-color: var(--primary-tint);
+    color: var(--primary-text);
+}
+
+/* Offener Modus (NK-201): der Hinweis bleibt als Chip im Kopf sichtbar. */
+.chip-anmeldung {
+    display: inline-flex;
+    align-items: center;
+    height: var(--knopf-hoehe-klein);
+    padding: 0 var(--space-3);
+    border-radius: var(--radius-chip);
+    background: var(--warning-bg);
+    color: var(--warning-text);
+    font-size: 13px;
+    font-weight: 600;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.chip-anmeldung:hover {
+    color: var(--warning-strong);
+}
+
+/* Tasten: Mono, unten doppelt gerandet wie eine Taste. */
+kbd {
+    display: inline-grid;
+    place-items: center;
+    min-width: 24px;
+    height: 24px;
+    padding: 0 6px;
+    border: 1px solid var(--control-border);
+    border-bottom-width: 2px;
+    border-radius: 6px;
+    background: var(--surface);
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    line-height: 1;
+}
+
+/* Seitenband: der erste Kopf jeder Seite läuft weiß über die ganze Breite,
+   mit Titel, Untertitel, Knöpfen und darunter den Reitern des Bereichs. */
+.tab-content {
+    padding: 0 var(--seiten-rand) var(--space-7);
+}
+
+.tab-content > .section-header:first-child {
+    align-items: flex-end;  /* Knöpfe auf der Grundlinie des Titelblocks */
+    margin: 0 calc(-1 * var(--seiten-rand)) var(--space-5);
+    padding: var(--space-5) var(--seiten-rand);
+    background: var(--surface);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.tab-content > .section-header:first-child:has(> .unter-reiter:not([hidden])) {
+    padding-bottom: 0;
+}
+
+/* Seitentitel: eine Stufe für jede Seite (28 px). */
+.tab-content > .section-header:first-child h2 {
+    font-size: 28px;
+    font-weight: 600;
+    line-height: 1.2;
+    letter-spacing: -0.02em;
+}
+
+/* Reiter: die Seiten des Bereichs, ohne Symbol; die offene Seite trägt
+   den Indigo-Strich. */
+.nav-menu.unter-reiter {
+    flex: 1 0 100%;
+    display: flex;
+    gap: var(--space-5);
+    margin-top: var(--space-2);
+    overflow-x: auto;
 }
 
 .nav-item {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 14px 16px;
-    text-decoration: none;
+    min-height: var(--knopf-hoehe);
+    border-bottom: 2px solid transparent;
     color: var(--text-muted);
     font-weight: 500;
-    border-radius: var(--radius-md);
+    text-decoration: none;
+    white-space: nowrap;
     transition: var(--transition);
 }
 
 .nav-item i {
-    font-size: 20px;
+    display: none;
 }
 
 .nav-item:hover {
-    background: rgba(255, 255, 255, 0.5);
-    color: var(--primary);
-    transform: translateX(4px);
+    color: var(--text-main);
 }
 
 .nav-item.active {
-    background: var(--primary);
-    color: white;
-    box-shadow: 0 4px 12px rgba(79, 70, 229, 0.2);
-}
-
-/* Main Content */
-.main-content {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 32px;
-    /* B6 (NK-100): als Flex-Kind darf die Spalte schrumpfen, sonst drücken
-       breite Kinder (Suchleiste, Tabellen) sie über den rechten Rand und
-       schneiden die Kopfknaepfe ab. */
-    min-width: 0;
-}
-
-.top-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 12px 0;
-}
-
-.greeting h1 {
-    font-size: 32px;
-    font-weight: 700;
-    margin-bottom: 4px;
-}
-
-.greeting p {
-    color: var(--text-muted);
-    font-size: 16px;
+    color: var(--text-main);
+    font-weight: 600;
+    border-bottom-color: var(--primary);
 }
 
 /* Buttons */
@@ -287,11 +598,15 @@ body {
     justify-content: center;
     gap: var(--space-2);
     height: var(--knopf-hoehe);
-    padding: 0 var(--space-5);
+    padding: 0 var(--space-4);
+    border: 1px solid transparent;
     border-radius: var(--radius-md);
     font-family: inherit;
     font-weight: 600;
     font-size: 15px;
+    line-height: 1.2;
+    white-space: nowrap;
+    text-decoration: none;
     cursor: pointer;
     transition: var(--transition);
 }
@@ -314,30 +629,43 @@ body {
 
 .btn-primary {
     background: var(--primary);
-    color: white;
-    border: none;
-    box-shadow: 0 4px 12px rgba(79, 70, 229, 0.2);
+    border-color: var(--primary);
+    color: var(--on-primary);
 }
 
 .btn-primary:hover {
     background: var(--primary-hover);
-    transform: translateY(-2px);
-    box-shadow: 0 6px 16px rgba(79, 70, 229, 0.3);
+    border-color: var(--primary-hover);
+    color: var(--on-primary);
 }
 
 .btn-secondary {
-    background: transparent;
+    background: var(--surface);
     color: var(--text-main);
-    border: 1px solid #D1D5DB;
+    border-color: var(--control-border);
 }
 
 .btn-secondary:hover {
-    background: rgba(255, 255, 255, 0.5);
+    background: var(--bg-hover);
+    border-color: var(--field-border);
+    color: var(--text-main);
+}
+
+.btn-primary:disabled,
+.btn-secondary:disabled,
+.btn-tint:disabled,
+.btn-gefahr:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
 }
 
 .btn-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     background: transparent;
     border: none;
+    border-radius: var(--radius-md);
     color: var(--text-muted);
     cursor: pointer;
     font-size: 20px;
@@ -346,72 +674,74 @@ body {
 
 .btn-icon:hover {
     color: var(--text-main);
+    background: var(--bg-hover);
 }
 
 /* Stats */
 .dashboard-stats {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-    gap: 24px;
+    gap: var(--space-5);
 }
 
 .stat-card {
-    padding: 24px;
+    padding: var(--space-5);
     display: flex;
     align-items: center;
-    gap: 20px;
-    transition: var(--transition);
-}
-
-.stat-card:hover {
-    transform: translateY(-4px);
+    gap: var(--space-4);
 }
 
 .stat-icon {
-    width: 56px;
-    height: 56px;
-    border-radius: 50%;
-    background: rgba(79, 70, 229, 0.1);
-    color: var(--primary);
+    width: 44px;
+    height: 44px;
+    flex-shrink: 0;
+    border-radius: var(--radius-md);
+    background: var(--primary-tint);
+    color: var(--primary-text);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 28px;
+    font-size: 22px;
 }
 
 .stat-info h3 {
-    font-size: 14px;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
     color: var(--text-muted);
-    font-weight: 500;
-    margin-bottom: 4px;
+    margin-bottom: var(--space-1);
 }
 
 .stat-info p {
-    font-size: 28px;
-    font-weight: 700;
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-size: 26px;
+    font-weight: 500;
+    line-height: 1.2;
     color: var(--text-main);
 }
 
 /* Properties Grid */
 .properties-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-    gap: 24px;
+    grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr));
+    gap: var(--space-5);
 }
 
 .property-card {
-    padding: 24px;
+    padding: var(--space-5);
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: var(--space-4);
     transition: var(--transition);
     text-decoration: none;
     color: inherit;
 }
 
 .property-card:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 12px 40px rgba(31, 38, 135, 0.1);
+    border-color: var(--field-border);
+    color: inherit;
 }
 
 .prop-header {
@@ -421,47 +751,93 @@ body {
 }
 
 .prop-icon {
-    width: 48px;
-    height: 48px;
-    border-radius: 12px;
-    background: linear-gradient(135deg, var(--primary), #818CF8);
-    color: white;
+    width: 44px;
+    height: 44px;
+    border-radius: var(--radius-md);
+    background: var(--primary-tint);
+    color: var(--primary-text);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 24px;
+    font-size: 22px;
 }
 
 .prop-title {
     font-size: 18px;
     font-weight: 600;
-    margin-top: 12px;
+    margin-top: var(--space-3);
 }
 
 .prop-meta {
     display: flex;
-    gap: 16px;
+    flex-wrap: wrap;
+    gap: var(--space-4);
     color: var(--text-muted);
-    font-size: 14px;
-    border-top: 1px solid rgba(0,0,0,0.05);
-    padding-top: 16px;
+    font-size: 13px;
+    border-top: 1px solid var(--divider);
+    padding-top: var(--space-4);
 }
 
 .prop-meta span {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--space-2);
 }
 
-.loading-state {
+/* Graue Platzhalter in Form der Liste, bis die Daten da sind. */
+.skelett {
     grid-column: 1 / -1;
     display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    padding: 40px;
-    color: var(--text-muted);
-    font-weight: 500;
+    flex-direction: column;
+    gap: var(--space-3);
+}
+
+.skelett span {
+    display: block;
+    height: 56px;
+    border-radius: var(--radius-md);
+    background: var(--divider);
+}
+
+.skelett span:nth-child(2) { width: 85%; }
+.skelett span:nth-child(3) { width: 70%; }
+
+/* Ein dünner Balken unten im Knopf zeigt, dass eine lange Aktion läuft. */
+.arbeitet {
+    position: relative;
+    overflow: hidden;
+}
+
+.arbeitet::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    width: 100%;
+    height: 3px;
+    background: currentColor;
+    opacity: 0.4;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    .skelett span {
+        animation: skelett-puls 1.4s ease-in-out infinite alternate;
+    }
+
+    .arbeitet::after {
+        width: 40%;
+        opacity: 1;
+        animation: fortschritt 1.2s var(--kurve) infinite;
+    }
+}
+
+@keyframes skelett-puls {
+    to { opacity: 0.45; }
+}
+
+@keyframes fortschritt {
+    from { transform: translateX(-100%); }
+    to   { transform: translateX(250%); }
 }
 
 /* Der drehende Spinner (NK-126): Phosphor liefert nur das Symbol, die
@@ -475,19 +851,25 @@ body {
     to   { transform: rotate(360deg); }
 }
 
+@media (prefers-reduced-motion: reduce) {
+    .ph-spin {
+        animation-duration: 3s;
+    }
+}
+
 /* Modals */
 .modal-overlay {
     position: fixed;
     top: 0; left: 0; right: 0; bottom: 0;
-    background: rgba(0,0,0,0.2);
-    backdrop-filter: blur(4px);
+    padding: var(--space-4);
+    background: var(--overlay);
     display: flex;
     align-items: center;
     justify-content: center;
     z-index: 1000;
     opacity: 0;
     pointer-events: none;
-    transition: var(--transition);
+    transition: opacity 0.15s ease;
 }
 
 .modal-overlay.active {
@@ -503,58 +885,78 @@ body {
        und „Speichern“ ist nicht mehr erreichbar. */
     max-height: calc(100vh - 32px);
     overflow-y: auto;
-    padding: 32px;
-    transform: translateY(20px) scale(0.95);
-    transition: var(--transition);
-}
-
-.modal-overlay.active .modal {
-    transform: translateY(0) scale(1);
+    /* Lange Wörter (Abbildnamen im Update-Hinweis) liefen bei 320 px hinaus. */
+    overflow-wrap: break-word;
+    padding: var(--space-5);
 }
 
 .modal-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 24px;
+    gap: var(--space-4);
+    margin-bottom: var(--space-5);
+}
+
+.modal-header h2,
+.modal-header h3 {
+    font-size: 18px;
+    font-weight: 600;
 }
 
 .form-group {
-    margin-bottom: 20px;
+    margin-bottom: var(--space-4);
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--space-2);
 }
 
 .form-group label {
-    font-weight: 500;
-    font-size: 14px;
+    font-weight: 600;
+    font-size: 15px;
     color: var(--text-main);
 }
 
+/* Felder: 44 px, Rand 1 px, im Fokus 2 px Indigo; das
+   Polster schrumpft um den einen Pixel, damit der Text nicht springt. */
 .form-group input[type="text"],
 .form-group input[type="number"],
 .form-group input[type="date"],
 .form-group input[type="password"],
 .form-group input[type="email"],
-.form-group select {
+.form-group select,
+.form-group textarea {
     width: 100%;
-    padding: 12px 16px;
-    border-radius: var(--radius-sm);
-    border: 1px solid #D1D5DB;
-    background: rgba(255,255,255,0.5);
+    min-height: var(--knopf-hoehe);
+    padding: 0 var(--space-3);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--field-border);
+    background-color: var(--surface);
+    color: var(--text-main);
     font-family: inherit;
-    font-size: 16px;
+    font-size: 15px;
     transition: var(--transition);
     appearance: none;
     -webkit-appearance: none;
 }
 
+.form-group textarea {
+    padding: var(--space-3);
+    line-height: 1.5;
+    resize: vertical;
+}
+
+.form-group input[type="number"],
+.form-group input[type="date"] {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+}
+
 /* Custom dropdown arrow for select */
 .form-group select {
-    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235A5C72' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
     background-repeat: no-repeat;
-    background-position: right 16px center;
+    background-position: right var(--space-3) center;
     background-size: 16px;
     padding-right: 40px;
 }
@@ -564,11 +966,86 @@ body {
 .form-group input[type="date"]:focus,
 .form-group input[type="password"]:focus,
 .form-group input[type="email"]:focus,
-.form-group select:focus {
+.form-group select:focus,
+.form-group textarea:focus {
     outline: none;
-    border-color: var(--primary);
-    box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
-    background: white;
+    border: 2px solid var(--primary);
+    padding-left: 11px;
+    padding-right: 11px;
+}
+
+.form-group select:focus {
+    padding-right: 39px;
+}
+
+.form-group textarea:focus {
+    padding: 11px;
+}
+
+.form-group input[aria-invalid="true"],
+.form-group select[aria-invalid="true"] {
+    border-color: var(--danger-color);
+}
+
+.form-group input:disabled,
+.form-group select:disabled,
+.form-group textarea:disabled {
+    background-color: var(--bg-color);
+    color: var(--text-muted);
+}
+
+/* Auch die geöffnete Liste im Design, gebaut wie das Kontomenü.
+   Customizable Select gibt es ab Chromium 135 (Edge, WebView2); andere
+   Browser zeigen weiter die Liste des Systems. Den Pfeil malt das Feld. */
+@supports (appearance: base-select) {
+    select,
+    .form-group select,
+    ::picker(select) {
+        appearance: base-select;
+    }
+
+    /* base-select macht das Feld zur Flexbox: Text sonst oben. */
+    select {
+        align-items: center;
+    }
+
+    select::picker-icon,
+    option::checkmark {
+        display: none;
+    }
+
+    ::picker(select) {
+        /* Wie die Systemliste nach unten; nach oben nur ohne Platz. */
+        position-try-order: normal;
+        margin-block: var(--space-1);
+        padding: var(--space-1);
+        background: var(--surface);
+        color: var(--text-main);
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-lg);
+    }
+
+    option {
+        padding: var(--space-2) var(--space-3);
+        border-radius: var(--radius-md);
+        font-size: 15px;
+    }
+
+    option:hover,
+    option:focus-visible {
+        background: var(--bg-hover);
+        outline: none;
+    }
+
+    option:checked {
+        background: var(--primary-tint);
+        color: var(--primary-text);
+        font-weight: 500;
+    }
+
+    option:disabled {
+        color: var(--text-muted);
+    }
 }
 
 /* Custom File Upload Button */
@@ -585,19 +1062,21 @@ body {
 .file-upload-label {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-2);
     width: 100%;
-    padding: 12px 16px;
-    border-radius: var(--radius-sm);
-    border: 1px dashed var(--primary);
-    background: rgba(255,255,255,0.5);
-    color: var(--primary);
-    font-weight: 500;
+    min-height: var(--knopf-hoehe);
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-md);
+    border: 1px dashed var(--field-border);
+    background: var(--surface);
+    color: var(--primary-text);
+    font-weight: 600;
     cursor: pointer;
     transition: var(--transition);
 }
 .file-upload-label:hover {
-    background: rgba(79, 70, 229, 0.1);
+    background: var(--primary-tint);
+    border-color: var(--primary);
 }
 
 /* Hide spin buttons */
@@ -612,23 +1091,38 @@ input[type="number"] {
     appearance: textfield;
 }
 
+input[type="checkbox"],
+input[type="radio"],
+input[type="range"],
+progress {
+    accent-color: var(--primary);
+}
+
 .checkbox-group {
     flex-direction: row;
     align-items: center;
-    gap: 12px;
+    gap: var(--space-3);
 }
 
 .checkbox-group input[type="checkbox"] {
     width: 20px;
     height: 20px;
+    flex-shrink: 0;
     cursor: pointer;
+}
+
+.checkbox-group label {
+    font-weight: 400;
 }
 
 .modal-footer {
     display: flex;
+    flex-wrap: wrap;
     justify-content: flex-end;
-    gap: 16px;
-    margin-top: 32px;
+    gap: var(--space-2);
+    margin-top: var(--space-5);
+    padding-top: var(--space-4);
+    border-top: 1px solid var(--divider);
 }
 
 /* Image Hover Tooltip */
@@ -637,20 +1131,19 @@ input[type="number"] {
     display: inline-block;
     cursor: pointer;
 }
+/* Fest am Bildschirm: Tabellen rollen quer (overflow-x), absolut wäre das Foto
+   am Tabellenrand abgeschnitten. Lage und Höhe setzt app.js beim Überfahren. */
 .image-hover-preview {
     display: none;
-    position: absolute;
-    bottom: 100%;
-    left: 50%;
-    transform: translateX(-50%);
+    position: fixed;
     width: 250px;
     height: auto;
-    border-radius: 8px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    object-fit: contain;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-color);
     z-index: 9999;
-    margin-bottom: 8px;
-    background: white;
-    padding: 4px;
+    background: var(--surface);
+    padding: var(--space-1);
     pointer-events: none;
 }
 .image-hover-container:hover .image-hover-preview {
@@ -659,50 +1152,54 @@ input[type="number"] {
 
 /* Accordion Styles */
 .accordion {
-    margin-bottom: 16px;
-    border: 1px solid rgba(0,0,0,0.05);
-    border-radius: var(--radius-sm);
+    margin-bottom: var(--space-4);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
     overflow: hidden;
-    background: rgba(255, 255, 255, 0.4);
+    background: var(--surface);
 }
 
 .accordion-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 16px;
-    background: rgba(255, 255, 255, 0.6);
+    gap: var(--space-3);
+    min-height: var(--knopf-hoehe);
+    padding: var(--space-4) var(--space-5);
+    background: var(--surface);
     cursor: pointer;
     transition: var(--transition);
     font-weight: 600;
 }
 
 .accordion-header:hover {
-    background: rgba(255, 255, 255, 0.9);
+    background: var(--bg-hover);
 }
 
 .accordion-header-left {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: var(--space-3);
 }
 
 .accordion-icon {
     font-size: 20px;
-    color: var(--primary);
+    color: var(--primary-text);
 }
 
 .accordion-badge {
-    background: rgba(79, 70, 229, 0.1);
-    color: var(--primary);
-    padding: 2px 8px;
-    border-radius: 12px;
+    background: var(--primary-tint);
+    color: var(--primary-text);
+    padding: var(--space-1) var(--space-2);
+    border-radius: var(--radius-chip);
     font-size: 13px;
-    font-weight: 700;
+    font-weight: 600;
+    line-height: 1.2;
 }
 
 .accordion-chevron {
-    transition: transform 0.3s ease;
+    color: var(--text-muted);
+    transition: transform 0.15s ease;
 }
 
 .accordion.open .accordion-chevron {
@@ -711,23 +1208,54 @@ input[type="number"] {
 
 .accordion-content {
     display: none;
-    border-top: 1px solid rgba(0,0,0,0.05);
+    border-top: 1px solid var(--border-color);
 }
 
 .accordion.open .accordion-content {
     display: block;
 }
 
-/* Zebra Striping */
-.table-zebra tbody tr:nth-child(even) {
-    background-color: rgba(0, 0, 0, 0.02);
+/* Tabellen wie in Excel, aber ohne Gitter. Neben dem Spaltennamen
+   sitzt ein Pfeilknopf wie der Filterpfeil in Excel (tabelleSortieren); er
+   zeigt die aktive Richtung. */
+.sortier-knopf {
+    display: inline-flex;
+    align-items: center;
+    margin-left: var(--space-1);
+    padding: var(--space-1);
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: none;
+    font-size: inherit;
+    color: inherit;
+    cursor: pointer;
+    vertical-align: middle;
 }
-.table-zebra tbody tr:hover {
-    background-color: rgba(79, 70, 229, 0.03);
+.sortier-knopf:hover,
+th[aria-sort] .sortier-knopf {
+    color: var(--primary-text);
+}
+.sortier-knopf i {
+    opacity: 0.5;
+}
+/* Der Pfeil bleibt neben dem Namen; schmale Tabellen scrollen ohnehin seitlich. */
+th[data-sort] {
+    white-space: nowrap;
+}
+th[aria-sort] .sortier-knopf i {
+    opacity: 1;
+}
+.accordion-content .tabelle tbody tr:hover {
+    background: var(--bg-hover);
+}
+.summenzeile td {
+    border-top: 1px solid var(--control-border);
+    font-weight: 600;
 }
 
-/* Typography Utilities */
+/* Typography Utilities: Beträge, Daten, Zählerstände in Geist Mono. */
 .tabular-nums {
+    font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
 }
 
@@ -735,52 +1263,55 @@ input[type="number"] {
     text-align: right;
 }
 
+td.text-right,
+th.text-right {
+    font-variant-numeric: tabular-nums;
+}
+
+td.text-right {
+    font-family: var(--font-mono);
+    white-space: nowrap;
+}
 
 /* Controls Bar */
 .controls-bar {
     display: flex;
-    gap: 16px;
-    margin-bottom: 24px;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin-bottom: var(--space-5);
     align-items: center;
 }
 .controls-bar .form-group {
     margin-bottom: 0;
-    flex: 1;
+    flex: 1 1 280px;
 }
 
 /* ─── Data Quality Dashboard ─── */
 .dq-meter-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 16px;
+    grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr));
+    gap: var(--space-4);
 }
 
 .dq-meter-card {
-    padding: 20px;
-    border-radius: var(--radius-md);
-    background: var(--glass-bg);
-    backdrop-filter: blur(12px);
-    border: 1px solid var(--glass-border);
-    box-shadow: var(--glass-shadow);
-    transition: var(--transition);
-    border-left: 4px solid #D1D5DB;
+    padding: var(--space-4) var(--space-5);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+    border: 1px solid var(--border-color);
+    border-left: 4px solid var(--control-border);
 }
 
-.dq-meter-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 24px rgba(31, 38, 135, 0.1);
-}
-
-.dq-meter-card.status-green { border-left-color: #10B981; }
+.dq-meter-card.status-green { border-left-color: var(--success-color); }
 .dq-meter-card.status-yellow { border-left-color: var(--warning-color); }
 .dq-meter-card.status-red { border-left-color: var(--danger-color); }
-.dq-meter-card.status-none { border-left-color: #9CA3AF; }
+.dq-meter-card.status-none { border-left-color: var(--field-border); }
 
 .dq-meter-header {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    margin-bottom: 12px;
+    gap: var(--space-3);
+    margin-bottom: var(--space-3);
 }
 
 .dq-meter-title {
@@ -795,54 +1326,59 @@ input[type="number"] {
     margin-top: 2px;
 }
 
+/* Chips: 13 px, halbfett, rund, Tönung plus dunkle Schrift. */
 .dq-status-badge {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    padding: 4px 10px;
-    border-radius: 20px;
+    gap: var(--space-1);
+    padding: var(--space-1) var(--space-2);
+    border-radius: var(--radius-chip);
     font-size: 13px;
     font-weight: 600;
+    line-height: 1.2;
     white-space: nowrap;
 }
 
 .dq-status-badge.green {
-    background: rgba(16, 185, 129, 0.1);
-    color: #059669;
+    background: var(--success-bg);
+    color: var(--success-color);
 }
 
 .dq-status-badge.yellow {
-    background: rgba(245, 158, 11, 0.1);
-    color: #D97706;
+    background: var(--warning-bg);
+    color: var(--warning-text);
 }
 
 .dq-status-badge.red {
-    background: rgba(239, 68, 68, 0.1);
-    color: #DC2626;
+    background: var(--danger-bg);
+    color: var(--danger-color);
 }
 
 .dq-status-badge.none {
-    background: rgba(156, 163, 175, 0.1);
-    color: #6B7280;
+    background: var(--bg-color);
+    color: var(--text-muted);
 }
 
 .dq-meter-details {
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    margin-top: 12px;
-    padding-top: 12px;
-    border-top: 1px solid rgba(0, 0, 0, 0.05);
+    gap: var(--space-1);
+    margin-top: var(--space-3);
+    padding-top: var(--space-3);
+    border-top: 1px solid var(--divider);
 }
 
 .dq-meter-detail {
     display: flex;
     justify-content: space-between;
+    gap: var(--space-3);
     font-size: 13px;
     color: var(--text-muted);
 }
 
 .dq-meter-detail span:last-child {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
     font-weight: 500;
     color: var(--text-main);
 }
@@ -850,22 +1386,17 @@ input[type="number"] {
 .dq-warnings {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: var(--space-3);
 }
 
 .dq-warning-card {
     display: flex;
     align-items: flex-start;
-    gap: 12px;
-    padding: 16px 20px;
-    border-radius: var(--radius-sm);
-    background: rgba(239, 68, 68, 0.05);
-    border: 1px solid rgba(239, 68, 68, 0.15);
-    transition: var(--transition);
-}
-
-.dq-warning-card:hover {
-    background: rgba(239, 68, 68, 0.08);
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    border-radius: var(--radius-md);
+    background: var(--danger-bg);
+    border: 1px solid var(--danger-border);
 }
 
 .dq-warning-icon {
@@ -876,7 +1407,7 @@ input[type="number"] {
 }
 
 .dq-warning-text {
-    font-size: 14px;
+    font-size: 15px;
     color: var(--text-main);
     line-height: 1.5;
 }
@@ -884,7 +1415,7 @@ input[type="number"] {
 .dq-warning-meta {
     font-size: 13px;
     color: var(--text-muted);
-    margin-top: 4px;
+    margin-top: var(--space-1);
 }
 
 .dq-empty-state {
@@ -892,30 +1423,29 @@ input[type="number"] {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 12px;
-    padding: 48px 24px;
+    gap: var(--space-3);
+    padding: var(--space-7) var(--space-5);
     color: var(--text-muted);
     text-align: center;
 }
 
 .dq-empty-state i {
     font-size: 48px;
-    color: #10B981;
-    opacity: 0.6;
+    color: var(--success-color);
 }
 
 .dq-summary-bar {
     display: flex;
-    gap: 24px;
+    gap: var(--space-5);
     flex-wrap: wrap;
-    margin-bottom: 24px;
+    margin-bottom: var(--space-5);
 }
 
 .dq-summary-item {
     display: flex;
     align-items: center;
-    gap: 8px;
-    font-size: 14px;
+    gap: var(--space-2);
+    font-size: 15px;
     font-weight: 500;
 }
 
@@ -925,10 +1455,10 @@ input[type="number"] {
     border-radius: 50%;
 }
 
-.dq-summary-dot.green { background: #10B981; }
+.dq-summary-dot.green { background: var(--success-color); }
 .dq-summary-dot.yellow { background: var(--warning-color); }
 .dq-summary-dot.red { background: var(--danger-color); }
-.dq-summary-dot.none { background: #9CA3AF; }
+.dq-summary-dot.none { background: var(--field-border); }
 
 /* --- UX: Interpolation Transparency --- */
 .interpolated-wrapper {
@@ -937,47 +1467,44 @@ input[type="number"] {
 }
 
 .interpolated-value {
-    border-bottom: 2px dotted #9ca3af;
+    border-bottom: 2px dotted var(--field-border);
     cursor: help;
     display: inline-flex;
     align-items: center;
-    gap: 4px;
+    gap: var(--space-1);
 }
 
 .math-icon {
-    color: var(--primary);
+    color: var(--primary-text);
     font-size: 1.25em;
     cursor: pointer;
     display: inline-block;
-    transition: transform 0.2s;
     vertical-align: middle;
 }
 
 .interpolated-wrapper:hover .math-icon {
-    transform: scale(1.15);
+    color: var(--primary-hover);
 }
 
+/* Erklärblase: weiße Fläche mit Linie wie jede Karte. */
 .glass-tooltip {
     visibility: hidden;
     opacity: 0;
     position: absolute;
     bottom: 120%;
     left: 50%;
-    transform: translateX(-50%) translateY(10px);
+    transform: translateX(-50%);
     width: max-content;
     max-width: 300px;
-    background: rgba(255, 255, 255, 0.85);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border: 1px solid rgba(255, 255, 255, 0.6);
-    border-radius: 12px;
-    padding: 12px 16px;
-    color: #1f2937;
+    background: var(--surface);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: var(--space-3) var(--space-4);
+    color: var(--text-main);
     font-size: 13px;
     line-height: 1.5;
-    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
     z-index: 100;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: opacity 0.15s ease;
     pointer-events: none;
     text-align: left;
 }
@@ -991,24 +1518,25 @@ input[type="number"] {
     transform: translateX(-50%);
     border-width: 6px;
     border-style: solid;
-    border-color: rgba(255, 255, 255, 0.85) transparent transparent transparent;
+    border-color: var(--border-color) transparent transparent transparent;
 }
 
-.interpolated-wrapper:hover .glass-tooltip {
+/* Auch per Tastatur: das Etikett „geschätzt“ ist fokussierbar. */
+.interpolated-wrapper:hover .glass-tooltip,
+.interpolated-wrapper:focus-within .glass-tooltip {
     visibility: visible;
     opacity: 1;
-    transform: translateX(-50%) translateY(0);
 }
 
 /* --- Ebene 2: Interpolation Audit Modal --- */
 .timeline-container {
     position: relative;
     width: calc(100% - 120px);
-    margin: 32px 60px;
-    padding-top: 24px;
-    padding-bottom: 24px;
-    background: var(--bg-hover);
-    border-radius: 8px;
+    margin: var(--space-6) 60px;
+    padding-top: var(--space-5);
+    padding-bottom: var(--space-5);
+    background: var(--bg-color);
+    border-radius: var(--radius-md);
     border: 1px solid var(--border-color);
 }
 
@@ -1018,7 +1546,7 @@ input[type="number"] {
     bottom: 0;
     left: 0;
     right: 0;
-    border-top: 1px solid #d1d5db;
+    border-top: 1px solid var(--control-border);
     margin-top: 40px; /* Position of the axis */
     z-index: 0;
 }
@@ -1026,7 +1554,7 @@ input[type="number"] {
 .timeline-bar-reading {
     position: absolute;
     height: 12px;
-    background: #d1d5db; /* gray */
+    background: var(--control-border);
     border-radius: 6px;
     top: 34px; /* aligned with axis */
     z-index: 1;
@@ -1035,33 +1563,35 @@ input[type="number"] {
 .timeline-bar-target {
     position: absolute;
     height: 24px;
-    background: var(--primary); /* blue */
-    border-radius: 4px;
+    background: var(--primary);
+    border-radius: var(--radius-sm);
     top: 28px;
     z-index: 2;
     opacity: 0.8;
 }
 
+/* Überlappung: Ocker gestreift, die Farbe für „hier wird gerechnet“. */
 .timeline-bar-overlap {
     position: absolute;
     height: 24px;
     background: repeating-linear-gradient(
         45deg,
-        rgba(16, 185, 129, 0.4), /* green */
-        rgba(16, 185, 129, 0.4) 10px,
-        rgba(16, 185, 129, 0.7) 10px,
-        rgba(16, 185, 129, 0.7) 20px
+        var(--warning-bg),
+        var(--warning-bg) 10px,
+        var(--warning-color) 10px,
+        var(--warning-color) 20px
     );
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
     top: 28px;
     z-index: 3;
-    border: 2px solid #10b981;
+    border: 2px solid var(--warning-text);
 }
 
 .timeline-marker {
     position: absolute;
     top: -24px;
     transform: translateX(-50%);
+    font-family: var(--font-mono);
     font-size: 13px;
     color: var(--text-muted);
     text-align: center;
@@ -1075,26 +1605,28 @@ input[type="number"] {
     left: 50%;
     width: 1px;
     height: 50px;
-    background: #9ca3af;
-    border-left: 1px dashed #9ca3af;
+    border-left: 1px dashed var(--field-border);
 }
 
 /* Step-by-Step Table */
 .audit-table {
     width: 100%;
     border-collapse: collapse;
-    margin-top: 16px;
+    margin-top: var(--space-4);
 }
 
 .audit-table th, .audit-table td {
-    padding: 12px 16px;
+    padding: var(--space-3) var(--space-4);
     text-align: left;
-    border-bottom: 1px solid #e5e7eb;
+    border-bottom: 1px solid var(--divider);
 }
 .audit-table th {
+    font-size: 13px;
     font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
     color: var(--text-muted);
-    font-size: 0.85em;
+    border-bottom-color: var(--border-color);
 }
 
 @media print {
@@ -1105,7 +1637,7 @@ input[type="number"] {
        druckt nur das Modal -- frueher galt body * visibility:hidden aber
        IMMER, d.h. ohne offenes Modal kam eine leere Seite heraus. Die
        allgemeine Regel ist darum an :has gebunden. */
-    .sidebar, .top-header, .toast-stapel, .background-blobs,
+    .sidebar, .top-header, .toast-stapel,
     .modal-overlay, .kopf-aktionen, .kopf-menue-knopf, .btn, .filter-pill,
     .nav-menu, .feld-hilfe, .no-print {
         display: none !important;
@@ -1196,60 +1728,99 @@ input[type="number"] {
 /* Angemeldeter Benutzer in der Kopfzeile (NK-021). */
 .angemeldeter-benutzer {
     color: var(--text-muted);
-    font-size: 0.9rem;
+    font-size: 15px;
     font-weight: 500;
     white-space: nowrap;
 }
 
-/* Feldhilfe (NK-066): das Fragezeichen neben komplexen Feldbeschriftungen.
-   Das Erklaerfenster kommt aus dem title-Attribut des Browsers; hier steht
-   nur die Darstellung des Zeichens. */
-.feld-hilfe {
+/* Anbieter wählen oder gleich im Formular anlegen. */
+.anbieter-zeile {
+    display: flex;
+    gap: var(--space-2);
+    align-items: center;
+}
+
+.anbieter-zeile > select,
+.anbieter-zeile > input {
+    flex: 1;
+    min-width: 0;
+}
+
+.anbieter-zeile > button {
+    flex-shrink: 0;
+}
+
+#anbieter-neu {
+    margin-top: var(--space-2);
+}
+
+/* Leerer Bereich in einer Karte, ein Satz plus der nächste Schritt. */
+.leer-zeile {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+    align-items: center;
     color: var(--text-muted);
-    cursor: help;
-    font-size: 0.95em;
-    margin-left: 4px;
+    padding-block: var(--space-2);
+}
+
+/* Feldhilfe (NK-066): als <small> ein Hilfetext unter dem Feld, als
+   Symbol <i> das Fragezeichen neben der Beschriftung. Das Erklärfenster
+   kommt aus dem title-Attribut des Browsers. */
+.feld-hilfe {
+    display: block;
+    margin-top: var(--space-1);
+    color: var(--text-muted);
+    font-size: 13px;
+    font-weight: 400;
+}
+
+i.feld-hilfe {
+    display: inline-block;
+    margin: 0 0 0 var(--space-1);
+    font-size: 1em;
     vertical-align: middle;
+    cursor: help;
 }
 
-.feld-hilfe:hover {
-    color: var(--primary);
+i.feld-hilfe:hover {
+    color: var(--primary-text);
 }
 
-/* NK-186: Zeitraumvorschlag mit Begruendung in den Abrechnungsdialogen. */
+/* NK-186: Zeitraumvorschlag mit Begründung in den Abrechnungsdialogen. */
 .zeitraumvorschlag {
     border: 1px solid var(--border-color);
-    border-radius: 8px;
-    background: var(--bg-hover);
-    padding: 12px;
-    margin: 8px 0 12px;
+    border-radius: var(--radius-md);
+    background: var(--surface-alt);
+    padding: var(--space-3) var(--space-4);
+    margin: var(--space-2) 0 var(--space-3);
 }
 
 .zeitraumvorschlag ul {
-    margin: 6px 0 10px;
-    padding-left: 20px;
+    margin: var(--space-2) 0 var(--space-3);
+    padding-left: var(--space-5);
 }
 
-/* Erste Schritte (K5, NK-103): neu gesetzt, nicht ausgebessert. Das Panel
-   steht über den Kennzahlen und verschwindet, sobald alle Pflichtschritte
-   erledigt sind; gezeichnet wird es von zeigeErsteSchritte() in app.js. */
+/* Erste Schritte (K5, NK-103): das Panel steht über den Kennzahlen und
+   verschwindet, sobald alle Pflichtschritte erledigt sind; gezeichnet
+   wird es von zeigeErsteSchritte() in app.js. */
 .erste-schritte {
-    padding: var(--space-6);           /* K5: 32 px innen */
-    margin-bottom: var(--space-6);
+    padding: var(--space-5);
 }
 
 .erste-schritte h2 {
     margin: 0 0 var(--space-1);
-    font-size: 20px;
+    font-size: 18px;
+    font-weight: 600;
 }
 
 .erste-schritte-kopf p {
-    margin: 0 0 var(--space-2);
+    margin: 0 0 var(--space-3);
     color: var(--text-muted);
-    font-size: 14px;
+    font-size: 15px;
 }
 
-/* K5: Fortschritt „x von 5 erledigt“ mit schmalem Balken in Primärfarbe. */
+/* K5: Fortschritt „x von 5 erledigt“ mit schmalem Balken in Indigo. */
 .erste-schritte-fortschritt {
     display: flex;
     align-items: center;
@@ -1259,8 +1830,9 @@ input[type="number"] {
 }
 
 .erste-schritte-stand {
+    font-family: var(--font-mono);
     font-size: 13px;
-    font-weight: 600;
+    font-weight: 500;
     color: var(--text-main);
     white-space: nowrap;               /* NK-223 */
 }
@@ -1273,69 +1845,80 @@ input[type="number"] {
 .erste-schritte-balken {
     flex: 0 1 220px;
     height: 6px;
-    border-radius: 999px;
-    background: var(--bg-hover);
+    border-radius: var(--radius-chip);
+    background: var(--divider);
     overflow: hidden;
 }
 
 .erste-schritte-balken span {
     display: block;
     height: 100%;
-    border-radius: 999px;
+    border-radius: var(--radius-chip);
     background: var(--primary);
-    transition: width var(--transition);
+    transition: width 0.15s ease;
 }
 
 .erste-schritte-liste {
     list-style: none;                  /* B7: eine Nummerierung — die Marke */
-    margin: 0;
+    margin: 0 calc(-1 * var(--space-5));
     padding: 0;
+    border-top: 1px solid var(--divider);
 }
 
 /* K5: jede Zeile ein Raster 32px | 1fr | auto, mindestens 64 px hoch;
-   Zeilen trennt eine 1-px-Linie statt einer 4-px-Lücke. */
+   Zeilen trennt eine 1-px-Linie. */
 .erste-schritte-liste .schritt {
     display: grid;
     grid-template-columns: 32px 1fr auto;
     align-items: center;
     gap: var(--space-4);
     min-height: 64px;
-    padding: var(--space-4) var(--space-5);
+    padding: var(--space-3) var(--space-5);
 }
 
 .erste-schritte-liste .schritt + .schritt {
-    border-top: 1px solid var(--border-color);
+    border-top: 1px solid var(--divider);
 }
 
-/* K5: nur der aktuelle Schritt hervorgehoben — Palette (B9) und eine
-   3-px-Primärleiste links. */
+/* K5: nur der aktuelle Schritt hervorgehoben — Tönung und eine
+   3-px-Indigoleiste links. */
 .erste-schritte-liste .schritt.aktuell {
     background: var(--primary-tint);
     box-shadow: inset 3px 0 0 var(--primary);
 }
 
+/* Belegmarke: Quadrat mit 4 px Rundung, Ziffer in Mono. */
 .schritt-marke {
     flex: 0 0 auto;
     width: 32px;
     height: 32px;
-    border-radius: 50%;
+    border-radius: var(--radius-sm);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 14px;
-    font-weight: 600;
-    background: rgba(0, 0, 0, 0.06);
+    font-family: var(--font-mono);
+    font-size: 15px;
+    font-weight: 500;
+    background: var(--bg-color);
+    border: 1px solid var(--border-color);
     color: var(--text-muted);
 }
 
+.schritt.aktuell .schritt-marke {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: var(--on-primary);
+}
+
 .schritt.optional .schritt-marke {
-    border: 1px dashed var(--text-muted);
+    border: 1px dashed var(--field-border);
     background: transparent;
 }
 
 .schritt.erledigt .schritt-marke {
-    background: var(--success-color);
-    color: #fff;
+    background: var(--primary-tint);
+    border-color: var(--primary-tint);
+    color: var(--primary-text);
 }
 
 .schritt-text {
@@ -1354,6 +1937,7 @@ input[type="number"] {
 
 .schritt-text strong {
     font-size: 15px;
+    font-weight: 600;
 }
 
 .schritt-text span {
@@ -1368,16 +1952,17 @@ input[type="number"] {
 
 .schritt-hinweis {
     font-size: 13px;
-    font-weight: 400;
+    font-weight: 600;
+    line-height: 1.2;
     color: var(--text-muted);
-    border: 1px solid var(--text-muted);
-    border-radius: 999px;
-    padding: 0 var(--space-2);
+    background: var(--bg-color);
+    border-radius: var(--radius-chip);
+    padding: var(--space-1) var(--space-2);
 }
 
 /* Leerzustand (K4, NK-102): eine Komponente, ein Erzeuger (leerzustand()
    in app.js). Volle Breite — im Raster über alle Spalten (B3) —, der
-   Inhalt als Flex-Spalte zentriert statt links oben zu kleben. */
+   Inhalt als Flex-Spalte zentriert. */
 .empty-state {
     grid-column: 1 / -1;
     display: flex;
@@ -1398,26 +1983,27 @@ input[type="number"] {
 .leer-icon {
     width: 64px;
     height: 64px;
-    border-radius: 50%;
+    border-radius: var(--radius-lg);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 40px;
-    color: var(--primary);
+    font-size: 32px;
+    color: var(--primary-text);
     background: var(--primary-tint);
     margin-bottom: var(--space-4);
 }
 
 .empty-state h3 {
     margin: 0 0 var(--space-2);
-    font-size: 17px;
+    font-size: 18px;
+    font-weight: 600;
     color: var(--text-main);
 }
 
 .empty-state p {
     margin: 0 0 var(--space-4);
     max-width: 46ch;
-    font-size: 14px;
+    font-size: 15px;
     line-height: 1.5;
 }
 
@@ -1431,31 +2017,20 @@ input[type="number"] {
 /* Design-System (NK-067)                                              */
 /* ------------------------------------------------------------------ */
 
-/* Aliase (F-43): Namen, die der Bestand benutzt, ohne dass sie definiert
-   waren -- sie fielen auf Browser-Vorgaben zurück (38 Stellen). Sie fallen
-   jetzt auf die Palette oben zurück. Neue Beschriftungen benutzen die
-   kanonischen Namen. */
-:root {
-    --primary-color: var(--primary);
-    --text-color: var(--text-main);
-    --text-secondary: var(--text-muted);
-    --danger-color: #DC2626;
-    --success-color: #16A34A;
-    --warning-color: #D97706;
-    --border-color: rgba(17, 24, 39, 0.1);
-    --bg-hover: rgba(17, 24, 39, 0.04);
-}
-
-/* Ein Abstandsraster: Abschnittsköpfe statt zehnfach wiederholter
-   Inline-Stile. flex-wrap hält die Knöpfe im Kopf bei schmalen Fenstern
-   in der Reihe, statt sie überlaufen zu lassen. */
+/* Abschnittsköpfe: Titel links, Knöpfe rechts. flex-wrap hält die Knöpfe
+   bei schmalen Fenstern in der Reihe, statt sie überlaufen zu lassen. */
 .section-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    gap: 12px;
+    gap: var(--space-3);
     flex-wrap: wrap;
-    margin-bottom: 24px;
+    margin-bottom: var(--space-5);
+}
+
+.section-header h2 {
+    font-size: 18px;
+    font-weight: 600;
 }
 
 .section-header-getrennt {
@@ -1463,7 +2038,7 @@ input[type="number"] {
     padding-top: var(--space-5); /* K6: 24px-Token statt Literal (NK-101) */
 }
 
-/* K1 (NK-101): Aktionsknaepfe rechts im Seitenkopf; der Primärknopf steht
+/* K1 (NK-101): Aktionsknöpfe rechts im Seitenkopf; der Primärknopf steht
    ganz rechts, Nebenknöpfe links davon. margin-left: auto hält die
    Fluchtung auch in der Umbruchzeile bei schmalen Fenstern (K7). */
 .kopf-aktionen {
@@ -1478,25 +2053,20 @@ input[type="number"] {
 /* K1 (NK-101): Untertitel des Seitenkopfs statt Inline-Stil. */
 .section-untertitel {
     color: var(--text-muted);
-    font-size: 14px;
+    font-size: 15px;
     margin-top: var(--space-1);
 }
 
 .section-header-weit {
-    margin-top: 48px;
+    margin-top: var(--space-7);
 }
 
-/* Kopfbereich: Knöpfe umbrechen statt überlaufen. */
-.top-header {
-    flex-wrap: wrap;
-    gap: 12px;
-}
-
-.kopf-aktionen {
-    display: flex;
-    gap: 12px;
-    align-items: center;
-    flex-wrap: wrap;
+/* Ein Takt für jede Seite: Blöcke einer Ansicht stehen 24 px auseinander.
+   Die Tabs laufen im Blockfluss (app.js setzt display: block), darum
+   fallen diese Abstände mit älteren margin-bottom zusammen statt sich
+   zu addieren. */
+.tab-content > * + * {
+    margin-top: var(--space-5);
 }
 
 /* NK-253: der Menüknopf für die Kopfaktionen gilt nur am Handy (unten). */
@@ -1504,8 +2074,9 @@ input[type="number"] {
     display: none;
 }
 
-/* Tabellen (F-44): die Klassen, die der Bestand benutzt, ohne dass sie
-   existierten. Die Rollbalken bleiben im Behälter, nicht auf der Seite. */
+/* Tabellen (F-44): Kopf in Versalien 13 px,
+   Zeilen durch feine Linien getrennt, erste und letzte Spalte 24 px
+   vom Kartenrand. Die Rollbalken bleiben im Behälter. */
 .data-table-container {
     overflow-x: auto;
 }
@@ -1518,16 +2089,34 @@ input[type="number"] {
 .data-table th {
     text-align: left;
     font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
     color: var(--text-muted);
-    padding: 10px 12px;
+    padding: var(--space-3) var(--space-4);
     border-bottom: 1px solid var(--border-color);
     white-space: nowrap;
 }
 
 .data-table td {
-    padding: 10px 12px;
-    border-bottom: 1px solid var(--border-color);
+    height: 48px;
+    padding: var(--space-2) var(--space-4);
+    border-bottom: 1px solid var(--divider);
     vertical-align: middle;
+}
+
+.data-table th:first-child,
+.data-table td:first-child {
+    padding-left: var(--space-5);
+}
+
+.data-table th:last-child,
+.data-table td:last-child {
+    padding-right: var(--space-5);
+}
+
+.data-table tbody tr:last-child td {
+    border-bottom: 0;
 }
 
 .data-table tbody tr:hover {
@@ -1535,78 +2124,78 @@ input[type="number"] {
 }
 
 /* Sichtbarer Tastaturfokus (NK-073): jede ansteuerbare Stelle zeigt,
-   wo der Fokus liegt. */
+   wo der Fokus liegt — 2 px Indigo mit 2 px Abstand. */
 :focus-visible {
     outline: 2px solid var(--primary);
     outline-offset: 2px;
-    border-radius: 4px;
 }
 
 /* Meldungen im Stapel (NK-067): sie sammeln sich unten rechts, statt
    sich zu überlappen, und bleiben sechs Sekunden -- lang genug zum Lesen. */
 .toast-stapel {
     position: fixed;
-    bottom: 24px;
-    right: 24px;
+    bottom: var(--space-5);
+    right: var(--space-5);
     z-index: 9999;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--space-2);
     max-width: min(380px, calc(100vw - 48px));
 }
 
 .toast {
-    padding: 12px 20px;
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+    padding: var(--space-3) var(--space-4);
     border-radius: var(--radius-md);
-    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
-    font-size: 14px;
+    border: 1px solid var(--border-color);
+    background: var(--surface);
+    color: var(--text-main);
+    font-size: 15px;
     line-height: 1.4;
 }
 
 .toast-fehler {
-    background: #FEE2E2;
-    color: #B91C1C;
+    background: var(--danger-bg);
+    border-color: var(--danger-border);
+    color: var(--danger-color);
 }
 
 .toast-erfolg {
-    background: #DCFCE7;
-    color: #166534;
+    background: var(--success-bg);
+    border-color: var(--success-bg);
+    color: var(--success-color);
 }
 
-/* Tablet (NK-073): die Seitenleiste wird schmaler. NK-162 (F-91): mit
-   Beschriftung -- eine Spalte nur aus Symbolen verstand niemand, der die
-   Anwendung zum ersten Mal sieht. */
+/* Der Haken ploppt einmal auf, wenn etwas gespeichert ist. */
+.toast-haken {
+    flex: none;
+    font-size: 20px;
+    line-height: 1.05;
+    animation: haken-ploppen var(--dauer-mittel) var(--kurve);
+}
+
+@keyframes haken-ploppen {
+    from { transform: scale(0); opacity: 0; }
+}
+
+/* Tablet (NK-073): die Leiste bleibt beschriftet (NK-162, F-91); das
+   Kürzel im Befehlsfeld weicht dem Text. */
 @media (max-width: 1024px) {
-    .sidebar {
-        width: 196px;
-        padding: 24px 12px;
-        gap: 28px;
-    }
-
-    .logo h2 {
-        font-size: 18px;
-    }
-
-    .nav-item {
-        font-size: 15px;
-        gap: 10px;
-        padding: 12px 12px;
-    }
-
-    .nav-item i {
-        font-size: 20px;
+    .befehl-tasten {
+        display: none;
     }
 }
 
 /* Schmales Fenster (NK-073): Kopf stapelt, Kennzahlen einspaltig,
    Modals bekommen Luft. */
 @media (max-width: 720px) {
-    .top-header {
-        flex-direction: column;
-        align-items: flex-start;
+    .kopf-luecke {
+        display: none;
     }
 
-    .greeting h1 {
+    .tab-content > .section-header:first-child h2 {
         font-size: 24px;
     }
 
@@ -1615,17 +2204,22 @@ input[type="number"] {
     }
 
     .modal {
-        padding: 20px;
+        padding: var(--space-4);
     }
 
     .erste-schritte {
         padding: var(--space-4);
     }
 
+    .erste-schritte-liste {
+        margin: 0 calc(-1 * var(--space-4));
+    }
+
     /* K5: bei ≤ 720 px rutscht der Knopf unter den Text — bündig mit dem
        Text, nicht mit der Marke. */
     .erste-schritte-liste .schritt {
         grid-template-columns: 32px 1fr;
+        padding: var(--space-3) var(--space-4);
     }
 
     .erste-schritte-liste .schritt .btn-primary,
@@ -1635,43 +2229,42 @@ input[type="number"] {
     }
 }
 
-/* Zustandstöne als Flaechen (NK-067-Abnahme): dieselben Farben wie die
-   Meldungen, nicht neue. */
-:root {
-    --success-bg: #DCFCE7;
-    --danger-bg: #FEE2E2;
-    --warning-bg: rgba(217, 119, 6, 0.12);
-}
-
-/* Auswahlpillen der Statistiken (NK-067): sie benennen Kategorien, keine
-   Handlungen; der aktive Zustand traegt die Grundfarbe. */
+/* Auswahlknöpfe (NK-067): sie benennen Kategorien,
+   keine Handlungen. 36 px, gedrückt in Tinte. */
 .filter-pill {
-    padding: 6px 16px;
-    border-radius: 20px;
-    border: 1px solid var(--border-color);
-    background: white;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-height: 36px;
+    padding: 0 var(--space-4);
+    border-radius: var(--radius-chip);
+    border: 1px solid var(--control-border);
+    background: var(--surface);
     color: var(--text-main);
     cursor: pointer;
     font-family: inherit;
-    font-size: 14px;
+    font-size: 15px;
+    font-weight: 500;
+    white-space: nowrap;
     transition: var(--transition);
 }
 
 .filter-pill:hover {
-    border-color: var(--primary);
-    color: var(--primary);
+    background: var(--bg-hover);
+    border-color: var(--field-border);
 }
 
 .filter-pill.active {
-    background: var(--primary);
-    border-color: var(--primary);
-    color: white;
+    background: var(--text-main);
+    border-color: var(--text-main);
+    color: var(--surface);
+    font-weight: 600;
 }
 
-/* Gefahrenzone (NK-067): der zerstoerende Knopf traegt die Gefahr, nicht
-   die Grundfarbe der Haupthaendlungen. */
+/* Gefahrenzone (NK-067): der zerstörende Knopf trägt die Gefahr, nicht
+   die Grundfarbe der Haupthandlungen. */
 .gefahrenzone {
-    border: 1px solid rgba(220, 38, 38, 0.3);
+    border: 1px solid var(--danger-border);
 }
 
 .gefahrenzone h3 {
@@ -1680,12 +2273,13 @@ input[type="number"] {
 
 .btn-gefahr {
     background: var(--danger-color);
-    color: white;
-    border: none;
+    border-color: var(--danger-color);
+    color: var(--on-primary);
 }
 
 .btn-gefahr:hover {
-    background: #B91C1C;
+    background: var(--danger-hover);
+    border-color: var(--danger-hover);
 }
 
 .btn-gefahr:focus-visible {
@@ -1693,18 +2287,26 @@ input[type="number"] {
     outline-offset: 2px;
 }
 
-/* Vorhebender Nebenknoepf (NK-067): die Grundfarbe mit Deckkraft statt
-   eines eigenen Blautons. */
+/* Hervorgehobener Nebenknopf (NK-067): Indigo-Tönung statt eigenem Blau. */
 .btn-tint {
-    background: rgba(79, 70, 229, 0.1);
-    color: var(--primary);
-    border: 1px solid rgba(79, 70, 229, 0.3);
+    background: var(--primary-tint);
+    color: var(--primary-text);
+    border-color: var(--primary-tint);
+}
+
+.btn-tint:hover {
+    border-color: var(--primary);
 }
 
 /* Zeitleiste der Rechnungen (NK-144): chronologisch nach Ausstellungsdatum.
    Gruppenkarte je Monat, Eintragszeilen im Raster, Summe am Gruppenkopf. */
 .zeitleiste-jahr {
-    margin: 32px 0 16px;
+    margin: var(--space-6) 0 var(--space-4);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
 }
 
 .zeitleiste-jahr:first-child {
@@ -1714,9 +2316,9 @@ input[type="number"] {
 .zeitleiste-gruppe .zeitleiste-kopf {
     align-items: baseline;
     display: flex;
-    gap: 16px;
+    gap: var(--space-4);
     justify-content: space-between;
-    margin-bottom: 12px;
+    margin-bottom: var(--space-3);
 }
 
 .zeitleiste-gruppe .zeitleiste-kopf h3 {
@@ -1724,27 +2326,32 @@ input[type="number"] {
 }
 
 .zeitleiste-summe {
-    font-weight: 600;
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-weight: 500;
     white-space: nowrap;
 }
 
 .zeitleiste-eintrag {
     align-items: center;
-    border-top: 1px solid var(--border-color);
+    border-top: 1px solid var(--divider);
     display: grid;
-    gap: 12px;
-    grid-template-columns: 90px 1fr auto auto auto;
-    padding: 8px 0;
+    gap: var(--space-3);
+    grid-template-columns: 96px 1fr auto auto auto;
+    min-height: var(--knopf-hoehe);
+    padding: var(--space-2) 0;
 }
 
 .zeitleiste-datum {
     color: var(--text-muted);
+    font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
 }
 
 .zeitleiste-nr {
     color: var(--text-muted);
-    font-size: 0.9rem;
+    font-family: var(--font-mono);
+    font-size: 13px;
 }
 
 .zeitleiste-beleg {
@@ -1752,13 +2359,14 @@ input[type="number"] {
 }
 
 .zeitleiste-betrag {
+    font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
     text-align: right;
     white-space: nowrap;
 }
 
 .zeitleiste-gesamt {
-    margin-top: 16px;
+    margin-top: var(--space-4);
     text-align: right;
 }
 
@@ -1774,7 +2382,7 @@ input[type="number"] {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: var(--space-2, 8px);
+    gap: var(--space-2);
 }
 
 .vermieter-logo-vorschau {
@@ -1782,15 +2390,8 @@ input[type="number"] {
     max-width: 160px;
     border: 1px solid var(--border-color);
     border-radius: var(--radius-sm);
-    padding: 4px;
-    background: #FFFFFF;
-}
-
-.feld-hilfe {
-    display: block;
-    margin-top: 6px;
-    color: var(--text-muted);
-    font-size: 13px;
+    padding: var(--space-1);
+    background: var(--surface);
 }
 
 /* ------------------------------------------------------------------
@@ -1802,37 +2403,52 @@ input[type="number"] {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    gap: var(--space-3, 12px);
-    margin-bottom: var(--space-4, 16px);
+    flex-wrap: wrap;
+    gap: var(--space-3);
+    margin-bottom: var(--space-4);
+}
+
+.karten-kopf h3 {
+    font-size: 18px;
+    font-weight: 600;
 }
 
 .karten-kopf-hinweis {
-    font-size: 14px;
+    font-size: 13px;
     color: var(--text-muted);
 }
 
 .karten-text {
-    margin: 0 0 var(--space-4, 16px);
+    margin: 0 0 var(--space-4);
     color: var(--text-muted);
     line-height: 1.5;
 }
 
 /* NK-179: Über NebenkostenFix im Hilfe-Tab. */
-.ueber-zeichen { vertical-align: -5px; margin-right: 4px; }
-.ueber-links li { margin-bottom: 6px; }
-.ueber-links .feld-hilfe { display: block; }
-.ueber-links summary { cursor: pointer; color: var(--primary); }
+.ueber-zeichen { vertical-align: -5px; margin-right: var(--space-1); }
+.ueber-links li { margin-bottom: var(--space-2); }
+.ueber-links summary { cursor: pointer; color: var(--primary-text); }
 .ueber-drittlizenzen {
-    max-height: 320px; overflow: auto; margin-top: 8px; padding: 12px;
-    font-size: 0.8125rem; white-space: pre-wrap; overflow-wrap: anywhere;
-    background: var(--bg-color); border-radius: 8px;
+    max-height: 320px;
+    overflow: auto;
+    margin-top: var(--space-2);
+    padding: var(--space-3);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    background: var(--bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
 }
+
 /* NK-175: Schalter mit Beschriftung in einer Zeile. */
 .schalter-zeile {
     display: flex;
-    gap: 8px;
+    gap: var(--space-2);
     align-items: center;
-    margin: 0 0 12px;
+    min-height: var(--knopf-hoehe);
+    margin: 0 0 var(--space-3);
 }
 
 /* NK-174/175: Fließtext in Hinweisdialogen, Zeilenumbrüche bleiben. */
@@ -1843,15 +2459,17 @@ input[type="number"] {
 }
 
 .karten-abschnitt {
-    margin: var(--space-4, 16px) 0;
+    margin: var(--space-4) 0;
 }
 
 .karten-abschnitt-getrennt {
-    margin-top: 20px;
-    padding-top: var(--space-4, 16px);
-    border-top: 1px solid var(--border-color);
+    margin-top: var(--space-5);
+    padding-top: var(--space-4);
+    border-top: 1px solid var(--divider);
 }
 
+/* Schlichte Tabelle in Dialogen: dieselben Linien und Köpfe wie
+   .data-table, nur ohne Randspalten-Einzug. */
 .tabelle {
     width: 100%;
     border-collapse: collapse;
@@ -1862,8 +2480,33 @@ input[type="number"] {
     border-bottom: 1px solid var(--border-color);
 }
 
+/* Jeder Spaltenkopf in derselben Stufe wie .data-table, auch in
+   Tabellen, die app.js ohne Klasse baut. Zeilenköpfe (scope=row) bleiben. */
+thead th,
+.zaehler-kopf th {
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    text-align: left;
+}
+
+.tabellen-kopfzeile th,
+.tabellen-kopfzeile .zelle {
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
 .zelle {
-    padding: 10px 8px;
+    padding: var(--space-3) var(--space-2);
+}
+
+.tabelle tbody tr + tr {
+    border-top: 1px solid var(--divider);
 }
 
 .rollbereich {
@@ -1884,7 +2527,7 @@ input[type="number"] {
     flex-direction: row;
     flex-wrap: wrap;
     align-items: center;
-    margin-bottom: var(--space-4, 16px);
+    margin-bottom: var(--space-4);
 }
 
 .form-group.feld-zeile > input {
@@ -1896,34 +2539,55 @@ a.btn-primary,
 a.btn-secondary {
     text-decoration: none;
 }
+
+.btn-primary:hover,
+a.btn-primary:hover {
+    color: var(--on-primary);
+}
+
 .feld-min { min-width: 180px; }
 
+/* Feldpaare unten bündig: bricht eine Beschriftung um, rutscht nur sie nach
+   oben, die Eingabefelder bleiben auf einer Linie. Hilfetext unter die Zeile. */
 .felder-nebeneinander {
     display: flex;
-    gap: var(--space-4, 16px);
+    align-items: flex-end;
+    gap: var(--space-4);
+}
+
+.hilfe-unter-zeile {
+    margin: calc(-1 * var(--space-2)) 0 var(--space-4);
 }
 
 .zeile-eng {
     display: flex;
-    gap: var(--space-2, 8px);
+    gap: var(--space-2);
 }
 
 .knopf-zeile {
     display: flex;
     flex-wrap: wrap;
-    gap: var(--space-2, 8px);
+    gap: var(--space-2);
+}
+
+/* Von–bis-Felder: Eingaben bündig, auch wenn ein Label den Begriff-Knopf trägt */
+.zeitraum-felder {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: var(--space-3);
 }
 
 .spalte {
     display: flex;
     flex-direction: column;
-    gap: var(--space-5, 24px);
+    gap: var(--space-5);
 }
 
-.abstand-oben { margin-top: var(--space-4, 16px); }
-.abstand-unten-klein { margin: 0 0 var(--space-3, 12px); }
+.abstand-oben { margin-top: var(--space-4); }
+.abstand-unten-klein { margin: 0 0 var(--space-3); }
 .text-muted { color: var(--text-muted); }
-.text-primaer { color: var(--primary); }
+.text-primaer { color: var(--primary-text); }
 .raster-einspaltig { grid-template-columns: 1fr; }
 
 .dialog-mittel {
@@ -1939,13 +2603,11 @@ a.btn-secondary {
 .einstellungs-gruppen {
     display: flex;
     flex-wrap: wrap;
-    gap: var(--space-2, 8px);
-    margin-bottom: var(--space-5, 24px);
+    gap: var(--space-2);
 }
 
 .einstellungs-gruppen .filter-pill i {
     font-size: 18px;
-    vertical-align: -3px;
 }
 
 .einstellungs-raster {
@@ -1954,16 +2616,16 @@ a.btn-secondary {
 
 .math-icon-primaer {
     font-size: 1.1em;
-    color: var(--primary);
+    color: var(--primary-text);
 }
 
 .verbrauch-symbol {
     font-size: 18px;
-    color: var(--primary);
+    color: var(--primary-text);
 }
 
 @media (max-width: 640px) {
-    .felder-nebeneinander { flex-direction: column; }
+    .felder-nebeneinander { flex-direction: column; align-items: stretch; }
 }
 
 
@@ -1977,8 +2639,15 @@ a.btn-secondary {
         position: relative;
     }
 
+    /* Der Titel darf schrumpfen, sonst rutscht der Menüknopf unter ihn. */
+    .section-header > div:first-child {
+        flex: 1 1 0;
+        min-width: 0;
+    }
+
     .kopf-menue-knopf {
         display: inline-flex;
+        align-self: flex-start;
         justify-content: center;
         width: var(--knopf-hoehe);
         padding: 0;
@@ -1995,10 +2664,9 @@ a.btn-secondary {
         align-items: stretch;
         gap: var(--space-2);
         padding: var(--space-2);
-        background: white;
+        background: var(--surface);
         border: 1px solid var(--border-color);
         border-radius: var(--radius-md);
-        box-shadow: var(--glass-shadow);
     }
 
     .kopf-aktionen.mit-menue.offen {
@@ -2014,7 +2682,7 @@ a.btn-secondary {
     }
 
     .dashboard-card {
-        padding: 16px;
+        padding: var(--space-4);
     }
 
     /* NK-252: die Zählertabelle rollte in ihrer Karte, Verlauf, Stift und
@@ -2032,11 +2700,11 @@ a.btn-secondary {
     }
 
     .zaehler-tabelle tr {
-        padding: 8px 0;
+        padding: var(--space-2) 0;
     }
 
     .zaehler-tabelle td {
-        padding: 4px 0 !important;
+        padding: var(--space-1) 0 !important;
     }
 
     /* Die Beschriftung steht links daneben; der Inhalt der Zelle fließt wie bisher. */
@@ -2053,73 +2721,102 @@ a.btn-secondary {
         font-size: 13px;
         color: var(--text-muted);
     }
-
-    /* Mit dem Wechsel-Knopf (NK-258) passen die Aktionen nicht mehr in eine Zeile. */
-    .zaehler-tabelle td.zaehler-aktionen {
-        white-space: normal !important;
-    }
 }
 
+/* Telefon: die Leiste wird zur dunklen Leiste am
+   unteren Rand; der Inhalt hält unten Platz für sie frei. */
 @media (max-width: 560px) {
     .app-container {
-        padding: 12px 12px 84px;
-        gap: 12px;
+        padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px));
     }
 
     .sidebar {
         position: fixed;
         top: auto;
-        bottom: 8px;
-        left: 8px;
-        right: 8px;
+        bottom: 0;
+        left: 0;
+        right: 0;
         z-index: 50;
         width: auto;
         height: auto;
-        padding: 6px;
-        gap: 0;
+        flex-direction: row;
+        padding: var(--space-1) var(--space-2) calc(var(--space-1) + env(safe-area-inset-bottom, 0px));
+        overflow: visible;
     }
 
-    .sidebar .logo {
+    .sidebar .logo,
+    .leiste-luecke,
+    .sidebar .thema-knopf {
         display: none;
     }
 
-    .nav-menu {
-        flex-direction: row;
-        justify-content: space-between;
-        gap: 2px;
+    #kopf-thema {
+        display: inline-flex;
     }
 
-    .nav-item {
-        flex: 1;
-        min-width: 0;
-        padding: 10px 0;
-        /* Telefon: nur Symbole in der Leiste unten; der Name steht im
-           aria-label und im title (NK-162). */
-        font-size: 0;
+    .leiste {
+        flex-direction: row;
+        width: 100%;
         gap: 0;
+    }
+
+    .leiste-eintrag {
+        /* Nach Inhalt verteilen: „Einstellungen“ ist breiter als ein Fünftel von 390 px. */
+        flex: 1 1 auto;
+        width: auto;
+        min-width: 0;
+        min-height: 56px;
+        padding: var(--space-2) 0;
         justify-content: center;
     }
 
-    .nav-item i {
+    .leiste-eintrag i {
         font-size: 22px;
     }
 
-    .nav-item:hover {
-        transform: none;
+    /* Handy: eine Zeile aus Suchsymbol, Hauswahl und
+       Menüknopf; der Suchtext bleibt für Screenreader im Knopf. */
+    .top-header {
+        flex-wrap: nowrap;
+        padding: var(--space-3) var(--seiten-rand);
+    }
+
+    .befehl-knopf {
+        flex: 0 0 var(--knopf-hoehe);
+        justify-content: center;
+        padding: 0;
+    }
+
+    .befehl-text {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+    }
+
+    .top-header .haus-wahl {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+
+    .top-header .haus-wahl select {
+        width: 100%;
+        max-width: none;
     }
 }
 
 /* NK-164: Umzugskarte. */
 .haken-zeile {
     display: flex;
-    gap: 8px;
+    gap: var(--space-2);
     align-items: center;
-    font-weight: normal;
+    font-weight: 400;
 }
 
 .fortschritt {
     width: 100%;
-    margin: 8px 0;
+    margin: var(--space-2) 0;
     accent-color: var(--primary);
 }
 
@@ -2141,7 +2838,7 @@ a.btn-secondary {
 .import-zuordnung {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr));
-    gap: 12px 16px;
+    gap: var(--space-3) var(--space-4);
 }
 
 .import-zuordnung .form-group {
@@ -2149,39 +2846,41 @@ a.btn-secondary {
 }
 
 .pflicht-marke {
-    color: var(--primary);
+    color: var(--primary-text);
     font-weight: 700;
 }
 
 .rechnungstabelle td {
-    padding: 4px;
+    padding: var(--space-1);
     vertical-align: top;
 }
 
 .rechnungstabelle input {
     width: 100%;
     min-width: 96px;
-    padding: 8px 10px;
+    min-height: var(--knopf-hoehe);
+    padding: 0 var(--space-3);
     font: inherit;
-    font-size: 14px;
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    background: rgba(255, 255, 255, 0.8);
+    font-size: 15px;
+    color: var(--text-main);
+    border: 1px solid var(--field-border);
+    border-radius: var(--radius-md);
+    background: var(--surface);
 }
 
 .rechnungstabelle input:focus {
     outline: none;
-    border-color: var(--primary);
-    box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.12);
+    border: 2px solid var(--primary);
+    padding: 0 11px;
 }
 
 .rechnungstabelle .rt-kostenart { min-width: 200px; }
 .dialog-breit .table-container { overflow-x: auto; }
 .rechnungstabelle .rt-status { min-width: 220px; max-width: 320px; font-size: 13px; }
-.rechnungstabelle tr.zeile-fehler input { border-color: #B91C1C; }
-.rechnungstabelle .rt-status.fehler { color: #B91C1C; }
-.rechnungstabelle .rt-status.ok { color: #15803D; }
-.import-befund-fehler { color: #B91C1C; }
+.rechnungstabelle tr.zeile-fehler input { border-color: var(--danger-color); }
+.rechnungstabelle .rt-status.fehler { color: var(--danger-color); }
+.rechnungstabelle .rt-status.ok { color: var(--success-color); }
+.import-befund-fehler { color: var(--danger-color); }
 
 /* NK-158: Hilfe. Das „?“ an Fachbegriffen ist ein Knopf (Tastatur,
    Touch), kein title-Tooltip: den sieht auf dem Tablet niemand. */
@@ -2193,68 +2892,225 @@ a.btn-secondary {
     height: 24px;
     margin: 0 2px;
     padding: 0;
-    border: 1px solid var(--border-color);
+    border: 1px solid var(--control-border);
     border-radius: 50%;
-    background: rgba(255, 255, 255, 0.7);
-    color: var(--primary);
+    background: var(--surface);
+    color: var(--primary-text);
     font-size: 14px;
     vertical-align: middle;
     cursor: pointer;
+    transition: var(--transition);
 }
 
 .begriff-hilfe:hover,
 .begriff-hilfe:focus-visible {
     background: var(--primary);
-    color: #FFFFFF;
-    outline: none;
+    border-color: var(--primary);
+    color: var(--on-primary);
 }
 
 .begriff-blase {
     position: fixed;
     z-index: 1200;
-    padding: 14px 16px;
+    padding: var(--space-3) var(--space-4);
     border-radius: var(--radius-md);
-    background: #FFFFFF;
-    border: 1px solid var(--border-color);
-    box-shadow: 0 12px 32px rgba(17, 24, 39, 0.18);
+    background: var(--surface);
+    border: 1px solid var(--field-border);
     font-size: 15px;
     line-height: 1.5;
 }
 
 .begriff-blase p {
-    margin: 6px 0 10px;
+    margin: var(--space-1) 0 var(--space-3);
     color: var(--text-main);
+}
+
+/* Einführung als Sprechblasen-Tour. Der Ring legt mit seiner
+   breiten Kontur den Schleier über alles außer der Zielstelle (kein
+   box-shadow, siehe Schattenregel); Klicks gehen durch ihn hindurch. */
+.tour-ring {
+    position: fixed;
+    z-index: 1190;
+    border: 2px solid var(--primary);
+    border-radius: var(--radius-md);
+    outline: 200vmax solid var(--overlay);
+    pointer-events: none;
+    transition: left var(--dauer-mittel) var(--kurve), top var(--dauer-mittel) var(--kurve),
+        width var(--dauer-mittel) var(--kurve), height var(--dauer-mittel) var(--kurve);
+}
+
+.tour-blase {
+    position: fixed;
+    z-index: 1200;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-4);
+    border-radius: var(--radius-md);
+    background: var(--surface);
+    border: 1px solid var(--field-border);
+    font-size: 15px;
+    line-height: 1.5;
+    animation: tour-auf var(--dauer-mittel) var(--kurve);
+}
+
+/* Der Pfeil: ein gedrehtes Quadrat an der Kante, die zum Ziel zeigt;
+   --pfeil setzt tourZeigen() auf die Mitte des Ziels. */
+.tour-blase::before {
+    content: "";
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    background: var(--surface);
+    border: 1px solid var(--field-border);
+    transform: rotate(45deg);
+}
+
+.tour-blase[data-seite="unten"]::before {
+    top: -7px;
+    left: calc(var(--pfeil, 50%) - 6px);
+    border-right: 0;
+    border-bottom: 0;
+}
+
+.tour-blase[data-seite="oben"]::before {
+    bottom: -7px;
+    left: calc(var(--pfeil, 50%) - 6px);
+    border-left: 0;
+    border-top: 0;
+}
+
+.tour-blase[data-seite="rechts"]::before {
+    left: -7px;
+    top: calc(var(--pfeil, 50%) - 6px);
+    border-top: 0;
+    border-right: 0;
+}
+
+.tour-blase[data-seite="mitte"]::before {
+    display: none;
+}
+
+.tour-kopf,
+.tour-fuss {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.tour-stand {
+    flex: 1;
+    color: var(--text-muted);
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+}
+
+.tour-zu {
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    border: 0;
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+}
+
+.tour-zu:hover {
+    background: var(--primary-tint);
+    color: var(--primary-text);
+}
+
+.tour-titel {
+    font-size: 17px;
+}
+
+.tour-blase p {
+    margin: 0;
+    color: var(--text-main);
+}
+
+.tour-punkte {
+    display: flex;
+    flex: 1;
+    gap: 6px;
+}
+
+.tour-punkte span {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--field-border);
+    transition: background var(--dauer-kurz) var(--kurve), width var(--dauer-kurz) var(--kurve);
+}
+
+.tour-punkte span.aktiv {
+    width: 18px;
+    border-radius: 3px;
+    background: var(--primary);
+}
+
+.erste-schritte-titel {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2) var(--space-3);
+}
+
+@keyframes tour-auf {
+    from { opacity: 0; transform: scale(0.96); }
+}
+
+@keyframes tour-puls {
+    from { opacity: 0.7; transform: scale(1); }
+    to { opacity: 0; transform: scale(1.12); }
+}
+
+/* Der Puls läuft endlos -- darum nur, wenn Bewegung erwünscht ist; die
+   zentrale Kürzung auf 1 ms ließe ihn sonst flackern. */
+@media (prefers-reduced-motion: no-preference) {
+    .tour-ring::after {
+        content: "";
+        position: absolute;
+        inset: -2px;
+        border: 2px solid var(--primary);
+        border-radius: inherit;
+        animation: tour-puls 1.6s var(--kurve) infinite;
+    }
 }
 
 .hilfe-raster {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr));
-    gap: 24px;
+    gap: var(--space-5);
     align-items: start;
 }
 
 .hilfe-frage {
-    margin: 20px 0 6px;
-    font-size: 17px;
+    margin: var(--space-5) 0 var(--space-2);
+    font-size: 15px;
+    font-weight: 600;
 }
 
 .hilfe-liste {
-    margin: 0 0 12px 22px;
+    margin: 0 0 var(--space-3) var(--space-5);
     line-height: 1.7;
 }
 
 .hilfe-checkliste {
     list-style: none;
-    margin: 0 0 12px;
+    margin: 0 0 var(--space-3);
     padding: 0;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: var(--space-2);
 }
 
 .hilfe-checkliste label {
     display: flex;
-    gap: 10px;
+    gap: var(--space-3);
     align-items: flex-start;
     line-height: 1.5;
     cursor: pointer;
@@ -2269,37 +3125,38 @@ a.btn-secondary {
 
 .hilfe-begriffe dt {
     font-weight: 600;
-    margin-top: 12px;
+    margin-top: var(--space-3);
 }
 
 .hilfe-begriffe dd {
-    margin: 4px 0 0;
+    margin: var(--space-1) 0 0;
     color: var(--text-muted);
     line-height: 1.5;
 }
 
 .mieter-erklaerung {
-    margin-top: 16px;
-    padding: 14px 16px;
+    margin-top: var(--space-4);
+    padding: var(--space-3) var(--space-4);
     border-radius: var(--radius-md);
-    background: var(--primary-tint, rgba(79, 70, 229, 0.08));
+    background: var(--primary-tint);
     line-height: 1.5;
 }
 
 .mieter-erklaerung p {
-    margin: 4px 0 0;
+    margin: var(--space-1) 0 0;
 }
 
 /* NK-159: das Beispielhaus ist überall als Beispiel erkennbar. */
 .badge-beispiel {
     display: inline-block;
-    margin-left: 8px;
-    padding: 2px 8px;
-    border-radius: 999px;
+    margin-left: var(--space-2);
+    padding: var(--space-1) var(--space-2);
+    border-radius: var(--radius-chip);
     background: var(--primary-tint);
-    color: var(--primary);
+    color: var(--primary-text);
     font-size: 13px;
     font-weight: 600;
+    line-height: 1.2;
     vertical-align: middle;
 }
 
@@ -2308,13 +3165,13 @@ a.btn-secondary {
     justify-content: space-between;
     align-items: center;
     flex-wrap: wrap;
-    gap: 12px;
-    padding: 20px;
+    gap: var(--space-3);
+    padding: var(--space-4) var(--space-5);
 }
 
 .historie-knoepfe {
     display: flex;
-    gap: 8px;
+    gap: var(--space-2);
     align-items: center;
     flex-wrap: wrap;
 }
@@ -2323,20 +3180,21 @@ a.btn-secondary {
 td .btn-icon,
 .tabelle .btn-icon,
 .data-table .btn-icon {
-    min-width: 40px;
-    min-height: 40px;
+    min-width: var(--knopf-hoehe);
+    min-height: var(--knopf-hoehe);
 }
 
 .schrift-wahl {
     display: flex;
     flex-wrap: wrap;
-    gap: 12px 24px;
+    gap: var(--space-3) var(--space-5);
 }
 
 .schrift-wahl label {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-2);
+    min-height: var(--knopf-hoehe);
     cursor: pointer;
 }
 
@@ -2345,28 +3203,28 @@ td .btn-icon,
     height: 20px;
 }
 
+/* Kurze Hinweise (Leerlauf, Entwurf) schweben oben mittig. */
 .hinweis-leiste {
     position: fixed;
     left: 50%;
-    top: 16px;
+    top: var(--space-4);
     transform: translateX(-50%);
     z-index: 1300;
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 12px;
+    gap: var(--space-3);
     max-width: calc(100vw - 32px);
-    padding: 12px 16px;
+    padding: var(--space-3) var(--space-4);
     border-radius: var(--radius-md);
-    background: #FFFFFF;
-    border: 1px solid var(--border-color);
-    box-shadow: 0 12px 32px rgba(17, 24, 39, 0.18);
+    background: var(--surface);
+    border: 1px solid var(--field-border);
     font-size: 15px;
 }
 
 /* NK-214 (B7): die dauerhafte Warnung im offenen Modus schwebte über Kopf,
    Knöpfen und Dialogtiteln. Sie steht jetzt als Band im Fluss unter dem
-   Kopf; die kurzen Hinweise (Leerlauf, Entwurf) schweben weiter. */
+   Kopf — im Ocker des Hinweisbands. */
 .hinweis-leiste.hinweis-band {
     position: relative;
     left: auto;
@@ -2374,12 +3232,18 @@ td .btn-icon,
     transform: none;
     z-index: auto;
     max-width: none;
-    box-shadow: none;
+    background: var(--warning-bg);
+    border-color: var(--warning-bg);
+    color: var(--warning-strong);
 }
 
-:focus-visible {
-    outline: 3px solid rgba(79, 70, 229, 0.45);
-    outline-offset: 2px;
+.hinweis-band > i {
+    font-size: 20px;
+    color: var(--warning-text);
+}
+
+.hinweis-band > span {
+    flex: 1 1 240px;
 }
 
 /* NK-162: mit größerer Schrift ist ein Tablet so schmal wie ein kleines
@@ -2403,12 +3267,12 @@ td .btn-icon,
 
 /* NK-261, NK-262, NK-263: Vorauszahlungen, Fristenkalender, Mehrjahresblick
    mit Klassen statt Inline-Stilen (Wächter in tests/test_design_einheit.py). */
-.abstand-oben-gross { margin-top: var(--space-5, 24px); }
-.zwischentitel { margin: var(--space-4, 16px) 0 var(--space-2, 8px); }
+.abstand-oben-gross { margin-top: var(--space-5); }
+.zwischentitel { margin: var(--space-4) 0 var(--space-2); font-size: 15px; }
 .breite-voll { width: 100%; }
 .dialog-vorauszahlung { max-width: 720px; width: 90%; }
-.tabelle-luftig th { padding: var(--space-2, 8px); }
-.tabelle-kompakt th { padding: 6px var(--space-2, 8px); }
+.tabelle-luftig th { padding: var(--space-2); }
+.tabelle-kompakt th { padding: var(--space-2); }
 .spalte-knopf { width: 48px; }
 
 .kopf-mit-knopf {
@@ -2416,93 +3280,1401 @@ td .btn-icon,
     justify-content: space-between;
     align-items: center;
     flex-wrap: wrap;
-    gap: var(--space-4, 16px);
+    gap: var(--space-4);
 }
 
 .kopf-text { max-width: 640px; }
 
 .kopf-text h3 {
-    margin: 0 0 var(--space-2, 8px);
+    margin: 0 0 var(--space-2);
     display: flex;
     align-items: center;
-    gap: var(--space-2, 8px);
+    gap: var(--space-2);
 }
 
 .kopf-text p {
     margin: 0;
     color: var(--text-muted);
-    font-size: 0.92em;
+    font-size: 15px;
 }
 
 #fristen-liste {
-    margin: var(--space-4, 16px) 0 0;
-    padding-left: 20px;
+    margin: var(--space-4) 0 0;
+    padding-left: var(--space-5);
 }
 
-/* NK-160: Jahresabrechnungs-Assistent. */
+/* NK-160: Jahresabrechnungs-Assistent. Die Schritte sind Belegmarken:
+   Ziffer in Mono, aktueller Schritt in Indigo. */
 .assistent-schritte {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: var(--space-2);
     list-style: none;
-    margin: 0 0 16px;
+    margin: 0 0 var(--space-4);
     padding: 0;
     counter-reset: schritt;
 }
 
 .assistent-schritte li {
     counter-increment: schritt;
-    padding: 6px 12px;
-    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--knopf-hoehe-klein);
+    padding: 0 var(--space-3);
+    border-radius: var(--radius-md);
     border: 1px solid var(--border-color);
     color: var(--text-muted);
-    font-size: 14px;
+    font-size: 13px;
+    font-weight: 500;
 }
 
 .assistent-schritte li::before {
     content: counter(schritt) ". ";
+    font-family: var(--font-mono);
+    margin-right: var(--space-1);
 }
 
 .assistent-schritte li.aktuell {
     background: var(--primary);
     border-color: var(--primary);
-    color: #FFFFFF;
+    color: var(--on-primary);
     font-weight: 600;
 }
 
 .assistent-schritte li.erledigt {
     background: var(--primary-tint);
-    color: var(--primary);
+    border-color: var(--primary-tint);
+    color: var(--primary-text);
 }
 
 .jahr-fehlt td:first-child i,
-.jahr-offen td:first-child i { color: #B45309; }
-.jahr-erfasst td:first-child i { color: #15803D; }
-.jahr-sprung td:first-child i { color: #B45309; }
+.jahr-offen td:first-child i,
+.jahr-sprung td:first-child i { color: var(--warning-text); }
+.jahr-erfasst td:first-child i { color: var(--success-color); }
 
 .jahr-mieter {
-    padding: 16px;
-    margin-bottom: 12px;
+    padding: var(--space-4);
+    margin-bottom: var(--space-3);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
-    background: rgba(255, 255, 255, 0.6);
+    background: var(--surface);
 }
 
 .jahr-positionen,
 .jahr-warnungen,
 .jahr-ergebnis-liste {
-    margin: 8px 0 0 20px;
+    margin: var(--space-2) 0 0 var(--space-5);
     line-height: 1.6;
 }
 
-.jahr-warnungen { color: #B45309; }
+.jahr-warnungen { color: var(--warning-text); }
 
 /* D-116: ab der vierten Meldung aufklappbar, ohne eigenen Listenpunkt. */
 .weitere-hinweise-zeile { list-style: none; }
-.weitere-hinweise > ul { margin: 4px 0 0 20px; padding: 0; }
+.weitere-hinweise > ul { margin: var(--space-1) 0 0 var(--space-5); padding: 0; }
 
 /* Die Rückfrage wechselt ihren Hauptknopf zwischen btn-primary und
-   btn-gefahr; ohne das blendete „Löschen“ beim Öffnen von Violett nach Rot. */
+   btn-gefahr; ohne das blendete „Löschen“ beim Öffnen von Indigo nach Rot. */
 #frage-ja {
     transition: none;
+}
+
+/* ------------------------------------------------------------------ */
+/* Heute: Aufgaben nach Art, jede mit genau einer Handlung. */
+.aufgaben {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-5);
+}
+
+.aufgaben-gruppe {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+
+.aufgaben .aufgaben-titel {
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+.aufgabe {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-3) var(--space-4);
+    min-height: 64px;
+    padding: var(--space-3) var(--space-5);
+    background: var(--surface);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+}
+
+.aufgabe-text {
+    flex: 1 1 240px;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.aufgabe-name {
+    font-weight: 600;
+}
+
+.aufgabe-info {
+    color: var(--text-muted);
+    font-size: 13px;
+}
+
+/* Chips: Zustand in drei Tönen -- Ocker fehlt, Ziegel offen, Indigo fällig. */
+.chip {
+    display: inline-flex;
+    align-items: center;
+    height: 24px;
+    padding: 0 var(--space-2);
+    border-radius: var(--radius-chip);
+    font-size: 13px;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.chip-warn {
+    background: var(--warning-bg);
+    color: var(--warning-text);
+}
+
+.chip-rot {
+    background: var(--danger-bg);
+    color: var(--danger-color);
+}
+
+.chip-ind {
+    background: var(--primary-tint);
+    color: var(--primary-text);
+}
+
+@media (max-width: 560px) {
+    .aufgabe {
+        padding: var(--space-3) var(--space-4);
+    }
+
+    .aufgabe .btn-primary,
+    .aufgabe .btn-secondary {
+        width: 100%;
+    }
+}
+
+/* Befehlspalette: oben im Fenster, Treffer nach Art gruppiert. */
+.modal-overlay.befehl-overlay {
+    align-items: flex-start;
+    padding-top: 12vh;
+}
+
+.modal.befehl {
+    max-width: 640px;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--surface);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+}
+
+.befehl-eingabe {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: 0 var(--space-5);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.befehl-eingabe > i {
+    font-size: 20px;
+    color: var(--text-muted);
+}
+
+.befehl-eingabe input {
+    flex: 1;
+    min-width: 0;
+    height: 56px;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    font-size: 18px;
+}
+
+.befehl-liste {
+    max-height: min(60vh, 420px);
+    overflow-y: auto;
+    padding: var(--space-2);
+}
+
+.befehl-gruppe {
+    padding: var(--space-3) var(--space-3) var(--space-1);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+.befehl-eintrag {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-4);
+    min-height: var(--knopf-hoehe);
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+}
+
+.befehl-eintrag:hover {
+    background: var(--bg-hover);
+}
+
+.befehl-eintrag[aria-selected="true"] {
+    background: var(--primary-tint);
+    box-shadow: inset 3px 0 0 var(--primary);
+}
+
+.befehl-titel {
+    min-width: 0;
+}
+
+.befehl-info {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-muted);
+    font-size: 13px;
+}
+
+.befehl-liste mark {
+    background: none;
+    color: var(--primary-text);
+    font-weight: 600;
+}
+
+.befehl-leer {
+    padding: var(--space-5) var(--space-3);
+    color: var(--text-muted);
+}
+
+.befehl-fuss {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-5);
+    padding: var(--space-3) var(--space-5);
+    border-top: 1px solid var(--border-color);
+    background: var(--surface-alt);
+    color: var(--text-muted);
+    font-size: 13px;
+}
+
+.befehl-fuss span {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+}
+
+/* Kontomenü: Hilfe, Drucken und Abmelden liegen auf jeder
+   Breite hinter dem Namen; der Kopf behält die Suche im Mittelpunkt. */
+.top-header > .kopf-menue-knopf {
+    display: inline-flex;
+    gap: var(--space-2);
+    flex-shrink: 0;
+}
+
+.top-header > .kopf-aktionen.mit-menue {
+    display: none;
+    position: absolute;
+    top: calc(100% - var(--space-2));
+    right: var(--seiten-rand);
+    z-index: 20;
+    min-width: 240px;
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-1);
+    padding: var(--space-2);
+    background: var(--surface);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+}
+
+.top-header > .kopf-aktionen.mit-menue.offen {
+    display: flex;
+    animation: auftauchen var(--dauer-kurz) var(--kurve) backwards;
+}
+
+.top-header > .kopf-aktionen.mit-menue button {
+    justify-content: flex-start;
+    border-color: transparent;
+}
+
+.top-header > .kopf-aktionen.mit-menue button:hover {
+    background: var(--bg-hover);
+}
+
+.konto-knopf .ph-caret-down {
+    font-size: 13px;
+    transition: transform var(--dauer-kurz) var(--kurve);
+}
+
+.konto-knopf[aria-expanded="true"] .ph-caret-down {
+    transform: rotate(180deg);
+}
+
+.konto-knopf .angemeldeter-benutzer {
+    max-width: 160px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: inherit;
+}
+
+@media (max-width: 560px) {
+    .konto-knopf .angemeldeter-benutzer,
+    .konto-knopf .ph-caret-down {
+        display: none;
+    }
+}
+
+/* Eingang: links die Belege, in der Mitte das Blatt, rechts das
+   Rechnungsformular als Spalte mit „Rechnung übernehmen“ am Fuß. */
+.pill-zahl {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 20px;
+    margin-left: var(--space-1);
+    padding: 0 var(--space-1);
+    border-radius: var(--radius-chip);
+    background: var(--primary);
+    color: var(--on-primary);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.eingang {
+    display: grid;
+    grid-template-columns: 280px minmax(0, 1fr) 400px;
+    gap: var(--space-5);
+    align-items: start;
+}
+
+.eingang-links {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    min-width: 0;
+}
+
+/* Viele Rechnungen: die Liste rollt für sich, Knopf und Hinweis bleiben stehen. */
+.eingang-liste {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    max-height: calc(100vh - 376px);
+    min-height: 120px;
+    overflow-y: auto;
+    padding: 2px;
+}
+
+.eingang-hinweis {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 13px;
+}
+
+.eingang-leer .eingang-vorschau {
+    grid-column: 2 / -1;
+}
+
+/* Das Formular bleibt als Kind stehen, darum zählt auch der leere Eingang. */
+.eingang-formular:empty,
+.eingang-leer .eingang-formular {
+    display: none;
+}
+
+.beleg-zeile {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    width: 100%;
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--surface);
+    color: var(--text-main);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: background-color var(--dauer-kurz) var(--kurve), border-color var(--dauer-kurz) var(--kurve);
+}
+
+.beleg-zeile:hover {
+    background: var(--bg-hover);
+}
+
+.beleg-zeile[aria-pressed="true"] {
+    background: var(--primary-tint);
+    border-color: var(--primary);
+    box-shadow: inset 3px 0 0 var(--primary);
+}
+
+/* Titel und Betrag in einer Zeile, Lieferant und Datum darunter über die volle Breite. */
+.beleg-text {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--space-1) var(--space-3);
+    flex: 1;
+    min-width: 0;
+}
+
+.beleg-info {
+    grid-column: 1 / -1;
+}
+
+.beleg-name {
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.beleg-info {
+    color: var(--text-muted);
+    font-size: 13px;
+}
+
+.beleg-betrag,
+#kosten-kopfzahl strong {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+#kosten-kopfzahl strong {
+    color: var(--text-main);
+}
+
+/* Enter speichert (type=submit); der Hinweis steht nur am Knopf, nicht im Text. */
+.als-spalte #btn-save-invoice::after {
+    content: "Enter" / "";
+    margin-left: var(--space-2);
+    padding: 0 6px;
+    border: 1px solid currentColor;
+    border-bottom-width: 2px;
+    border-radius: 6px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    line-height: 20px;
+}
+
+.eingang-vorschau {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    min-width: 0;
+    animation: auftauchen var(--dauer-mittel) var(--kurve) backwards;
+}
+
+.vorschau-kopf {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.vorschau-titel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    flex: 1;
+    min-width: 0;
+}
+
+.vorschau-titel h3 {
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+/* Das Blatt liegt auf grauem Grund wie auf dem Schreibtisch; Tiefe über Rand, nicht Schatten. */
+.vorschau-blatt {
+    display: flex;
+    justify-content: center;
+    padding: var(--space-5);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    background: var(--surface-alt);
+}
+
+.beleg-blatt,
+.beleg-bild {
+    width: 100%;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    background: var(--vorschau);
+}
+
+.beleg-blatt {
+    height: calc(100vh - 390px);
+    min-height: 480px;
+}
+
+.beleg-bild {
+    height: auto;
+    max-width: 100%;
+    object-fit: contain;
+}
+
+/* PDF: die Seiten liegen als Blätter direkt auf dem Grund, ein Rahmen statt
+   zwei. Das Blatt rollt, nicht die Seite. */
+.vorschau-blatt.beleg-pdf {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;   /* zentriert läge Seite 1 über dem Rollbereich */
+    align-items: flex-start;   /* zentriert die Seite per margin, sonst wäre beim Zoom der linke Rand weg */
+    gap: var(--space-4);
+    height: calc(100vh - 390px);
+    min-height: 480px;
+    overflow: auto;
+    scrollbar-gutter: stable;   /* „Seitenbreite“ passt, auch wenn der Rollbalken erscheint */
+}
+
+/* Breite und Höhe setzt der Zoom in zeichnePdf. */
+.pdf-seite {
+    display: block;
+    flex-shrink: 0;
+    margin-inline: auto;
+    border-radius: var(--radius-sm);
+}
+
+/* Leiste über dem PDF: Seite zurück/vor, Zoom, ganze Seite, Seitenbreite. */
+.pdf-leiste {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-1);
+}
+
+.pdf-seitenzahl,
+.pdf-prozent {
+    color: var(--text-muted);
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.pdf-seitenzahl {
+    min-width: 96px;
+}
+
+.pdf-prozent {
+    min-width: 48px;
+}
+
+.pdf-trenner {
+    width: 1px;
+    height: 20px;
+    margin-inline: var(--space-2);
+    background: var(--border-color);
+}
+
+/* 32 px Trefferfläche, das nackte .btn-icon wäre nur so groß wie das Zeichen */
+.pdf-leiste .btn-icon {
+    width: 32px;
+    height: 32px;
+    font-size: 18px;
+}
+
+.pdf-leiste .btn-icon[aria-pressed="true"] {
+    color: var(--primary-text);
+    background: var(--primary-tint);
+}
+
+.pdf-leiste .btn-icon:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+
+.beleg-ohne {
+    margin: 0;
+    padding: var(--space-6) 0;
+    color: var(--text-muted);
+}
+
+/* Formular als Spalte: dasselbe #invoice-modal, ohne Überlagerung. */
+.modal-overlay.als-spalte {
+    position: sticky;
+    top: var(--space-4);
+    display: block;
+    padding: 0;
+    background: none;
+    opacity: 1;
+    pointer-events: auto;
+    z-index: auto;
+}
+
+.als-spalte .modal {
+    max-width: none;
+    max-height: calc(100vh - 282px);
+    padding-bottom: 0;
+    animation: auftauchen var(--dauer-mittel) var(--kurve) backwards;
+}
+
+/* Schließen gibt es in der Spalte nicht: wer nicht übernehmen will, wählt einen anderen Beleg. */
+.als-spalte .modal-header .btn-icon,
+.als-spalte .modal-footer .btn-secondary {
+    display: none;
+}
+
+.als-spalte .modal-footer {
+    position: sticky;
+    bottom: 0;
+    padding-bottom: var(--space-5);
+    background: var(--surface);
+}
+
+.als-spalte .modal-footer .btn-primary {
+    flex: 1;
+}
+
+@media (max-width: 1100px) {
+    .eingang {
+        grid-template-columns: 240px minmax(0, 1fr);
+    }
+
+    .eingang-formular {
+        grid-column: 2;
+    }
+
+    .modal-overlay.als-spalte {
+        position: static;
+    }
+
+    .als-spalte .modal {
+        max-height: none;
+    }
+}
+
+@media (max-width: 720px) {
+    .eingang {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .eingang-formular,
+    .eingang-leer .eingang-vorschau {
+        grid-column: auto;
+    }
+
+    .eingang-liste {
+        max-height: 40vh;
+    }
+
+    .eingang-hinweis {
+        display: none;
+    }
+
+    .beleg-blatt,
+    .vorschau-blatt.beleg-pdf {
+        height: 70vh;
+        min-height: 360px;
+    }
+
+    .vorschau-blatt {
+        padding: var(--space-3);
+    }
+}
+
+/* Zähler: links die Liste, rechts das Detail des gewählten
+   Zählers mit Kennzahlen, Verbrauchsbalken und Ablesungen. */
+.zaehler-ansicht {
+    display: flex;
+    gap: var(--space-5);
+    align-items: flex-start;
+}
+
+.zaehler-ansicht > #meters-container {
+    flex: 1;
+    min-width: 0;
+}
+
+.zaehler-detail {
+    flex: 0 0 440px;
+    min-width: 0;
+    position: sticky;
+    top: var(--space-4);
+    max-height: calc(100vh - 2 * var(--space-4));
+    overflow-y: auto;
+    padding: var(--space-5);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+}
+
+.zaehler-detail:empty {
+    display: none;
+}
+
+.zaehler-detail.blendet-ein {
+    animation: auftauchen var(--dauer-mittel) var(--kurve);
+}
+
+.zaehler-detail-kopf {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: var(--space-3);
+}
+
+.zaehler-detail-titel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    min-width: 0;
+}
+
+.zaehler-art {
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+}
+
+.zaehler-nummer {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: 22px;
+    overflow-wrap: anywhere;
+}
+
+.zaehler-detail-aktionen {
+    flex-wrap: wrap;
+}
+
+.zaehler-detail-aktionen > button {
+    flex: 1 1 auto;
+    justify-content: center;
+}
+
+.zaehler-kennzahlen {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--space-2);
+}
+
+.kennzahl {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    padding: var(--space-3);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--bg-hover);
+    min-width: 0;
+}
+
+.kennzahl-titel,
+.kennzahl small {
+    font-size: 13px;
+    color: var(--text-muted);
+}
+
+.kennzahl strong {
+    font-size: 16px;
+    overflow-wrap: anywhere;
+}
+
+/* Verbrauch je Ablesezeitraum: die Säulenhöhe setzt app.js als --anteil. */
+.verbrauch-balken {
+    display: flex;
+    align-items: flex-end;
+    gap: var(--space-2);
+    height: 120px;
+    padding-top: var(--space-2);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.balken {
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    align-items: center;
+    gap: var(--space-1);
+}
+
+.balken-saeule {
+    width: 100%;
+    max-width: 32px;
+    height: var(--anteil);
+    min-height: 2px;
+    border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+    background: var(--primary);
+    transform-origin: bottom;
+    animation: marke-wachsen var(--dauer-mittel) var(--kurve) backwards;
+}
+
+.balken-datum {
+    font-size: 13px;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+/* Gewählte Zeile: getönt, links ein Indigo-Akzent wie bei den Belegen. */
+.zaehler-tabelle tr[data-zaehler] {
+    cursor: pointer;
+}
+
+/* Zeilen-Hover führt das Auge über die Zeile; die gewählte Zeile behält ihre Tönung. */
+@media (hover: hover) {
+    .tabelle tbody tr:hover,
+    .zaehler-tabelle tr[data-zaehler]:not([aria-current="true"]):hover {
+        background: var(--bg-hover);
+    }
+}
+
+.zaehler-tabelle tr[aria-current="true"] {
+    background: var(--primary-tint);
+}
+
+.zaehler-tabelle tr[aria-current="true"] > td:first-child {
+    box-shadow: inset 3px 0 0 var(--primary);
+}
+
+.zaehler-tabelle tr[data-zaehler]:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: -2px;
+}
+
+/* Breit trägt das Detail alle Handlungen, die Liste bleibt ruhig. */
+@media (min-width: 1101px) {
+    .zaehler-tabelle .zaehler-kopf th:last-child,
+    .zaehler-tabelle td.zaehler-aktionen {
+        display: none;
+    }
+}
+
+@media (max-width: 1100px) {
+    .zaehler-ansicht {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    /* Mit dem Wechsel-Knopf (NK-258) und „Ersten Stand erfassen“ passen die
+       Aktionen nicht in eine Zeile; das inline nowrap hält NK-219. */
+    .zaehler-tabelle td.zaehler-aktionen {
+        white-space: normal !important;
+    }
+
+    .zaehler-detail {
+        flex: none;
+        position: static;
+        max-height: none;
+    }
+}
+
+/* Bewegung: kurz und gerichtet. Neue Inhalte steigen 8 px auf,
+   Dialoge wachsen aus 98 %. Wer weniger Bewegung wünscht, sieht keine. */
+:root {
+    --dauer-kurz: 140ms;
+    --dauer-mittel: 240ms;
+    --kurve: cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+@keyframes auftauchen {
+    from { opacity: 0; transform: translateY(8px); }
+}
+
+@keyframes hereinwachsen {
+    from { opacity: 0; transform: translateY(8px) scale(0.98); }
+}
+
+@keyframes marke-wachsen {
+    from { transform: scaleY(0); }
+}
+
+/* Seitenwechsel: die Blöcke der Seite folgen einander im Abstand von 40 ms. */
+.tab-content.active > * {
+    animation: auftauchen var(--dauer-mittel) var(--kurve) backwards;
+}
+
+.tab-content.active > :nth-child(2) { animation-delay: 40ms; }
+.tab-content.active > :nth-child(3) { animation-delay: 80ms; }
+.tab-content.active > :nth-child(n+4) { animation-delay: 120ms; }
+
+.modal-overlay.active > * {
+    animation: hereinwachsen var(--dauer-mittel) var(--kurve) backwards;
+}
+
+/* Leiste: der offene Bereich trägt links eine Indigo-Marke, die aufwächst. */
+.leiste-eintrag.active::before {
+    content: '';
+    position: absolute;
+    left: calc(-1 * var(--space-1));
+    top: var(--space-3);
+    bottom: var(--space-3);
+    width: 3px;
+    border-radius: var(--radius-chip);
+    background: var(--primary);
+    animation: marke-wachsen var(--dauer-mittel) var(--kurve) backwards;
+}
+
+/* Knöpfe geben beim Drücken einen Pixel nach. */
+button:not(:disabled):active,
+.btn:active {
+    transform: scale(0.98);
+}
+
+.aufgabe {
+    animation: auftauchen var(--dauer-mittel) var(--kurve) backwards;
+}
+
+.aufgabe:nth-child(3) { animation-delay: 40ms; }
+.aufgabe:nth-child(4) { animation-delay: 80ms; }
+.aufgabe:nth-child(n+5) { animation-delay: 120ms; }
+
+/* Seitenwechsel mit Richtung (initTabs, seitenRichtung): ein Bereich weiter
+   oben in der Leiste sinkt von oben herein, Reiter desselben Bereichs
+   gleiten quer, ihr Seitenkopf bleibt dabei stehen. */
+@keyframes von-oben {
+    from { opacity: 0; transform: translateY(-8px); }
+}
+
+@keyframes von-rechts {
+    from { opacity: 0; transform: translateX(16px); }
+}
+
+@keyframes von-links {
+    from { opacity: 0; transform: translateX(-16px); }
+}
+
+.tab-content.active[data-richtung="zurueck"] > * { animation-name: von-oben; }
+.tab-content.active[data-richtung="rechts"] > * { animation-name: von-rechts; }
+.tab-content.active[data-richtung="links"] > * { animation-name: von-links; }
+.tab-content.active[data-richtung="rechts"] > .section-header,
+.tab-content.active[data-richtung="links"] > .section-header { animation: none; }
+
+/* Dialoge legen eine leichte Unschärfe über die Seite dahinter. */
+.modal-overlay.active {
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+}
+
+/* Einflug nach der Anmeldung (index.html, formular.js): die Indigo-Fläche
+   der Anmeldeseite gleitet nach rechts weg, die App rückt von links nach. */
+html.einflug body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    background: var(--primary);
+    pointer-events: none;
+    animation: deckblatt-weg 560ms cubic-bezier(0.7, 0, 0.3, 1) 120ms forwards;
+}
+
+html.einflug .app-container {
+    animation: einschieben 640ms var(--kurve) 160ms backwards;
+}
+
+@keyframes deckblatt-weg {
+    to { transform: translateX(100%); visibility: hidden; }
+}
+
+@keyframes einschieben {
+    from { opacity: 0; transform: translateX(-32px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *:not(.ph-spin),
+    *::before,
+    *::after {
+        animation-duration: 1ms !important;
+        animation-delay: 0ms !important;
+        transition-duration: 1ms !important;
+    }
+}
+
+/* Eine Abrechnungstabelle für „Details zur Abrechnung“ und die
+   Vorschau (abrechnungsTabelle in app.js). Ergebnis zuerst, je Kostenart eine
+   Zeile; die Aufschlüsselung klappt darunter über die volle Breite auf. */
+.abr-kopf {
+    margin-bottom: var(--space-5);
+}
+
+.abr-kopf h3 {
+    margin: 0 0 var(--space-2);
+}
+
+.abr-kopf p {
+    margin: 0 0 var(--space-1);
+    color: var(--text-muted);
+}
+
+.abr-kopf .abr-kopf-klein {
+    font-size: 13px;
+}
+
+.abr-ergebnis {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: var(--space-3);
+    margin-bottom: var(--space-5);
+}
+
+.abr-ergebnis-feld {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    min-width: 0;
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--surface);
+}
+
+.abr-ergebnis-name {
+    font-size: 13px;
+    color: var(--text-muted);
+}
+
+.abr-ergebnis-wert {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.abr-ergebnis-saldo {
+    background: var(--primary-tint);
+    border-color: var(--primary-tint);
+}
+
+.abr-ergebnis-saldo .abr-ergebnis-name,
+.abr-ergebnis-saldo .abr-ergebnis-wert {
+    color: var(--primary-text);
+}
+
+.abr-ergebnis-saldo.abr-guthaben {
+    background: var(--success-bg);
+    border-color: var(--success-bg);
+}
+
+.abr-ergebnis-saldo.abr-guthaben .abr-ergebnis-name,
+.abr-ergebnis-saldo.abr-guthaben .abr-ergebnis-wert {
+    color: var(--success-color);
+}
+
+.abr-aktionen {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin-bottom: var(--space-5);
+}
+
+.abr-rahmen {
+    margin-bottom: var(--space-5);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+}
+
+.abr-tabelle .abr-zahl {
+    text-align: right;
+    white-space: nowrap;
+}
+
+.abr-tabelle td.abr-zahl {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+}
+
+.abr-tabelle .abr-beleg {
+    width: 1%;
+    text-align: center;
+}
+
+.abr-beleg-link {
+    display: inline-flex;
+    padding: var(--space-1);
+    border-radius: var(--radius-sm);
+    color: var(--primary-text);
+    font-size: 20px;
+}
+
+.abr-beleg-link:hover {
+    background: var(--primary-tint);
+}
+
+.abr-ohne-beleg,
+.abr-leer {
+    color: var(--text-muted);
+}
+
+.abr-leer {
+    text-align: center;
+}
+
+/* Jeder Posten ist ein eigener tbody; die Linie darunter bleibt stehen. */
+.data-table.abr-tabelle .abr-posten tr td {
+    border-bottom: 1px solid var(--divider);
+}
+
+.data-table.abr-tabelle .abr-posten:has(+ .abr-details:not([hidden])) tr td {
+    border-bottom-color: transparent;
+}
+
+.abr-umschalter {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+    width: 100%;
+    margin: 0;
+    padding: var(--space-1) 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.abr-tabelle .abr-umschalter:active {
+    transform: none;
+}
+
+.abr-pfeil {
+    margin-top: var(--space-1);
+    color: var(--text-muted);
+    transition: transform var(--dauer-kurz) var(--kurve);
+}
+
+.abr-umschalter[aria-expanded="true"] .abr-pfeil {
+    transform: rotate(90deg);
+}
+
+.abr-kostenart {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.abr-name {
+    font-weight: 500;
+}
+
+.abr-zeitraum {
+    font-size: 13px;
+    color: var(--text-muted);
+}
+
+.data-table.abr-tabelle .abr-details {
+    background: var(--surface-alt);
+}
+
+.data-table.abr-tabelle .abr-details tr td {
+    height: auto;
+    padding-top: var(--space-1);
+    padding-bottom: var(--space-1);
+    border-bottom: 0;
+}
+
+.data-table.abr-tabelle .abr-details tr:first-child td {
+    padding-top: 0;
+}
+
+.data-table.abr-tabelle .abr-details tr:last-child td {
+    padding-bottom: var(--space-3);
+    border-bottom: 1px solid var(--divider);
+}
+
+.data-table.abr-tabelle .abr-details tr:hover {
+    background: transparent;
+}
+
+.abr-unter-text {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+    padding-left: var(--space-5);
+    font-size: 13px;
+}
+
+.abr-symbol {
+    margin-top: 2px;
+    color: var(--text-muted);
+}
+
+.abr-symbol-eigen {
+    color: var(--primary-text);
+}
+
+.abr-text-titel {
+    font-weight: 600;
+}
+
+.abr-text-info {
+    color: var(--text-muted);
+}
+
+.abr-unter-betrag {
+    font-size: 13px;
+}
+
+/* „geschätzt“ statt ~ und Rechner: Hover oder Fokus erklärt, Klick zeigt
+   den Rechenweg (openInterpolationAudit). */
+.abr-geschaetzt {
+    display: inline-flex;
+    align-items: center;
+    margin-left: var(--space-1);
+    padding: 0 var(--space-2);
+    border: 0;
+    border-radius: var(--radius-chip);
+    background: var(--primary-tint);
+    color: var(--primary-text);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 20px;
+    white-space: nowrap;
+    cursor: help;
+}
+
+button.abr-geschaetzt {
+    cursor: pointer;
+}
+
+.abr-zaehlerkasten {
+    display: grid;
+    gap: var(--space-1);
+    margin: var(--space-2) 0 0 var(--space-5);
+    padding: var(--space-3) var(--space-4);
+    border: 1px dashed var(--control-border);
+    border-radius: var(--radius-md);
+    background: var(--surface);
+    font-size: 13px;
+}
+
+.abr-zaehlerkasten > div {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 var(--space-2);
+}
+
+.abr-zaehlerkasten dt {
+    color: var(--text-muted);
+}
+
+.abr-zaehlerkasten dd {
+    margin: 0;
+    font-weight: 500;
+}
+
+.data-table.abr-tabelle tfoot th {
+    font-size: 15px;
+    font-weight: 500;
+    letter-spacing: 0;
+    text-transform: none;
+    white-space: normal;
+    color: var(--text-main);
+}
+
+.data-table.abr-tabelle tfoot th,
+.data-table.abr-tabelle tfoot td {
+    border-top: 1px solid var(--divider);
+    border-bottom: 0;
+}
+
+.abr-tabelle .abr-minus {
+    color: var(--text-muted);
+}
+
+.data-table.abr-tabelle .abr-saldo th,
+.data-table.abr-tabelle .abr-saldo td {
+    background: var(--primary-tint);
+    color: var(--primary-text);
+    font-weight: 600;
+}
+
+@media (max-width: 560px) {
+    .abr-unter-text {
+        padding-left: 0;
+    }
+
+    .abr-zaehlerkasten {
+        margin-left: 0;
+    }
+
+    /* Handy: drei Spalten passen nicht, jede Zeile wird ein Raster mit
+       Betrag und Beleg rechts übereinander; Kopf nur für Vorleser */
+    .abr-tabelle thead {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+    }
+
+    .abr-tabelle tbody:not([hidden]),
+    .abr-tabelle tfoot {
+        display: block;
+    }
+
+    .abr-tabelle tr {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+    }
+
+    .data-table.abr-tabelle td,
+    .data-table.abr-tabelle th {
+        height: auto;
+    }
+
+    .data-table.abr-tabelle td:first-child,
+    .data-table.abr-tabelle th:first-child {
+        padding-left: var(--space-4);
+        padding-right: var(--space-2);
+    }
+
+    .abr-haupt > td:first-child {
+        grid-row: span 2;
+    }
+
+    .data-table.abr-tabelle .abr-haupt td.abr-zahl {
+        border-bottom-color: transparent;
+    }
+
+    .abr-tabelle td[colspan] {
+        grid-column: 1 / -1;
+    }
+
+    .abr-tabelle tr > td:empty {
+        display: none;
+    }
+
+    .data-table.abr-tabelle .abr-zahl,
+    .data-table.abr-tabelle .abr-beleg {
+        width: auto;
+        padding-right: var(--space-4);
+        text-align: right;
+    }
 }

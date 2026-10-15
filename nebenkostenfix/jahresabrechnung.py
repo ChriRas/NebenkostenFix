@@ -33,6 +33,8 @@ from __future__ import annotations
 from datetime import date, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
+from nebenkostenfix import betrkv
+
 # Die Kostenarten, die in fast jedem Mietshaus anfallen: fehlen sie, fragt
 # der Assistent nach, auch ohne Vorjahr.
 UEBLICH = (
@@ -41,7 +43,7 @@ UEBLICH = (
     'Entwässerung',
     'Straßenreinigung und Müllbeseitigung',
     'Sach- und Haftpflichtversicherung',
-    'Beleuchtung (Allgemeinstrom)',
+    'Allgemeinstrom',
 )
 STICHTAG_TOLERANZ = timedelta(days=31)
 WECHSEL_TOLERANZ = timedelta(days=7)
@@ -94,7 +96,8 @@ def stand(property_id: int, jahr: int, heute: date | None = None) -> dict:
                  and _ueberlappt(r.start_date, r.end_date, von, bis)]
         vorige = [r for r in rechnungen if r.category_id == kat.id
                   and _ueberlappt(r.start_date, r.end_date, vorjahr_von, vorjahr_bis)]
-        if not (diese or vorige or kat.name in UEBLICH):
+        if not (diese or vorige or kat.name in UEBLICH
+                or betrkv.FRUEHERE_NAMEN.get(kat.name) in UEBLICH):
             continue
         summe = sum((_anteil(r, von, bis) for r in diese), start=Decimal(0))
         summe_vorjahr = sum((_anteil(r, vorjahr_von, vorjahr_bis) for r in vorige), start=Decimal(0))
