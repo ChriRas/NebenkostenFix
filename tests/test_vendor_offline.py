@@ -72,6 +72,12 @@ PAKETE = {
         'fonts/geist-mono/OFL.txt',
         b"font-family: 'Geist Mono';",
     ),
+    # Legacy-Build: läuft auch in der Edge-WebView der Desktop-App.
+    'pdfjs': (
+        ['pdfjs/pdf.min.js', 'pdfjs/pdf.worker.min.js'],
+        'pdfjs/LICENSE',
+        b'"4.10.38"',
+    ),
 }
 
 # Der Pin: sha256 jeder gebündelten Datei. Ein neues Paket heißt: Datei
@@ -106,6 +112,10 @@ PINS = {
         '684ad5b531f81d43c1e8c7038262d5db7cdc1f68006e04d6c7769efa8d33c8cc',
     'fonts/geist-mono/geist-mono-latin-ext.woff2':
         '1a189eb997c3e2ece68373e387afaec9e8617424186c4b1ab3cff7c54ba6223b',
+    'pdfjs/pdf.min.js':
+        '44ec6f011027ee77791386b66c14876a5fc29e20bf0433c07c6726fff7212b72',
+    'pdfjs/pdf.worker.min.js':
+        'bd88805178a26c729db8c0107a5b630cb900ec070f4d8c7529a3e45530afd41d',
 }
 
 
@@ -188,3 +198,11 @@ def test_gebuendelte_dateien_werden_ausgeliefert(auth_client):
         antwort = auth_client.get(f'/static/vendor/fonts/{schrift}')
         assert antwort.status_code == 200, schrift
         assert antwort.data[:4] == b'wOF2', schrift
+
+
+def test_pdfjs_wird_als_skript_ausgeliefert(auth_client):
+    """pdf.js lädt als Modul und Worker: das geht nur mit JS-Medientyp."""
+    for datei in ('pdf.min.js', 'pdf.worker.min.js'):
+        antwort = auth_client.get(f'/static/vendor/pdfjs/{datei}')
+        assert antwort.status_code == 200, datei
+        assert 'javascript' in antwort.content_type, (datei, antwort.content_type)

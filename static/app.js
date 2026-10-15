@@ -2869,6 +2869,22 @@ function zaehlerArtName(name) {
     return ZAEHLER_ANZEIGENAMEN[name] || name;
 }
 
+// Fotovorschau einer Ablesung: neben dem Symbol auf der Seite mit mehr Platz,
+// waagrecht im Fenster gehalten (die Vorschau ist position: fixed).
+document.addEventListener('mouseover', ereignis => {
+    const halter = ereignis.target.closest && ereignis.target.closest('.image-hover-container');
+    const bild = halter && halter.querySelector('.image-hover-preview');
+    if (!bild) return;
+    const r = halter.getBoundingClientRect();
+    const breite = 260;   // 250 px Bild plus Innenabstand und Rand
+    const links = Math.min(Math.max(8, r.left + r.width / 2 - breite / 2), window.innerWidth - breite - 8);
+    const oben = r.top, unten = window.innerHeight - r.bottom;
+    bild.style.left = `${links}px`;
+    bild.style.top = oben >= unten ? '' : `${r.bottom + 8}px`;
+    bild.style.bottom = oben >= unten ? `${window.innerHeight - r.top + 8}px` : '';
+    bild.style.maxHeight = `${Math.max(oben, unten) - 16}px`;
+});
+
 function getReadingHtml(r, einheit) {
     // NK-220: die Einheit kommt vom Server (einheit_fuer im Rechenkern),
     // nicht mehr aus dem Namen der Kostenart; Heizung bekam vorher keine.
@@ -4650,11 +4666,11 @@ function renderAlleRechnungen(liste, eingang) {
 // Kopf und Blatt der mittleren Spalte; PDF und Bild bleiben in der App,
 // der Knopf daneben öffnet dieselbe Datei in einem neuen Tab.
 function vorschauHtml({ titel, info, adresse, datei, knoepfeHtml = '' }) {
-    // PDF darf im Rahmen derselben Herkunft stehen (CSP frame-src 'self' blob:).
+    const istPdf = Boolean(adresse) && /\.pdf$/i.test(datei);
     const blattHtml = !adresse
         ? `<p class="beleg-ohne">${escapeHtml('Zu dieser Rechnung ist kein Beleg hinterlegt.')}</p>`
-        : /\.pdf$/i.test(datei)
-            ? `<iframe class="beleg-blatt" src="${escapeHtml(adresse)}" title="${escapeHtml(`Vorschau: ${titel}`)}"></iframe>`
+        : istPdf
+            ? `<p class="beleg-ohne">${escapeHtml('PDF wird geladen …')}</p>`
             : /\.(png|jpe?g|webp|gif)$/i.test(datei)
                 ? `<img class="beleg-bild" src="${escapeHtml(adresse)}" alt="${escapeHtml(titel)}">`
                 : `<p class="beleg-ohne">${escapeHtml('Für diese Datei gibt es keine Vorschau. Öffnen Sie sie in einem neuen Tab.')}</p>`;
@@ -4664,7 +4680,61 @@ function vorschauHtml({ titel, info, adresse, datei, knoepfeHtml = '' }) {
     return `<div class="vorschau-kopf"><div class="vorschau-titel">` +
         `<h3>${escapeHtml(titel)}</h3>` +
         `<span class="beleg-info">${escapeHtml(info)}</span></div>` +
-        `${tabHtml}${knoepfeHtml}</div><div class="vorschau-blatt">${blattHtml}</div>`;
+        `${tabHtml}${knoepfeHtml}</div>` +
+        (istPdf
+            ? `<div class="vorschau-blatt beleg-pdf" data-pdf="${escapeHtml(adresse)}" data-titel="${escapeHtml(titel)}" role="region" aria-label="${escapeHtml(`Vorschau: ${titel}`)}">${blattHtml}</div>`
+            : `<div class="vorschau-blatt">${blattHtml}</div>`);
+}
+
+// PDF-Belege zeichnet pdf.js als Seiten auf das eigene Blatt. Der PDF-Viewer
+// des Browsers brachte im iframe einen zweiten Rahmen samt Werkzeugleiste mit.
+// Neue Uploads kommen als Datei (fetch auf blob: sperrt die CSP), sonst lädt
+// fetch die Datei. Scheitert pdf.js, zeigt der iframe wie bisher das PDF.
+let pdfjsLaden = null;
+async function zeichnePdf(blatt, datei = null) {
+    if (!blatt) return;
+    const adresse = blatt.dataset.pdf;
+    try {
+        pdfjsLaden = pdfjsLaden || import('/static/vendor/pdfjs/pdf.min.js').then(pdfjs => {
+            pdfjs.GlobalWorkerOptions.workerSrc = '/static/vendor/pdfjs/pdf.worker.min.js';
+            return pdfjs;
+        });
+        const pdfjs = await pdfjsLaden;
+        let daten;
+        if (datei) {
+            daten = await datei.arrayBuffer();
+        } else {
+            const antwort = await fetch(adresse);
+            if (!antwort.ok) throw await serverFehler(antwort);
+            daten = await antwort.arrayBuffer();
+        }
+        const pdf = await pdfjs.getDocument({ data: daten, isEvalSupported: false }).promise;
+        try {
+            const zielSeite = Number((adresse.match(/#page=(\d+)/) || [])[1]) || 1;
+            blatt.innerHTML = '';
+            for (let nr = 1; nr <= pdf.numPages && blatt.isConnected; nr++) {
+                const seite = await pdf.getPage(nr);
+                const leinwand = document.createElement('canvas');
+                leinwand.className = 'pdf-seite';
+                leinwand.setAttribute('role', 'img');
+                leinwand.setAttribute('aria-label', `Seite ${nr} von ${pdf.numPages}`);
+                blatt.append(leinwand);
+                const massstab = leinwand.clientWidth * (window.devicePixelRatio || 1) / seite.getViewport({ scale: 1 }).width;
+                const ansicht = seite.getViewport({ scale: massstab });
+                leinwand.width = Math.floor(ansicht.width);
+                leinwand.height = Math.floor(ansicht.height);
+                await seite.render({ canvasContext: leinwand.getContext('2d'), viewport: ansicht }).promise;
+                if (nr === zielSeite) blatt.scrollTop = leinwand.offsetTop - blatt.firstElementChild.offsetTop;
+            }
+        } finally {
+            pdf.destroy();
+        }
+    } catch (fehler) {
+        console.warn('pdf.js-Vorschau gescheitert, zeige den Browser-Viewer', fehler);
+        if (!blatt.isConnected) return;
+        blatt.classList.remove('beleg-pdf');
+        blatt.innerHTML = `<iframe class="beleg-blatt" src="${escapeHtml(adresse)}" title="${escapeHtml(`Vorschau: ${blatt.dataset.titel}`)}"></iframe>`;
+    }
 }
 
 async function zeigeBeleg(d) {
@@ -4679,6 +4749,7 @@ async function zeigeBeleg(d) {
         knoepfeHtml: `<button type="button" class="btn-icon" title="Beleg bearbeiten" onclick="openAddDocumentModal(${d.id})"><i class="ph ph-pencil-simple"></i></button>` +
             `<button type="button" class="btn-icon" title="Beleg löschen" onclick="deleteDocument(${d.id})"><i class="ph ph-trash"></i></button>`,
     });
+    zeichnePdf(vorschau.querySelector('.beleg-pdf'));
 
     await openAddInvoiceModal(null, document.getElementById('eingang-formular'));
     if (vorschau.dataset.beleg !== `d${d.id}`) return;   // inzwischen ein anderer Beleg gewählt
@@ -4717,6 +4788,7 @@ async function zeigeRechnung(inv) {
             ? `<button type="button" class="btn-icon" title="Rechnung löschen" aria-label="Rechnung löschen" onclick="deleteInvoice(${Number(inv.id)})"><i class="ph ph-trash" aria-hidden="true"></i></button>`
             : '<button type="button" class="btn-icon" title="Datei verwerfen" aria-label="Datei verwerfen" onclick="verwirfNeueDatei(); renderDocuments();"><i class="ph ph-x" aria-hidden="true"></i></button>',
     });
+    zeichnePdf(vorschau.querySelector('.beleg-pdf'), inv ? null : neueDatei);
 
     await openAddInvoiceModal(inv ? inv.id : null, document.getElementById('eingang-formular'));
     if (vorschau.dataset.beleg !== schluessel) return;   // inzwischen etwas anderes gewählt

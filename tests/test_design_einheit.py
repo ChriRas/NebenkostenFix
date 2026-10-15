@@ -567,3 +567,61 @@ def test_runde2_kleinfehler_datum_einzahl_zeitraum():
     assert '.zeitraum-felder {' in STIL
     for feld in ('billing-period-start', 'frei-period-start'):
         assert 'class="zeitraum-felder"' in SEITE[SEITE.index(f'id="{feld}"') - 300:SEITE.index(f'id="{feld}"')], feld
+
+
+def _regel(selektor: str, text: str = STIL) -> str:
+    start = text.index(selektor + ' {')
+    return text[start:text.index('}', start)]
+
+
+def test_runde3_feldpaare_unten_buendig():
+    """Runde 3: Bricht in einem Feldpaar eine Beschriftung um, bleiben die
+    Eingabefelder auf einer Linie. Hilfetexte stehen deshalb unter der Zeile,
+    nie in nur einer Hälfte. Unter 640 px stapeln die Felder in voller Breite."""
+    assert 'align-items: flex-end' in _regel('.felder-nebeneinander')
+    assert '.felder-nebeneinander { flex-direction: column; align-items: stretch; }' in STIL
+    seite = _ohne_kommentare_html(SEITE)
+    paare = seite.split('<div class="felder-nebeneinander">')[1:]
+    assert len(paare) >= 17
+    for paar in paare:
+        # Das Paar endet, wo die öffnenden und schließenden divs aufgehen.
+        tiefe, pos = 1, 0
+        while tiefe:
+            auf, zu = paar.find('<div', pos), paar.find('</div>', pos)
+            if auf != -1 and auf < zu:
+                tiefe, pos = tiefe + 1, auf + 4
+            else:
+                tiefe, pos = tiefe - 1, zu + 6
+        assert '<small' not in paar[:pos], paar[:200]
+
+
+def test_runde3_fotovorschau_nicht_vom_tabellenrahmen_beschnitten():
+    """Runde 3: Die Fotovorschau einer Ablesung liegt fest im Fenster. Absolut
+    beschnitt sie das overflow-x der Tabellenrolle (oberste Zeile halb)."""
+    regel = _regel('.image-hover-preview')
+    assert 'position: fixed' in regel
+    assert 'bottom: 100%' not in regel
+    assert "ereignis.target.closest('.image-hover-container')" in SKRIPT
+
+
+def test_runde3_pdf_ohne_browser_viewer():
+    """PDF-Belege zeichnet pdf.js auf das eigene Blatt, ein Rahmen statt zwei.
+
+    Der iframe mit dem PDF-Viewer des Browsers bleibt nur als Rückfall in
+    zeichnePdf, vorschauHtml selbst setzt ihn nicht mehr.
+    """
+    start = SKRIPT.index('function vorschauHtml(')
+    vorschau = SKRIPT[start:SKRIPT.index('\n}\n', start)]
+    assert '<iframe' not in vorschau
+    assert 'beleg-pdf' in vorschau
+    zeichnen = SKRIPT[SKRIPT.index('async function zeichnePdf('):]
+    zeichnen = zeichnen[:zeichnen.index('\n}\n')]
+    assert "import('/static/vendor/pdfjs/pdf.min.js')" in zeichnen
+    assert 'isEvalSupported: false' in zeichnen   # CSP ohne unsafe-eval
+    assert 'datei.arrayBuffer()' in zeichnen       # fetch auf blob: sperrt die CSP
+    assert '<iframe' in zeichnen                   # Rückfall
+    assert SKRIPT.count("zeichnePdf(vorschau.querySelector('.beleg-pdf')") == 2
+    regel = _regel('.vorschau-blatt.beleg-pdf')
+    assert 'overflow-y: auto' in regel and 'position: relative' in regel
+    assert 'justify-content: flex-start' in regel   # Seite 1 bleibt erreichbar
+    assert 'border:' not in _regel('.pdf-seite')   # kein zweiter Rahmen

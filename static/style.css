@@ -964,18 +964,17 @@ progress {
     display: inline-block;
     cursor: pointer;
 }
+/* Fest am Bildschirm: Tabellen rollen quer (overflow-x), absolut wäre das Foto
+   am Tabellenrand abgeschnitten. Lage und Höhe setzt app.js beim Überfahren. */
 .image-hover-preview {
     display: none;
-    position: absolute;
-    bottom: 100%;
-    left: 50%;
-    transform: translateX(-50%);
+    position: fixed;
     width: 250px;
     height: auto;
+    object-fit: contain;
     border-radius: var(--radius-md);
     border: 1px solid var(--border-color);
     z-index: 9999;
-    margin-bottom: var(--space-2);
     background: var(--surface);
     padding: var(--space-1);
     pointer-events: none;
@@ -2303,9 +2302,16 @@ a.btn-primary:hover {
 
 .feld-min { min-width: 180px; }
 
+/* Feldpaare unten bündig: bricht eine Beschriftung um, rutscht nur sie nach
+   oben, die Eingabefelder bleiben auf einer Linie. Hilfetext unter die Zeile. */
 .felder-nebeneinander {
     display: flex;
+    align-items: flex-end;
     gap: var(--space-4);
+}
+
+.hilfe-unter-zeile {
+    margin: calc(-1 * var(--space-2)) 0 var(--space-4);
 }
 
 .zeile-eng {
@@ -2374,7 +2380,7 @@ a.btn-primary:hover {
 }
 
 @media (max-width: 640px) {
-    .felder-nebeneinander { flex-direction: column; }
+    .felder-nebeneinander { flex-direction: column; align-items: stretch; }
 }
 
 
@@ -3422,6 +3428,28 @@ td .btn-icon,
     object-fit: contain;
 }
 
+/* PDF: die Seiten liegen als Blätter direkt auf dem Grund, ein Rahmen statt
+   zwei. Das Blatt rollt, nicht die Seite. */
+.vorschau-blatt.beleg-pdf {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;   /* zentriert läge Seite 1 über dem Rollbereich */
+    align-items: center;
+    gap: var(--space-4);
+    height: calc(100vh - 390px);
+    min-height: 480px;
+    overflow-y: auto;
+}
+
+.pdf-seite {
+    display: block;
+    flex-shrink: 0;
+    width: 100%;
+    height: auto;
+    border-radius: var(--radius-sm);
+}
+
 .beleg-ohne {
     margin: 0;
     padding: var(--space-6) 0;
@@ -3500,7 +3528,8 @@ td .btn-icon,
         display: none;
     }
 
-    .beleg-blatt {
+    .beleg-blatt,
+    .vorschau-blatt.beleg-pdf {
         height: 70vh;
         min-height: 360px;
     }
