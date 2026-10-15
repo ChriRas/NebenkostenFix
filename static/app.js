@@ -173,6 +173,8 @@ async function zeigeAngemeldetenBenutzer() {
         if (netzhinweis) netzhinweis.hidden = !!daten.desktop;
         const leiste = document.getElementById('ohne-anmeldung-hinweis');
         if (leiste) leiste.hidden = !(offen && !daten.desktop);
+        const chip = document.getElementById('kopf-anmeldung-aus');
+        if (chip) chip.hidden = !(offen && !daten.desktop);
         // NK-123: die Gefahrenzone gehoert nur in den Entwicklungsstapel.
         // Sie bleibt im HTML verborgen, bis /api/auth/me meldet, dass die
         // Entwicklerroute angemeldet ist -- im Auslieferungsbuild bleibt
@@ -259,6 +261,7 @@ function initApp() {
     initTabs();
     initModalBedienung();
     initBarrierearm();
+    initBefehl();
     initKopfMenues();
     fetchProperties();
     fetchTenants();
@@ -483,10 +486,7 @@ function initTabs() {
             tabContents.forEach(tab => tab.style.display = 'none');
             
             item.classList.add('active');
-            // NK-224: der Gruß gehört zur Übersicht, jede andere Seite hat
-            // ihre eigene Überschrift.
-            const gruss = document.querySelector('.greeting');
-            if (gruss) gruss.hidden = item.dataset.tab !== 'dashboard';
+            zeigeBereich(item);
             const targetId = 'tab-' + item.dataset.tab;
             const targetTab = document.getElementById(targetId);
             if (targetTab) {
@@ -516,6 +516,38 @@ function initTabs() {
             tab.style.display = 'none';
         }
     });
+
+    // Leiste (Konzept D): ein Bereich öffnet seine zuletzt gezeigte Seite.
+    document.querySelectorAll('.leiste-eintrag, .logo').forEach(eintrag => {
+        eintrag.addEventListener('click', (e) => {
+            e.preventDefault();
+            const gruppe = eintrag.dataset.gruppe;
+            const erste = document.querySelector(`.nav-item[data-gruppe="${gruppe}"]`);
+            wechsleZuTab(letzteSeite[gruppe] || erste.dataset.tab);
+        });
+    });
+    zeigeBereich(document.querySelector('.nav-item.active'));
+}
+
+// Konzept D: die Leiste zeigt den Bereich, die Reiter im Seitenkopf seine
+// Seiten. Die Reiter wandern in den Kopf der offenen Seite.
+const letzteSeite = {};
+function zeigeBereich(item) {
+    const gruppe = item ? item.dataset.gruppe : null;
+    if (item) letzteSeite[gruppe] = item.dataset.tab;
+    document.querySelectorAll('.leiste-eintrag').forEach(eintrag => {
+        const aktiv = eintrag.dataset.gruppe === gruppe;
+        eintrag.classList.toggle('active', aktiv);
+        if (aktiv) eintrag.setAttribute('aria-current', 'page');
+        else eintrag.removeAttribute('aria-current');
+    });
+    const reiter = document.querySelector('.unter-reiter');
+    if (!reiter) return;
+    const seiten = [...reiter.querySelectorAll('.nav-item')];
+    seiten.forEach(seite => { seite.hidden = seite.dataset.gruppe !== gruppe; });
+    reiter.hidden = seiten.filter(seite => !seite.hidden).length < 2;
+    const kopf = item && document.querySelector(`#tab-${item.dataset.tab} > .section-header`);
+    if (kopf) kopf.appendChild(reiter);
 }
 
 // --- Erste Schritte (NK-072) ---
@@ -554,6 +586,241 @@ function wechsleZuTab(tabName) {
     }
     const item = document.querySelector(`.nav-item[data-tab="${tabName}"]`);
     if (item) item.click();
+}
+
+// --- Heute (Konzept D) --------------------------------------------------------
+// Was jetzt zu tun ist, abgelesen aus den geladenen Daten: Zähler ohne Stand
+// im laufenden Jahr und fällige Abrechnungen. Zahlungen und Belege haben
+// keinen Status, an dem sich „offen“ ablesen ließe; sie fehlen darum hier.
+
+let abrechnungsVorschlaege = [];
+
+function heuteAufgaben() {
+    const echt = echterBestand();
+    const jahr = String(new Date().getFullYear());
+    const mitStand = new Set(echt.readings
+        .filter(r => (r.reading_date || '').startsWith(jahr)).map(r => r.meter_id));
+    const beispielMieter = new Set(tenants.filter(t => t.ist_beispiel).map(t => t.id));
+    return [
+        { name: 'Erfassen', aufgaben: echt.meters.filter(m => !mitStand.has(m.id)).map(m => ({
+            titel: `${zaehlerArtName(m.category_name)} ${m.meter_number}`,
+            info: `${m.property_name} · noch kein Stand ${jahr}`,
+            chip: 'fehlt', art: 'warn', aktion: 'Stand eintragen',
+            los: () => openAddReadingModal(m.id),
+        })) },
+        { name: 'Abrechnen', aufgaben: abrechnungsVorschlaege
+            .filter(v => !beispielMieter.has(v.tenant_id)).map(v => ({
+                titel: `${v.tenant_name} (${v.apartment_name})`,
+                info: `${datumText(v.suggested_start)} – ${datumText(v.suggested_end)} · unberechnete Kosten`,
+                chip: 'fällig', art: 'ind', aktion: 'Offene Kosten abrechnen',
+                los: () => openBillingSelectionModal(v),
+            })) },
+    ].filter(gruppe => gruppe.aufgaben.length);
+}
+
+function zeigeHeute() {
+    const feld = document.getElementById('heute-aufgaben');
+    if (!feld) return;
+    const gruppen = heuteAufgaben();
+    const anzahl = gruppen.reduce((summe, g) => summe + g.aufgaben.length, 0);
+    const zahl = document.getElementById('heute-zahl');
+    if (zahl) {
+        zahl.textContent = anzahl;
+        zahl.hidden = !anzahl;
+    }
+    const stand = document.getElementById('heute-stand');
+    if (stand) {
+        stand.textContent = !echterBestand().properties.length ? ''
+            : anzahl === 1 ? '1 Aufgabe offen.' : anzahl ? `${anzahl} Aufgaben offen.` : 'Nichts offen.';
+    }
+    feld.hidden = !anzahl;
+    feld.innerHTML = gruppen.map((g, gi) => `<section class="aufgaben-gruppe" aria-label="${escapeHtml(g.name)}">` +
+        `<h3 class="aufgaben-titel">${escapeHtml(g.name)}</h3>` +
+        g.aufgaben.map((a, ai) => `<div class="aufgabe" data-gruppe="${gi}" data-aufgabe="${ai}">` +
+            `<div class="aufgabe-text"><span class="aufgabe-name">${escapeHtml(a.titel)}</span>` +
+            `<span class="aufgabe-info">${escapeHtml(a.info)}</span></div>` +
+            `<span class="chip chip-${escapeHtml(a.art)}">${escapeHtml(a.chip)}</span>` +
+            `<button type="button" class="${gi + ai ? 'btn-secondary' : 'btn-primary'}">${escapeHtml(a.aktion)}</button>` +
+            `</div>`).join('') +
+        `</section>`).join('');
+    // Kein Datensatz im onclick-Attribut (NK-149): die Aktion hängt am Knopf.
+    feld.querySelectorAll('.aufgabe').forEach(zeile => {
+        const aufgabe = gruppen[zeile.dataset.gruppe].aufgaben[zeile.dataset.aufgabe];
+        zeile.querySelector('button').addEventListener('click', aufgabe.los);
+    });
+}
+
+// --- Kopfleiste (Konzept D) ---------------------------------------------------
+
+function fuelleHausWahl() {
+    const feld = document.getElementById('haus-wahl-feld');
+    const wahl = document.getElementById('haus-wahl');
+    if (!feld || !wahl) return;
+    feld.hidden = !properties.length;
+    wahl.innerHTML = '<option value="">Immobilie öffnen …</option>' + properties
+        .map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
+}
+
+function hausWaehlen(wahl) {
+    const haus = properties.find(p => String(p.id) === wahl.value);
+    wahl.value = '';
+    if (!haus) return;
+    wechsleZuTab('properties');
+    showPropertyDetails(haus);
+}
+window.hausWaehlen = hausWaehlen;
+
+// --- Befehlspalette (Konzept D) -----------------------------------------------
+// Strg+K oder das Suchfeld im Kopf: Seiten, häufige Aktionen und der Bestand
+// (Mieter, Zähler, Immobilien, Rechnungen) in einer Liste. Jedes Suchwort
+// muss vorkommen, darum findet „Stand Strom“ jeden Stromzähler.
+
+let befehlTreffer = [];
+let befehlAuswahl = 0;
+
+function befehlEintraege() {
+    const seiten = [...document.querySelectorAll('.unter-reiter .nav-item')].map(item => ({
+        gruppe: 'Seiten', titel: item.textContent.trim(), info: '',
+        los: () => wechsleZuTab(item.dataset.tab),
+    }));
+    seiten.push({ gruppe: 'Seiten', titel: 'Hilfe', info: '', los: () => zeigeHilfe() });
+    const aktionen = [
+        ['Rechnung erfassen', () => openAddInvoiceModal()],
+        ['Zahlung erfassen', () => openAddPaymentModal()],
+        ['Mieter anlegen', () => openAddTenantModal()],
+        ['Immobilie anlegen', () => openAddPropertyModal()],
+        ['Jahr abrechnen', () => oeffneJahrAssistent()],
+    ].map(([titel, los]) => ({ gruppe: 'Aktionen', titel, info: '', los }));
+    const zaehler = meters.map(m => ({
+        gruppe: 'Zähler', titel: `Stand eintragen: ${zaehlerArtName(m.category_name)} ${m.meter_number}`,
+        info: m.property_name || '', los: () => openAddReadingModal(m.id),
+    }));
+    const mieter = tenants.map(t => ({
+        gruppe: 'Mieter', titel: t.name, info: `${t.apartment_name} · ${t.property_name}`,
+        los: () => { wechsleZuTab('tenants'); openAddTenantModal(t); },
+    }));
+    const haeuser = properties.map(p => ({
+        gruppe: 'Immobilien', titel: p.name, info: '',
+        los: () => { wechsleZuTab('properties'); showPropertyDetails(p); },
+    }));
+    const rechnungen = invoices.map(r => ({
+        gruppe: 'Rechnungen', titel: [r.provider_name, r.invoice_number].filter(Boolean).join(' · ') || 'Rechnung',
+        info: `${r.category_name} · ${r.property_name} · ${datumText(r.start_date)} – ${datumText(r.end_date)}`,
+        los: () => { wechsleZuTab('invoices'); openAddInvoiceModal(r.id); },
+    }));
+    return [...seiten, ...aktionen, ...zaehler, ...mieter, ...haeuser, ...rechnungen];
+}
+
+// Hebt jedes Suchwort im Text hervor; der Text bleibt maskiert.
+function befehlMarkiert(text, woerter) {
+    const klein = text.toLowerCase();
+    const an = new Array(text.length).fill(false);
+    woerter.forEach(wort => {
+        for (let i = klein.indexOf(wort); i !== -1 && wort; i = klein.indexOf(wort, i + wort.length)) {
+            for (let j = i; j < i + wort.length; j++) an[j] = true;
+        }
+    });
+    let html = '';
+    for (let i = 0; i < text.length;) {
+        let j = i;
+        while (j < text.length && an[j] === an[i]) j++;
+        const stueck = escapeHtml(text.slice(i, j));
+        html += an[i] ? `<mark>${stueck}</mark>` : stueck;
+        i = j;
+    }
+    return html;
+}
+
+function befehlSuchen() {
+    const feld = document.getElementById('befehl-feld');
+    const woerter = feld.value.toLowerCase().split(/\s+/).filter(Boolean);
+    const alle = befehlEintraege();
+    befehlTreffer = woerter.length
+        ? alle.filter(e => woerter.every(w => `${e.titel} ${e.info}`.toLowerCase().includes(w)))
+        : alle.filter(e => e.gruppe === 'Seiten' || e.gruppe === 'Aktionen');
+    // Je Gruppe höchstens sechs, damit die Liste überschaubar bleibt.
+    const jeGruppe = {};
+    befehlTreffer = befehlTreffer.filter(e => (jeGruppe[e.gruppe] = (jeGruppe[e.gruppe] || 0) + 1) <= 6);
+    befehlAuswahl = 0;
+    const liste = document.getElementById('befehl-liste');
+    if (!befehlTreffer.length) {
+        liste.innerHTML = '<p class="befehl-leer">Nichts gefunden. Versuchen Sie einen anderen Begriff.</p>';
+        feld.removeAttribute('aria-activedescendant');
+        return;
+    }
+    let gruppe = '';
+    liste.innerHTML = befehlTreffer.map((e, i) => {
+        const kopf = e.gruppe !== gruppe ? `<div class="befehl-gruppe" role="presentation">${escapeHtml(e.gruppe)}</div>` : '';
+        gruppe = e.gruppe;
+        return kopf + `<div class="befehl-eintrag" role="option" id="befehl-${i}" data-index="${i}">` +
+            `<span class="befehl-titel">${befehlMarkiert(e.titel, woerter)}</span>` +
+            (e.info ? `<span class="befehl-info">${befehlMarkiert(e.info, woerter)}</span>` : '') +
+            `</div>`;
+    }).join('');
+    befehlMarkieren();
+}
+
+function befehlMarkieren() {
+    document.querySelectorAll('.befehl-eintrag').forEach(eintrag => {
+        const aktiv = Number(eintrag.dataset.index) === befehlAuswahl;
+        eintrag.setAttribute('aria-selected', aktiv ? 'true' : 'false');
+        if (aktiv) eintrag.scrollIntoView({ block: 'nearest' });
+    });
+    document.getElementById('befehl-feld').setAttribute('aria-activedescendant', `befehl-${befehlAuswahl}`);
+}
+
+function befehlAusfuehren(index) {
+    const eintrag = befehlTreffer[index];
+    if (!eintrag) return;
+    befehlSchliessen();
+    eintrag.los();
+}
+
+function befehlOeffnen() {
+    const dialog = document.getElementById('befehl-dialog');
+    const feld = document.getElementById('befehl-feld');
+    feld.value = '';
+    befehlSuchen();
+    dialog.classList.add('active');
+    setTimeout(() => feld.focus(), 0);
+}
+window.befehlOeffnen = befehlOeffnen;
+
+function befehlSchliessen() {
+    document.getElementById('befehl-dialog').classList.remove('active');
+}
+window.befehlSchliessen = befehlSchliessen;
+
+function initBefehl() {
+    const feld = document.getElementById('befehl-feld');
+    const liste = document.getElementById('befehl-liste');
+    if (!feld || !liste) return;
+    // Tippen ist hier Suchen, keine Änderung: Esc fragt nicht nach.
+    feld.addEventListener('input', (e) => {
+        e.stopPropagation();
+        befehlSuchen();
+    });
+    feld.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            e.preventDefault();
+            const schritt = e.key === 'ArrowDown' ? 1 : -1;
+            befehlAuswahl = (befehlAuswahl + schritt + befehlTreffer.length) % (befehlTreffer.length || 1);
+            befehlMarkieren();
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            befehlAusfuehren(befehlAuswahl);
+        }
+    });
+    liste.addEventListener('click', (e) => {
+        const eintrag = e.target.closest('.befehl-eintrag');
+        if (eintrag) befehlAusfuehren(Number(eintrag.dataset.index));
+    });
+    document.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+            e.preventDefault();
+            befehlOeffnen();
+        }
+    });
 }
 
 // --- Hilfe (NK-158, F-88) ------------------------------------------------------
@@ -627,8 +894,7 @@ function zeigeHilfe(abschnitt) {
         tab.classList.remove('active');
         tab.style.display = 'none';
     });
-    const gruss = document.querySelector('.greeting');
-    if (gruss) gruss.hidden = true;
+    zeigeBereich(null);
     // data-fest bleibt offen: „Über …“ im Menü der Windows-App darf den
     // Haftungshinweis nicht wegklicken (NK-174).
     document.querySelectorAll('.modal-overlay.active:not([data-fest])')
@@ -722,6 +988,9 @@ function mieterErklaerungHtml(daten) {
 }
 
 function zeigeErsteSchritte() {
+    // Heute (Konzept D) hängt an denselben Zahlen.
+    zeigeHeute();
+    fuelleHausWahl();
     const panel = document.getElementById('erste-schritte');
     const liste = document.getElementById('erste-schritte-liste');
     if (!panel || !liste) return;
@@ -868,7 +1137,8 @@ function initKopfMenues() {
         aktionen.parentElement.querySelector('.kopf-menue-knopf')
             .setAttribute('aria-expanded', String(offen));
     };
-    document.querySelectorAll('.section-header > .kopf-aktionen').forEach(aktionen => {
+    // Konzept D: auch der App-Kopf (Hilfe, Drucken, Abmelden) klappt am Handy ein.
+    document.querySelectorAll('.section-header > .kopf-aktionen, .top-header > .kopf-aktionen').forEach(aktionen => {
         if (aktionen.querySelectorAll('button').length < 2) return;
         const knopf = document.createElement('button');
         knopf.type = 'button';
@@ -882,7 +1152,9 @@ function initKopfMenues() {
         knopf.addEventListener('click', () => schalte(aktionen, !aktionen.classList.contains('offen')));
         aktionen.classList.add('mit-menue');
         // Direkt hinter den Titel, damit Filter-Pillen nicht dazwischen umbrechen.
-        aktionen.parentElement.firstElementChild.after(knopf);
+        // Im App-Kopf direkt vor die Aktionen, also hinter die Hauswahl.
+        if (aktionen.parentElement.classList.contains('top-header')) aktionen.before(knopf);
+        else aktionen.parentElement.firstElementChild.after(knopf);
         aktionen.addEventListener('click', e => { if (e.target.closest('button')) schalte(aktionen, false); });
     });
     const schliesseAlle = () => document.querySelectorAll('.kopf-aktionen.offen').forEach(a => schalte(a, false));
@@ -5752,6 +6024,8 @@ async function fetchBillingSuggestions() {
     try {
         const res = await fetch('/api/billing/suggestions');
         const suggestions = await res.json();
+        abrechnungsVorschlaege = suggestions;
+        zeigeHeute();
         
         const container = document.getElementById('billing-suggestions-container');
         if (!container) return;
@@ -6845,35 +7119,21 @@ async function fetchAnalytics() {
     const navContainer = document.getElementById('analytics-nav');
     navContainer.replaceChildren();
     
-    const btnGen = document.createElement('button');
-    btnGen.className = currentAnalyticsView === 'general' ? 'btn-primary' : 'btn-secondary';
-    btnGen.textContent = 'Gebäudeübersicht';
-    btnGen.onclick = () => { currentAnalyticsView = 'general'; fetchAnalytics(); };
-    navContainer.appendChild(btnGen);
-    
-    const apts = allApartments.filter(a => a.property_id === propId);
-    apts.forEach(apt => {
-        const btnApt = document.createElement('button');
-        btnApt.className = currentAnalyticsView === apt.id ? 'btn-primary' : 'btn-secondary';
-        btnApt.textContent = apt.name;
-        btnApt.onclick = () => { currentAnalyticsView = apt.id; fetchAnalytics(); };
-        navContainer.appendChild(btnApt);
-    });
-    
-    // Finanzen pill
-    const btnFin = document.createElement('button');
-    btnFin.className = currentAnalyticsView === 'finanzen' ? 'btn-primary' : 'btn-secondary';
-    btnFin.innerHTML = '<i class="ph ph-coins" aria-hidden="true"></i> Finanzen';
-    btnFin.onclick = () => { currentAnalyticsView = 'finanzen'; fetchAnalytics(); };
-    navContainer.appendChild(btnFin);
-    
-    // Datenqualität pill
-    const btnDQ = document.createElement('button');
-    btnDQ.className = currentAnalyticsView === 'dataquality' ? 'btn-primary' : 'btn-secondary';
-    btnDQ.innerHTML = '<i class="ph ph-clipboard-text" aria-hidden="true"></i> Datenqualität';
-    btnDQ.onclick = () => { currentAnalyticsView = 'dataquality'; fetchAnalytics(); };
-    navContainer.appendChild(btnDQ);
-    
+    // Konzept D: die Ansichtswahl sind Filterpillen; die gewählte trägt Tinte.
+    const pille = (ansicht, inhalt) => {
+        const knopf = document.createElement('button');
+        knopf.type = 'button';
+        knopf.className = currentAnalyticsView === ansicht ? 'filter-pill active' : 'filter-pill';
+        knopf.setAttribute('aria-pressed', String(currentAnalyticsView === ansicht));
+        knopf.innerHTML = inhalt;
+        knopf.onclick = () => { currentAnalyticsView = ansicht; fetchAnalytics(); };
+        navContainer.appendChild(knopf);
+    };
+    pille('general', 'Gebäudeübersicht');
+    allApartments.filter(a => a.property_id === propId).forEach(apt => pille(apt.id, escapeHtml(apt.name)));
+    pille('finanzen', '<i class="ph ph-coins" aria-hidden="true"></i> Finanzen');
+    pille('dataquality', '<i class="ph ph-clipboard-text" aria-hidden="true"></i> Datenqualität');
+
     const viewGen = document.getElementById('analytics-view-general');
     const viewApt = document.getElementById('analytics-view-apartment');
     const viewDQ = document.getElementById('analytics-view-dataquality');

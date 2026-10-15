@@ -1,5 +1,7 @@
 /* =====================================================================
-   Kontoblatt (Konzept A): Papier, Tinte, Indigo aus dem Logo.
+   Aufgaben (Konzept D): dunkle Leiste links, weiße Arbeitsfläche,
+   Indigo aus dem Logo; Ocker heißt „zu tun“, Ziegel „Fehler/Löschen“,
+   Grün „erledigt“.
 
    Jede Farbe, Schrift, Rundung und jeder Abstand steht hier als Token.
    Komponenten nennen keine Farbliterale, sondern nur var(--…). Ein
@@ -10,21 +12,22 @@
    ===================================================================== */
 :root {
     /* Flächen */
-    --bg-color: #F5F5F8;
+    --bg-color: #FAFAFB;
     --surface: #FFFFFF;
-    --surface-alt: #FAFAFC;
-    --bg-hover: #F5F5F8;
-    --overlay: rgba(26, 27, 46, 0.4);
+    --surface-alt: #FAFAFB;
+    --bg-hover: #F4F4F8;
+    --overlay: rgba(23, 24, 43, 0.4);
+    --vorschau: #F1F1F5;
 
     /* Schrift. NK-162: --text-muted hält 4,5 : 1 auf Weiß, auf dem
        Papier und auf den Tönungen der Primärfarbe. */
-    --text-main: #1A1B2E;
-    --text-muted: #5A5C72;
+    --text-main: #17182B;
+    --text-muted: #5B5D72;
 
     /* Linien */
-    --border-color: #DEDFE8;
-    --divider: #EDEDF3;
-    --control-border: #C9CBD9;
+    --border-color: #ECEDF2;
+    --divider: #ECEDF2;
+    --control-border: #D4D5E0;
     --field-border: #8C8FA6;
 
     /* Indigo aus dem Logo */
@@ -35,18 +38,25 @@
     --primary-tint: #EEEDFD;
     --on-primary: #FFFFFF;
 
-    /* Zustände: erledigt trägt den Haken aus dem Logo (Indigo), zu tun
-       ist Ocker, Ziegel nur Löschen und Fehler. Kein Grün. */
-    --success-color: #3E36C2;
-    --success-bg: #EEEDFD;
+    /* Zustände: erledigt ist Grün, zu tun Ocker, Ziegel nur Löschen und
+       Fehler. */
+    --success-color: #2F7D5B;
+    --success-bg: #E3F1EA;
     --warning-color: #C27A12;
     --warning-text: #8A5300;
     --warning-bg: #FAEED8;
     --warning-strong: #5E3A00;
     --danger-color: #A3312A;
     --danger-hover: #82261F;
-    --danger-bg: #F7E3E0;
+    --danger-bg: #F7E4E2;
     --danger-border: #E3B7B2;
+
+    /* Leiste links (Konzept D) */
+    --leiste: #16172A;
+    --leiste-text: #A9ABC4;
+    --leiste-hover: #22233A;
+    --leiste-aktiv: #2A2B45;
+    --leiste-breite: 96px;
 
     /* Alte Namen, die app.js und ältere Regeln noch lesen. */
     --primary-color: var(--primary);
@@ -55,13 +65,15 @@
     --secondary: var(--primary-text);
 
     /* Schriften (gebündelt unter static/vendor/fonts, OFL) */
-    --font-sans: 'Instrument Sans', 'Segoe UI', system-ui, sans-serif;
-    --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+    --font-sans: 'Geist', 'Segoe UI', system-ui, sans-serif;
+    --font-mono: 'Geist Mono', ui-monospace, monospace;
 
-    /* Rundungen: Flächen 12, Bedienelemente 8, Belegmarken 4, Chips rund */
+    /* Rundungen: Flächen 12, Befehlsfeld und Leiste 10, Bedienelemente 8,
+       Belegmarken 4, Chips rund */
     --radius-lg: 12px;
     --radius-md: 8px;
     --radius-sm: 4px;
+    --radius-feld: 10px;
     --radius-chip: 999px;
     --transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease;
 
@@ -76,6 +88,8 @@
     --space-7: 48px;
     --knopf-hoehe: 44px;
     --knopf-hoehe-klein: 32px;
+    /* Seitenrand der Arbeitsfläche: 32 px, auf schmalen Fenstern 16 px */
+    --seiten-rand: clamp(16px, 3vw, 32px);
 }
 
 /* Vorlage Dunkelmodus: nur die Farb-Tokens neu setzen, z. B.
@@ -151,7 +165,7 @@ a:hover {
 .kpi-titel {
     font-size: 13px;
     font-weight: 600;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--text-muted);
     margin-bottom: var(--space-2);
@@ -201,144 +215,294 @@ a:hover {
     border-bottom-color: var(--field-border);
 }
 
-/* Layout: Seitenleiste über die volle Höhe, daneben die Arbeitsfläche. */
+/* Layout (Konzept D „Aufgaben“): dunkle Leiste links über die volle Höhe,
+   daneben Kopfleiste und Arbeitsfläche über die ganze Breite. */
 .app-container {
     display: flex;
     min-height: 100vh;
 }
 
-/* Sidebar */
+/* Leiste: vier Bereiche und die Einstellungen, Symbol über dem Namen. */
 .sidebar {
-    width: 240px;
+    width: var(--leiste-breite);
     flex-shrink: 0;
-    padding: var(--space-5) var(--space-4);
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-5);
     position: sticky;
     top: 0;
     height: 100vh;
     overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-4);
+    padding: var(--space-4) 0;
+    background: var(--leiste);
 }
 
-/* Die Seitenleiste ist keine Karte, sondern der Rand des Kontoblatts. */
-.sidebar.glass-panel {
-    border: none;
-    border-right: 1px solid var(--border-color);
-    border-radius: 0;
+/* Auf Dunkel reicht Indigo nicht für 3 : 1; der Fokus nimmt den Leistentext. */
+.sidebar :focus-visible {
+    outline-color: var(--leiste-text);
 }
 
 .logo {
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-    padding: 0 var(--space-3);
-    color: var(--primary);
+    display: grid;
+    place-items: center;
+    width: 56px;
+    height: 56px;
+    border-radius: var(--radius-feld);
 }
 
 .logo-zeichen {
-    width: 32px;
-    height: 32px;
-    flex-shrink: 0;
+    width: 40px;
+    height: 40px;
 }
 
-.logo h2 {
-    font-weight: 700;
-    font-size: 18px;
-    letter-spacing: -0.01em;
-    color: var(--text-main);
-}
-
-/* NK-155: „Fix“ in der Primärfarbe, wie auf den Anmeldeseiten. */
-.logo-fix {
-    color: var(--primary);
-    font-weight: 700;
-}
-
-.nav-menu {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-}
-
-.nav-item {
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-    min-height: var(--knopf-hoehe);
-    padding: 0 var(--space-3);
-    text-decoration: none;
-    color: var(--text-main);
-    font-weight: 500;
-    border-radius: var(--radius-md);
-    transition: var(--transition);
-}
-
-.nav-item i {
-    font-size: 20px;
-    color: var(--text-muted);
-}
-
-.nav-item:hover {
-    background: var(--bg-hover);
-    color: var(--text-main);
-}
-
-.nav-item.active {
-    background: var(--primary-tint);
-    color: var(--primary-text);
-    font-weight: 600;
-}
-
-.nav-item.active i {
-    color: var(--primary-text);
-}
-
-/* Main Content: links bündig, höchstens 1120 px breit, Abstand 32. */
-.main-content {
+.leiste {
     flex: 1;
     display: flex;
     flex-direction: column;
-    gap: var(--space-6);
-    max-width: calc(1120px + 2 * clamp(16px, 4vw, 48px));
-    padding: var(--space-6) clamp(16px, 4vw, 48px) var(--space-7);
-    /* B6 (NK-100): als Flex-Kind darf die Spalte schrumpfen, sonst drücken
-       breite Kinder (Suchleiste, Tabellen) sie über den rechten Rand und
-       schneiden die Kopfknaepfe ab. */
-    min-width: 0;
-}
-
-.top-header {
-    display: flex;
-    justify-content: space-between;
     align-items: center;
-    flex-wrap: wrap;               /* Knöpfe umbrechen statt überlaufen */
-    gap: var(--space-3);
+    gap: var(--space-1);
 }
 
-/* Seitentitel: der Gruß auf der Übersicht und die Überschrift im ersten
-   Kopf jeder anderen Seite sind dieselbe Stufe (Kontoblatt: 32 px). Die
-   Übersicht hat den Gruß als Titel, ihr „Übersicht“ bleibt Abschnitt. */
-.greeting h1,
-.tab-content:not(#tab-dashboard) > .section-header:first-child h2 {
-    font-size: 32px;
+.leiste-luecke {
+    flex: 1;
+}
+
+.leiste-eintrag {
+    position: relative;
+    /* 72 px aus dem Entwurf reichen für „Einstellungen“ in 13 px nicht. */
+    width: 88px;
+    padding: var(--space-3) 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-1);
+    border-radius: var(--radius-feld);
+    color: var(--leiste-text);
+    font-size: 13px;
+    font-weight: 500;
+    text-decoration: none;
+    transition: var(--transition);
+}
+
+.leiste-eintrag i {
+    font-size: 24px;
+}
+
+.leiste-eintrag:hover {
+    background: var(--leiste-hover);
+    color: var(--on-primary);
+}
+
+.leiste-eintrag.active {
+    background: var(--leiste-aktiv);
+    color: var(--on-primary);
+    font-weight: 600;
+}
+
+/* Zahl der offenen Aufgaben an „Heute“. */
+.leiste-zahl {
+    position: absolute;
+    top: var(--space-1);
+    left: calc(50% + 6px);
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    border-radius: var(--radius-chip);
+    background: var(--primary);
+    color: var(--on-primary);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 20px;
+    text-align: center;
+}
+
+/* Arbeitsfläche: volle Breite; Kopfleiste und Seitenband laufen bis zum
+   Rand, die Inhalte halten --seiten-rand. */
+.main-content {
+    flex: 1;
+    min-width: 0;  /* B6 (NK-100): breite Tabellen drücken die Spalte nicht auf */
+}
+
+/* Kopfleiste: Befehlsfeld, Immobilie, Hinweis und die globalen Knöpfe. */
+.top-header {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-4) var(--seiten-rand);
+    background: var(--surface);
+    border-bottom: 1px solid var(--border-color);
+}
+
+/* Die Suche gibt Platz ab; erst unter 1100 px bricht der Kopf um. */
+.befehl-knopf {
+    flex: 0 1 640px;
+    min-width: 0;
+    max-width: 640px;
+    height: var(--knopf-hoehe);
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: 0 var(--space-3) 0 var(--space-4);
+    border: 1px solid var(--control-border);
+    border-radius: var(--radius-feld);
+    background: var(--surface-alt);
+    color: var(--text-muted);
+    font-family: inherit;
+    font-size: 15px;
+    text-align: left;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+@media (min-width: 1101px) {
+    .top-header > .kopf-aktionen {
+        flex-shrink: 0;
+    }
+}
+
+@media (max-width: 1100px) {
+    .top-header {
+        flex-wrap: wrap;
+    }
+}
+
+.befehl-knopf:hover {
+    border-color: var(--field-border);
+}
+
+.befehl-knopf > i {
+    font-size: 18px;
+}
+
+.befehl-text {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.befehl-tasten {
+    display: flex;
+    gap: var(--space-1);
+}
+
+.kopf-luecke {
+    flex: 1;
+}
+
+/* Feldstil aus .form-group; der Kopf braucht nur Breite und Abstand. */
+.top-header .haus-wahl {
+    margin: 0;
+}
+
+.top-header .haus-wahl select {
+    width: auto;
+    max-width: 240px;
+    font-weight: 500;
+}
+
+/* Offener Modus (NK-201): der Hinweis bleibt als Chip im Kopf sichtbar. */
+.chip-anmeldung {
+    display: inline-flex;
+    align-items: center;
+    height: var(--knopf-hoehe-klein);
+    padding: 0 var(--space-3);
+    border-radius: var(--radius-chip);
+    background: var(--warning-bg);
+    color: var(--warning-text);
+    font-size: 13px;
+    font-weight: 600;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.chip-anmeldung:hover {
+    color: var(--warning-strong);
+}
+
+/* Tasten (Konzept D): Mono, unten doppelt gerandet wie eine Taste. */
+kbd {
+    display: inline-grid;
+    place-items: center;
+    min-width: 24px;
+    height: 24px;
+    padding: 0 6px;
+    border: 1px solid var(--control-border);
+    border-bottom-width: 2px;
+    border-radius: 6px;
+    background: var(--surface);
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    line-height: 1;
+}
+
+/* Seitenband: der erste Kopf jeder Seite läuft weiß über die ganze Breite,
+   mit Titel, Untertitel, Knöpfen und darunter den Reitern des Bereichs. */
+.tab-content {
+    padding: 0 var(--seiten-rand) var(--space-7);
+}
+
+.tab-content > .section-header:first-child {
+    align-items: flex-end;  /* Knöpfe auf der Grundlinie des Titelblocks */
+    margin: 0 calc(-1 * var(--seiten-rand)) var(--space-5);
+    padding: var(--space-5) var(--seiten-rand);
+    background: var(--surface);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.tab-content > .section-header:first-child:has(> .unter-reiter:not([hidden])) {
+    padding-bottom: 0;
+}
+
+/* Seitentitel: eine Stufe für jede Seite (Konzept D: 28 px). */
+.tab-content > .section-header:first-child h2 {
+    font-size: 28px;
     font-weight: 600;
     line-height: 1.2;
     letter-spacing: -0.02em;
 }
 
-.greeting h1 {
-    margin-bottom: var(--space-1);
+/* Reiter: die Seiten des Bereichs, ohne Symbol; die offene Seite trägt
+   den Indigo-Strich. */
+.nav-menu.unter-reiter {
+    flex: 1 0 100%;
+    display: flex;
+    gap: var(--space-5);
+    margin-top: var(--space-2);
+    overflow-x: auto;
 }
 
-/* Knöpfe stehen auf der Grundlinie des Titelblocks, auch mit Untertitel. */
-.tab-content:not(#tab-dashboard) > .section-header:first-child {
-    align-items: flex-end;
-}
-
-.greeting p {
+.nav-item {
+    display: flex;
+    align-items: center;
+    min-height: var(--knopf-hoehe);
+    border-bottom: 2px solid transparent;
     color: var(--text-muted);
-    font-size: 15px;
+    font-weight: 500;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: var(--transition);
+}
+
+.nav-item i {
+    display: none;
+}
+
+.nav-item:hover {
+    color: var(--text-main);
+}
+
+.nav-item.active {
+    color: var(--text-main);
+    font-weight: 600;
+    border-bottom-color: var(--primary);
 }
 
 /* Buttons */
@@ -463,7 +627,7 @@ a:hover {
 .stat-info h3 {
     font-size: 13px;
     font-weight: 600;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--text-muted);
     margin-bottom: var(--space-1);
@@ -596,6 +760,8 @@ a:hover {
        und „Speichern“ ist nicht mehr erreichbar. */
     max-height: calc(100vh - 32px);
     overflow-y: auto;
+    /* Lange Wörter (Abbildnamen im Update-Hinweis) liefen bei 320 px hinaus. */
+    overflow-wrap: break-word;
     padding: var(--space-5);
 }
 
@@ -879,7 +1045,7 @@ progress {
     background-color: var(--bg-hover);
 }
 
-/* Typography Utilities: Beträge, Daten, Zählerstände in Plex Mono. */
+/* Typography Utilities: Beträge, Daten, Zählerstände in Geist Mono. */
 .tabular-nums {
     font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
@@ -1247,7 +1413,7 @@ td.text-right {
 .audit-table th {
     font-size: 13px;
     font-weight: 600;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--text-muted);
     border-bottom-color: var(--border-color);
@@ -1683,7 +1849,7 @@ i.feld-hilfe:hover {
     text-align: left;
     font-size: 13px;
     font-weight: 600;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--text-muted);
     padding: var(--space-3) var(--space-4);
@@ -1692,7 +1858,8 @@ i.feld-hilfe:hover {
 }
 
 .data-table td {
-    padding: var(--space-3) var(--space-4);
+    height: 48px;
+    padding: var(--space-2) var(--space-4);
     border-bottom: 1px solid var(--divider);
     vertical-align: middle;
 }
@@ -1757,27 +1924,23 @@ i.feld-hilfe:hover {
     color: var(--success-color);
 }
 
-/* Tablet (NK-073): die Seitenleiste wird schmaler. NK-162 (F-91): mit
-   Beschriftung -- eine Spalte nur aus Symbolen verstand niemand, der die
-   Anwendung zum ersten Mal sieht. */
+/* Tablet (NK-073): die Leiste bleibt beschriftet (NK-162, F-91); das
+   Kürzel im Befehlsfeld weicht dem Text. */
 @media (max-width: 1024px) {
-    .sidebar {
-        width: 200px;
-        padding: var(--space-5) var(--space-3);
+    .befehl-tasten {
+        display: none;
     }
 }
 
 /* Schmales Fenster (NK-073): Kopf stapelt, Kennzahlen einspaltig,
    Modals bekommen Luft. */
 @media (max-width: 720px) {
-    .top-header {
-        flex-direction: column;
-        align-items: flex-start;
+    .kopf-luecke {
+        display: none;
     }
 
-    .greeting h1,
-    .tab-content:not(#tab-dashboard) > .section-header:first-child h2 {
-        font-size: 26px;
+    .tab-content > .section-header:first-child h2 {
+        font-size: 24px;
     }
 
     .dashboard-stats {
@@ -1810,15 +1973,15 @@ i.feld-hilfe:hover {
     }
 }
 
-/* Auswahlknöpfe (NK-067, Konzept A „Filter“): sie benennen Kategorien,
-   keine Handlungen. 44 px wie jeder Knopf; aktiv in Indigo-Tönung. */
+/* Auswahlknöpfe (NK-067, Konzept D „Filter“): sie benennen Kategorien,
+   keine Handlungen. 36 px, gedrückt in Tinte. */
 .filter-pill {
     display: inline-flex;
     align-items: center;
     gap: var(--space-2);
-    min-height: var(--knopf-hoehe);
+    min-height: 36px;
     padding: 0 var(--space-4);
-    border-radius: var(--radius-md);
+    border-radius: var(--radius-chip);
     border: 1px solid var(--control-border);
     background: var(--surface);
     color: var(--text-main);
@@ -1836,9 +1999,9 @@ i.feld-hilfe:hover {
 }
 
 .filter-pill.active {
-    background: var(--primary-tint);
-    border-color: var(--primary);
-    color: var(--primary-text);
+    background: var(--text-main);
+    border-color: var(--text-main);
+    color: var(--surface);
     font-weight: 600;
 }
 
@@ -1885,7 +2048,7 @@ i.feld-hilfe:hover {
     margin: var(--space-6) 0 var(--space-4);
     font-size: 13px;
     font-weight: 600;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--text-muted);
 }
@@ -2067,7 +2230,7 @@ thead th,
 .zaehler-kopf th {
     font-size: 13px;
     font-weight: 600;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--text-muted);
     text-align: left;
@@ -2077,7 +2240,7 @@ thead th,
 .tabellen-kopfzeile .zelle {
     font-size: 13px;
     font-weight: 600;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--text-muted);
 }
@@ -2287,15 +2450,14 @@ a.btn-primary:hover {
     }
 }
 
-/* Telefon: die Seitenleiste wird zur Leiste am unteren Rand; der Inhalt
-   hält unten Platz für sie frei. */
+/* Telefon (Konzept D, E-Mobil): die Leiste wird zur dunklen Leiste am
+   unteren Rand; der Inhalt hält unten Platz für sie frei. */
 @media (max-width: 560px) {
     .app-container {
-        padding-bottom: calc(var(--knopf-hoehe) + var(--space-5) + env(safe-area-inset-bottom, 0px));
+        padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px));
     }
 
-    .sidebar,
-    .sidebar.glass-panel {
+    .sidebar {
         position: fixed;
         top: auto;
         bottom: 0;
@@ -2304,37 +2466,65 @@ a.btn-primary:hover {
         z-index: 50;
         width: auto;
         height: auto;
-        padding: var(--space-2) var(--space-2) calc(var(--space-2) + env(safe-area-inset-bottom, 0px));
-        gap: 0;
+        flex-direction: row;
+        padding: var(--space-1) var(--space-2) calc(var(--space-1) + env(safe-area-inset-bottom, 0px));
         overflow: visible;
-        border: none;
-        border-top: 1px solid var(--border-color);
-        border-radius: 0;
     }
 
-    .sidebar .logo {
+    .sidebar .logo,
+    .leiste-luecke {
         display: none;
     }
 
-    .nav-menu {
+    .leiste {
         flex-direction: row;
-        justify-content: space-between;
-        gap: var(--space-1);
+        width: 100%;
+        gap: 0;
     }
 
-    .nav-item {
-        flex: 1;
+    .leiste-eintrag {
+        /* Nach Inhalt verteilen: „Einstellungen“ ist breiter als ein Fünftel von 390 px. */
+        flex: 1 1 auto;
+        width: auto;
         min-width: 0;
-        padding: 0;
-        /* Telefon: nur Symbole in der Leiste unten; der Name steht im
-           aria-label und im title (NK-162). */
-        font-size: 0;
-        gap: 0;
+        min-height: 56px;
+        padding: var(--space-2) 0;
         justify-content: center;
     }
 
-    .nav-item i {
+    .leiste-eintrag i {
         font-size: 22px;
+    }
+
+    /* Konzept D, Handy (E-Mobil): eine Zeile aus Suchsymbol, Hauswahl und
+       Menüknopf; der Suchtext bleibt für Screenreader im Knopf. */
+    .top-header {
+        flex-wrap: nowrap;
+        padding: var(--space-3) var(--seiten-rand);
+    }
+
+    .befehl-knopf {
+        flex: 0 0 var(--knopf-hoehe);
+        justify-content: center;
+        padding: 0;
+    }
+
+    .befehl-text {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+    }
+
+    .top-header .haus-wahl {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+
+    .top-header .haus-wahl select {
+        width: 100%;
+        max-width: none;
     }
 }
 
@@ -2753,4 +2943,210 @@ td .btn-icon,
    btn-gefahr; ohne das blendete „Löschen“ beim Öffnen von Indigo nach Rot. */
 #frage-ja {
     transition: none;
+}
+
+/* ------------------------------------------------------------------ */
+/* Heute (Konzept D): Aufgaben nach Art, jede mit genau einer Handlung. */
+.aufgaben {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-5);
+}
+
+.aufgaben-gruppe {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+
+.aufgaben .aufgaben-titel {
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+.aufgabe {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-3) var(--space-4);
+    min-height: 64px;
+    padding: var(--space-3) var(--space-5);
+    background: var(--surface);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+}
+
+.aufgabe-text {
+    flex: 1 1 240px;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.aufgabe-name {
+    font-weight: 600;
+}
+
+.aufgabe-info {
+    color: var(--text-muted);
+    font-size: 13px;
+}
+
+/* Chips: Zustand in drei Tönen -- Ocker fehlt, Ziegel offen, Indigo fällig. */
+.chip {
+    display: inline-flex;
+    align-items: center;
+    height: 24px;
+    padding: 0 var(--space-2);
+    border-radius: var(--radius-chip);
+    font-size: 13px;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.chip-warn {
+    background: var(--warning-bg);
+    color: var(--warning-text);
+}
+
+.chip-rot {
+    background: var(--danger-bg);
+    color: var(--danger-color);
+}
+
+.chip-ind {
+    background: var(--primary-tint);
+    color: var(--primary-text);
+}
+
+@media (max-width: 560px) {
+    .aufgabe {
+        padding: var(--space-3) var(--space-4);
+    }
+
+    .aufgabe .btn-primary,
+    .aufgabe .btn-secondary {
+        width: 100%;
+    }
+}
+
+/* Befehlspalette (Konzept D): oben im Fenster, Treffer nach Art gruppiert. */
+.modal-overlay.befehl-overlay {
+    align-items: flex-start;
+    padding-top: 12vh;
+}
+
+.modal.befehl {
+    max-width: 640px;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--surface);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+}
+
+.befehl-eingabe {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: 0 var(--space-5);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.befehl-eingabe > i {
+    font-size: 20px;
+    color: var(--text-muted);
+}
+
+.befehl-eingabe input {
+    flex: 1;
+    min-width: 0;
+    height: 56px;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    font-size: 18px;
+}
+
+.befehl-liste {
+    max-height: min(60vh, 420px);
+    overflow-y: auto;
+    padding: var(--space-2);
+}
+
+.befehl-gruppe {
+    padding: var(--space-3) var(--space-3) var(--space-1);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+.befehl-eintrag {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-4);
+    min-height: var(--knopf-hoehe);
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+}
+
+.befehl-eintrag:hover {
+    background: var(--bg-hover);
+}
+
+.befehl-eintrag[aria-selected="true"] {
+    background: var(--primary-tint);
+    box-shadow: inset 3px 0 0 var(--primary);
+}
+
+.befehl-titel {
+    min-width: 0;
+}
+
+.befehl-info {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-muted);
+    font-size: 13px;
+}
+
+.befehl-liste mark {
+    background: none;
+    color: var(--primary-text);
+    font-weight: 600;
+}
+
+.befehl-leer {
+    padding: var(--space-5) var(--space-3);
+    color: var(--text-muted);
+}
+
+.befehl-fuss {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-5);
+    padding: var(--space-3) var(--space-5);
+    border-top: 1px solid var(--border-color);
+    background: var(--surface-alt);
+    color: var(--text-muted);
+    font-size: 13px;
+}
+
+.befehl-fuss span {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
 }

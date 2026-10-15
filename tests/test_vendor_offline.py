@@ -15,8 +15,8 @@ und beigeleget Lizenz. Diese Prüfungen halten das fest:
    erlaubt: sie tragen die Daten in sich (SVG-Namensraum im Kopfpfeil von
    style.css) und gehen an niemanden.
 2. Die Pakete liegen mit Lizenzdatei vor — Chart.js (MIT),
-   Phosphor-Icons (MIT), die Schriften Instrument Sans und IBM Plex Mono
-   (Kontoblatt) sowie Outfit (OFL, noch von den Anmeldeseiten verlinkt).
+   Phosphor-Icons (MIT), die Schriften Geist und Geist Mono
+   (Design Aufgaben) sowie Outfit (OFL, noch von den Anmeldeseiten verlinkt).
 3. Jede gebündelte Datei ist gegen ihren sha256 gepinnt. Die Kommentare
    im Bündel von Chart.js nennen Webseiten — gesehen wird das nicht als
    Netzadresse, sondern dadurch, dass der Inhalt unveränderlich ist: Wer
@@ -58,21 +58,19 @@ PAKETE = {
         'fonts/outfit/OFL.txt',
         None,
     ),
-    'fonts/instrument-sans': (
-        ['fonts/instrument-sans/instrument-sans.css',
-         'fonts/instrument-sans/instrument-sans-latin.woff2',
-         'fonts/instrument-sans/instrument-sans-latin-ext.woff2'],
-        'fonts/instrument-sans/OFL.txt',
-        b"font-family: 'Instrument Sans';",
+    'fonts/geist': (
+        ['fonts/geist/geist.css',
+         'fonts/geist/geist-latin.woff2',
+         'fonts/geist/geist-latin-ext.woff2'],
+        'fonts/geist/OFL.txt',
+        b"font-family: 'Geist';",
     ),
-    'fonts/ibm-plex-mono': (
-        ['fonts/ibm-plex-mono/ibm-plex-mono.css',
-         'fonts/ibm-plex-mono/ibm-plex-mono-400-latin.woff2',
-         'fonts/ibm-plex-mono/ibm-plex-mono-400-latin-ext.woff2',
-         'fonts/ibm-plex-mono/ibm-plex-mono-500-latin.woff2',
-         'fonts/ibm-plex-mono/ibm-plex-mono-500-latin-ext.woff2'],
-        'fonts/ibm-plex-mono/OFL.txt',
-        b"font-family: 'IBM Plex Mono';",
+    'fonts/geist-mono': (
+        ['fonts/geist-mono/geist-mono.css',
+         'fonts/geist-mono/geist-mono-latin.woff2',
+         'fonts/geist-mono/geist-mono-latin-ext.woff2'],
+        'fonts/geist-mono/OFL.txt',
+        b"font-family: 'Geist Mono';",
     ),
 }
 
@@ -96,22 +94,18 @@ PINS = {
         '6c18d579fd87c3776be068b762cbc83fde3acb543d49eabd3ade842eb987e887',
     'fonts/outfit/outfit-latin-ext.woff2':
         '0f53d1c03b3918d744a843b5039001ee31695ca1e255e3914188df81beb461e9',
-    'fonts/instrument-sans/instrument-sans.css':
-        '9e83aad9258a5d9c5682b62891dc690d6a62f46b433bfc893634de526c083057',
-    'fonts/instrument-sans/instrument-sans-latin.woff2':
-        '2ee17598a98d8a59e4df8152d015bec9ab8e4d5672cc0ab42bef806b568e3971',
-    'fonts/instrument-sans/instrument-sans-latin-ext.woff2':
-        'c4fcfea41f2c1cfeea9211fa43679845454a1d0e0d7e95e069c7e73c4ae302d2',
-    'fonts/ibm-plex-mono/ibm-plex-mono.css':
-        'a3db36e20c83b4897fa42e3fed178bd4c830705f920a7affa1c9ad48653e586a',
-    'fonts/ibm-plex-mono/ibm-plex-mono-400-latin.woff2':
-        '08949f728dc52d528e69b1667d15c89a5686a4ee9a296ff90983985f99c380f7',
-    'fonts/ibm-plex-mono/ibm-plex-mono-400-latin-ext.woff2':
-        '6bc0f226a5b7884a8170e3f62c63d7675609d4631bdc5931b5cdab81821f00eb',
-    'fonts/ibm-plex-mono/ibm-plex-mono-500-latin.woff2':
-        '01d285447409c8a588692162439a038b8cbd7871309ee20267b0d2d91c6e8e22',
-    'fonts/ibm-plex-mono/ibm-plex-mono-500-latin-ext.woff2':
-        '6bb06407c97584b0867a959e05e8874693bfeb8c317de190811c51598f2d99ea',
+    'fonts/geist/geist.css':
+        '64d6d98df287c81e0d03783000c17716af56dfe7a98ee772e4c1e79ce09b0e80',
+    'fonts/geist/geist-latin.woff2':
+        '19f9c92546aa300c312235e3125af1b81394d8db9a4bc4a425cd5b641d2d54e1',
+    'fonts/geist/geist-latin-ext.woff2':
+        '824f485b5d26e2f2da3c2b236132ece1bc8e4e43373452950bb0e40548b4313f',
+    'fonts/geist-mono/geist-mono.css':
+        '16c22d13f6ec8507a92e802dbf0561e926f64ee161c92d1cea9328f868ddec0f',
+    'fonts/geist-mono/geist-mono-latin.woff2':
+        '684ad5b531f81d43c1e8c7038262d5db7cdc1f68006e04d6c7769efa8d33c8cc',
+    'fonts/geist-mono/geist-mono-latin-ext.woff2':
+        '1a189eb997c3e2ece68373e387afaec9e8617424186c4b1ab3cff7c54ba6223b',
 }
 
 
@@ -175,8 +169,8 @@ def test_index_laedt_nur_gebuendeltes():
     for fremd in ('fonts.googleapis', 'fonts.gstatic', 'unpkg.com',
                   'cdn.jsdelivr.net'):
         assert fremd not in html, f'index.html verweist noch auf {fremd}.'
-    for gebuendelt in ('vendor/fonts/instrument-sans/instrument-sans.css',
-                       'vendor/fonts/ibm-plex-mono/ibm-plex-mono.css',
+    for gebuendelt in ('vendor/fonts/geist/geist.css',
+                       'vendor/fonts/geist-mono/geist-mono.css',
                        'vendor/phosphor/regular/style.css',
                        'vendor/phosphor/fill/style.css',
                        'vendor/chartjs/chart.umd.min.js'):
@@ -189,8 +183,8 @@ def test_gebuendelte_dateien_werden_ausgeliefert(auth_client):
     assert antwort.status_code == 200
     assert b'Chart.js' in antwort.data
     for schrift in ('outfit/outfit-latin.woff2',
-                    'instrument-sans/instrument-sans-latin.woff2',
-                    'ibm-plex-mono/ibm-plex-mono-400-latin.woff2'):
+                    'geist/geist-latin.woff2',
+                    'geist-mono/geist-mono-latin.woff2'):
         antwort = auth_client.get(f'/static/vendor/fonts/{schrift}')
         assert antwort.status_code == 200, schrift
         assert antwort.data[:4] == b'wOF2', schrift

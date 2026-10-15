@@ -111,7 +111,8 @@ def test_globaler_kopf_traegt_nur_was_ueberall_gilt():
 
 
 def test_begruessung_ohne_zurueck_beim_ersten_besuch():
-    assert '<h1 id="begruessung">Willkommen bei NebenkostenFix!</h1>' in SEITE
+    # Konzept D: der Gruß steht als Untertitel im Kopf von „Heute“.
+    assert '<span id="begruessung">Willkommen bei NebenkostenFix!</span>' in SEITE
     assert "'Willkommen zurück!' : 'Willkommen bei NebenkostenFix!'" in SKRIPT
 
 
@@ -171,9 +172,9 @@ def test_kontoblatt_schriften_nur_ueber_tokens():
         for wert in re.findall(r'font-family:\s*([^;"\'}]+)', text):
             assert wert.strip() in ('var(--font-sans)', 'var(--font-mono)', 'inherit'), \
                 f'{name}: font-family: {wert}'
-    assert "--font-sans: 'Instrument Sans'" in STIL
-    assert "--font-mono: 'IBM Plex Mono'" in STIL
-    for css in ('instrument-sans/instrument-sans.css', 'ibm-plex-mono/ibm-plex-mono.css'):
+    assert "--font-sans: 'Geist'" in STIL
+    assert "--font-mono: 'Geist Mono'" in STIL
+    for css in ('geist/geist.css', 'geist-mono/geist-mono.css'):
         assert f'/static/vendor/fonts/{css}' in SEITE
 
 
@@ -221,8 +222,8 @@ def test_kontoblatt_inline_abstaende_auf_dem_raster():
 
 
 def test_kontoblatt_seitentitel_und_tabellenkopf_einheitlich():
-    # Jede Seite außer der Übersicht beginnt mit einem Kopf samt h2; die
-    # gemeinsame Regel macht daraus den 32-px-Titel des Kontoblatts.
+    # Jede Seite beginnt mit einem Kopf samt h2; die gemeinsame Regel macht
+    # daraus das Seitenband mit dem 28-px-Titel (Konzept D).
     seiten = list(re.finditer(r'<section[^>]*\btab-content\b[^>]*>', SEITE))
     assert len(seiten) >= 10
     for seite in seiten:
@@ -231,17 +232,99 @@ def test_kontoblatt_seitentitel_und_tabellenkopf_einheitlich():
         erstes = re.search(r'<(\w+)([^>]*)>', rest)
         assert 'section-header' in erstes.group(2), f'{tab} beginnt nicht mit .section-header'
         assert re.match(r'\s*(?:<div>\s*)?<h2\b', rest[erstes.end():]), f'{tab}: Kopf ohne h2 vorn'
-    titel = re.search(r'\.tab-content:not\(#tab-dashboard\) > \.section-header:first-child h2\s*\{([^}]*)\}', STIL)
-    assert titel and 'font-size: 32px' in titel.group(1), 'Seitentitel-Regel fehlt'
+    titel = re.search(r'\n\.tab-content > \.section-header:first-child h2\s*\{([^}]*)\}', STIL)
+    assert titel and 'font-size: 28px' in titel.group(1), 'Seitentitel-Regel fehlt'
     kopf = re.search(r'\nthead th,\s*\.zaehler-kopf th\s*\{([^}]*)\}', STIL)
     assert kopf and 'text-transform: uppercase' in kopf.group(1), 'Spaltenkopf-Regel fehlt'
     # h3 ohne eigene Klasse ist Kartentitel: dieselbe Stufe wie .karten-kopf.
     assert re.search(r'\nh3 \{\s*font-size: 18px;', STIL)
 
 
-def test_kontoblatt_betraege_in_plex_mono():
+def test_betraege_in_geist_mono():
     """Ein Euro-Betrag, den ein nacktes <strong>/<span> umschließt, erbte die
     Textschrift (Zahlungskarte). Beträge tragen .tabular-nums."""
     nackt = re.findall(
         r'<(?:strong|b|span)(?: style="[^"]*")?>\$\{[^}]*currency', _ohne_kommentare_js(SKRIPT))
     assert not nackt, nackt
+
+
+# --- Konzept D „Aufgaben“ ----------------------------------------------------
+
+def _regel(selektor: str, text: str = STIL) -> str:
+    treffer = re.search(r'(?:^|\n)\s*' + re.escape(selektor) + r' \{([^}]*)\}', text)
+    assert treffer, selektor
+    return treffer.group(1)
+
+
+def _media(bedingung: str) -> str:
+    """Alle Blöcke einer Media-Query hintereinander (ohne Kommentare)."""
+    stil = re.sub(r'/\*.*?\*/', '', STIL, flags=re.S)
+    teile = stil.split('@media ' + bedingung + ' {')[1:]
+    return '\n'.join(t.split('\n}\n')[0] for t in teile)
+
+
+def test_konzept_d_leiste_mit_fuenf_bereichen():
+    """Die dunkle Leiste trägt die Bereiche; jeder Reiter gehört genau einem."""
+    leiste = re.findall(r'class="leiste-eintrag[^"]*" data-gruppe="(\w+)"', SEITE)
+    assert leiste == ['heute', 'haus', 'kosten', 'abrechnung', 'einstellungen']
+    reiter = dict(re.findall(r'class="nav-item[^"]*" data-tab="(\w+)" data-gruppe="(\w+)"', SEITE))
+    assert reiter == {'dashboard': 'heute', 'properties': 'haus', 'tenants': 'haus', 'meters': 'haus',
+                      'invoices': 'kosten', 'payments': 'kosten', 'billing': 'abrechnung',
+                      'reports': 'abrechnung', 'settings': 'einstellungen'}
+    # „Einstellungen“ passt in 13 px nicht in die 72 px des Entwurfs.
+    assert 'width: 88px;' in _regel('.leiste-eintrag')
+
+
+def test_konzept_d_befehlspalette():
+    knopf = SEITE[SEITE.index('id="befehl-oeffnen"'):SEITE.index('</button>', SEITE.index('id="befehl-oeffnen"'))]
+    assert 'aria-keyshortcuts="Control+K"' in knopf and '<kbd>Strg</kbd><kbd>K</kbd>' in knopf
+    dialog = SEITE[SEITE.index('id="befehl-dialog"'):]
+    assert 'role="combobox"' in dialog.split('</div>')[0] + dialog
+    for hinweis in ('<kbd>↑</kbd><kbd>↓</kbd> wählen', '<kbd>Enter</kbd> öffnen', '<kbd>Esc</kbd> schließen'):
+        assert hinweis in dialog, hinweis
+    assert "(e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k'" in SKRIPT
+    assert 'initBefehl();' in SKRIPT
+
+
+def test_konzept_d_kopf_bricht_erst_unter_1100_pixel_um():
+    """Bei 1280 px stand der Kopf zweizeilig: die Suche gibt jetzt Platz ab."""
+    knopf = _regel('.befehl-knopf')
+    assert 'flex: 0 1 640px;' in knopf and 'min-width: 0;' in knopf
+    assert 'flex-wrap' not in _regel('.top-header')
+    assert re.search(r'\.top-header \{\s*flex-wrap: wrap;', _media('(max-width: 1100px)'))
+    # Nicht schrumpfende Aktionen nur auf breiten Fenstern: sonst 136 px Überlauf am Handy.
+    assert re.search(r'\.top-header > \.kopf-aktionen \{\s*flex-shrink: 0;', _media('(min-width: 1101px)'))
+
+
+def test_konzept_d_handykopf_einzeilig():
+    """Am Handy stapelten sich Suche, Hauswahl und vier Knöpfe (233 px hoch)."""
+    schmal = _media('(max-width: 560px)')
+    assert 'flex: 0 0 var(--knopf-hoehe);' in _regel('.befehl-knopf', schmal)
+    text = _regel('.befehl-text', schmal)
+    # Der Suchtext bleibt als Name des Knopfs für Screenreader erhalten.
+    assert 'display: none' not in text and 'clip: rect(0 0 0 0);' in text
+    assert 'flex-wrap: nowrap;' in _regel('.top-header', schmal)
+    assert 'flex: 1 1 auto;' in _regel('.leiste-eintrag', _media('(max-width: 720px)') + schmal)
+
+
+def test_konzept_d_hauswahl_im_feldstil():
+    assert 'class="haus-wahl form-group" id="haus-wahl-feld" hidden' in SEITE
+
+
+def test_konzept_d_statistik_ansichten_als_filterpillen():
+    menue = SKRIPT[SKRIPT.index('const pille = (ansicht, inhalt) =>'):]
+    assert "'filter-pill active' : 'filter-pill'" in menue[:600]
+    assert "setAttribute('aria-pressed'" in menue[:600]
+    assert "'btn-primary' : 'btn-secondary'" not in SKRIPT[SKRIPT.index("getElementById('analytics-nav')"):][:1500]
+    assert re.search(r'\.filter-pill\.active \{\s*background: var\(--text-main\);', STIL)
+
+
+def test_lange_woerter_brechen_im_dialog_um():
+    assert 'overflow-wrap: break-word;' in _regel('.modal')
+
+
+def test_pruefskripte_wechseln_reiter_ueber_die_funktion():
+    """Reiter anderer Bereiche sind verborgen; ein Klick auf .nav-item ginge ins Leere."""
+    for skript in ('live_abgleich_ui.py', 'probe_ersteinrichtung.py'):
+        text = (WURZEL / 'scripts' / skript).read_text(encoding='utf-8')
+        assert 'wechsleZuTab(' in text, skript

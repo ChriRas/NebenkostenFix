@@ -369,7 +369,8 @@ def test_kopfaktionen_am_handy_im_menue():
     assert "initKopfMenues();" in start[:start.index("\n}\n")]
     menue = app[app.index("function initKopfMenues("):]
     menue = menue[:menue.index("\n}\n")]
-    assert "querySelectorAll('.section-header > .kopf-aktionen')" in menue
+    assert "querySelectorAll('.section-header > .kopf-aktionen, .top-header > .kopf-aktionen')" in menue
+    assert "if (aktionen.parentElement.classList.contains('top-header')) aktionen.before(knopf);" in menue
     for merkmal in ("'btn-secondary kopf-menue-knopf'", "'aria-haspopup'", "'aria-expanded'",
                     "'aria-label', 'Aktionen'", "classList.add('mit-menue')", "'Escape'"):
         assert merkmal in menue, merkmal

@@ -14,8 +14,8 @@
          Kein Code aus dem Internet -- ohne Internet funktioniert alles,
          und keine IP-Adresse geht an Google oder ein CDN (F-54).
          Feste Versionen, Lizenzen liegen neben den Dateien. -->
-    <link rel="stylesheet" href="/static/vendor/fonts/instrument-sans/instrument-sans.css">
-    <link rel="stylesheet" href="/static/vendor/fonts/ibm-plex-mono/ibm-plex-mono.css">
+    <link rel="stylesheet" href="/static/vendor/fonts/geist/geist.css">
+    <link rel="stylesheet" href="/static/vendor/fonts/geist-mono/geist-mono.css">
     <link rel="stylesheet" href="/static/vendor/phosphor/regular/style.css">
     <link rel="stylesheet" href="/static/vendor/phosphor/fill/style.css">
     <link rel="stylesheet" href="/static/style.css?v=12">
@@ -24,33 +24,42 @@
 
 <body>
     <div class="app-container">
-        <!-- Sidebar -->
-        <aside class="sidebar glass-panel">
-            <div class="logo">
-                <img class="logo-zeichen" src="/static/marke/zeichen.svg" alt="" width="36" height="36">
-                <h2>Nebenkosten<span class="logo-fix">Fix</span></h2>
-            </div>
-            <nav class="nav-menu">
-                <a href="#" class="nav-item active" data-tab="dashboard"><i class="ph ph-squares-four"></i>
-                    Übersicht</a>
-                <a href="#" class="nav-item" data-tab="properties"><i class="ph ph-house"></i> Immobilien</a>
-                <a href="#" class="nav-item" data-tab="tenants"><i class="ph ph-users"></i> Mieter</a>
-                <a href="#" class="nav-item" data-tab="meters"><i class="ph ph-gauge"></i> Zähler &amp; Ablesungen</a>
-                <a href="#" class="nav-item" data-tab="invoices"><i class="ph ph-receipt"></i> Rechnungen &amp; Belege</a>
-                <a href="#" class="nav-item" data-tab="billing"><i class="ph ph-file-text"></i> Abrechnungen</a>
-                <a href="#" class="nav-item" data-tab="payments"><i class="ph ph-coins"></i> Zahlungen</a>
-                <a href="#" class="nav-item" data-tab="reports"><i class="ph ph-chart-line-up"></i> Statistiken</a>
-                <a href="#" class="nav-item" data-tab="settings"><i class="ph ph-gear"></i> Einstellungen</a>
+        <!-- Leiste (Konzept D): vier Bereiche und die Einstellungen. Jeder
+             Bereich hat seine Seiten als Reiter im Seitenkopf (.unter-reiter);
+             initTabs() hält Leiste und Reiter gleich. -->
+        <aside class="sidebar">
+            <a class="logo" href="#" data-gruppe="heute" aria-label="NebenkostenFix, zu Heute">
+                <img class="logo-zeichen" src="/static/marke/zeichen.svg" alt="" width="40" height="40">
+                <h2 class="sr-only">Nebenkosten<span class="logo-fix">Fix</span></h2>
+            </a>
+            <nav class="leiste" aria-label="Bereiche">
+                <a href="#" class="leiste-eintrag active" data-gruppe="heute"><i class="ph ph-tray" aria-hidden="true"></i>Heute<span id="heute-zahl" class="leiste-zahl tabular-nums" hidden></span></a>
+                <a href="#" class="leiste-eintrag" data-gruppe="haus"><i class="ph ph-house" aria-hidden="true"></i>Haus</a>
+                <a href="#" class="leiste-eintrag" data-gruppe="kosten"><i class="ph ph-file-text" aria-hidden="true"></i>Kosten</a>
+                <a href="#" class="leiste-eintrag" data-gruppe="abrechnung"><i class="ph ph-receipt" aria-hidden="true"></i>Abrechnung</a>
+                <span class="leiste-luecke"></span>
+                <a href="#" class="leiste-eintrag" data-gruppe="einstellungen"><i class="ph ph-gear" aria-hidden="true"></i>Einstellungen</a>
             </nav>
         </aside>
 
         <!-- Main Content -->
         <main class="main-content">
             <header class="top-header">
-                <div class="greeting">
-                    <h1 id="begruessung">Willkommen bei NebenkostenFix!</h1>
-                    <p>Verwalten Sie Ihre Immobilien und Nebenkostenabrechnungen.</p>
-                </div>
+                <!-- Befehlsfeld (Konzept D): springt zu Seiten, Mietern, Zählern,
+                     Rechnungen und Zahlungen; Strg+K öffnet es überall. -->
+                <button type="button" class="befehl-knopf" id="befehl-oeffnen" onclick="befehlOeffnen()"
+                    aria-haspopup="dialog" aria-keyshortcuts="Control+K">
+                    <i class="ph ph-magnifying-glass" aria-hidden="true"></i>
+                    <span class="befehl-text">Suchen nach Seite, Mieter, Zähler …</span>
+                    <span class="befehl-tasten" aria-hidden="true"><kbd>Strg</kbd><kbd>K</kbd></span>
+                </button>
+                <span class="kopf-luecke"></span>
+                <label class="haus-wahl form-group" id="haus-wahl-feld" hidden>
+                    <span class="sr-only">Immobilie öffnen</span>
+                    <select id="haus-wahl" onchange="hausWaehlen(this)"></select>
+                </label>
+                <a class="chip-anmeldung" id="kopf-anmeldung-aus" href="/einrichtung" hidden
+                    title="Die Anmeldung ist ausgeschaltet. Jeder in Ihrem Netz kann alle Daten sehen.">Anmeldung aus</a>
                 <div class="kopf-aktionen">
                     <!-- Angemeldeter Benutzer und Abmelden (NK-021). Der Name
                          wird von zeigeAngemeldetenBenutzer() aus /api/auth/me
@@ -78,6 +87,23 @@
                 </div>
             </header>
 
+            <!-- Seiten eines Bereichs als Reiter (Konzept D). initTabs() hängt die
+                 Leiste unter den Kopf der offenen Seite; ein Bereich mit nur einer
+                 Seite zeigt keine Reiter. Ziel, Beschriftung und Icon wie im
+                 Glossar § 5. -->
+            <nav class="nav-menu unter-reiter" aria-label="Seiten des Bereichs" hidden>
+                <a href="#" class="nav-item active" data-tab="dashboard" data-gruppe="heute"><i class="ph ph-squares-four"></i>
+                    Übersicht</a>
+                <a href="#" class="nav-item" data-tab="properties" data-gruppe="haus"><i class="ph ph-house"></i> Immobilien</a>
+                <a href="#" class="nav-item" data-tab="tenants" data-gruppe="haus"><i class="ph ph-users"></i> Mieter</a>
+                <a href="#" class="nav-item" data-tab="meters" data-gruppe="haus"><i class="ph ph-gauge"></i> Zähler &amp; Ablesungen</a>
+                <a href="#" class="nav-item" data-tab="invoices" data-gruppe="kosten"><i class="ph ph-receipt"></i> Rechnungen &amp; Belege</a>
+                <a href="#" class="nav-item" data-tab="billing" data-gruppe="abrechnung"><i class="ph ph-file-text"></i> Abrechnungen</a>
+                <a href="#" class="nav-item" data-tab="payments" data-gruppe="kosten"><i class="ph ph-coins"></i> Zahlungen</a>
+                <a href="#" class="nav-item" data-tab="reports" data-gruppe="abrechnung"><i class="ph ph-chart-line-up"></i> Statistiken</a>
+                <a href="#" class="nav-item" data-tab="settings" data-gruppe="einstellungen"><i class="ph ph-gear"></i> Einstellungen</a>
+            </nav>
+
             <!-- NK-201: Warnung im offenen Modus, sichtbar nur in Docker. NK-214:
                  unter dem Kopf im Fluss, nicht schwebend über Kopf und Dialogen. -->
             <div id="ohne-anmeldung-hinweis" class="hinweis-leiste hinweis-band" role="status" hidden>
@@ -89,8 +115,16 @@
             <!-- TAB: DASHBOARD -->
             <section class="content-section tab-content active" id="tab-dashboard">
                 <div class="section-header">
-                    <h2>Übersicht</h2>
+                    <div>
+                        <h2>Heute</h2>
+                        <!-- NK-156: „zurück“ nur, wenn es schon etwas gibt. -->
+                        <p class="section-untertitel"><span id="begruessung">Willkommen bei NebenkostenFix!</span>
+                            <span id="heute-stand"></span></p>
+                    </div>
                 </div>
+                <!-- Aufgaben (Konzept D): was jetzt zu tun ist, gebaut von
+                     zeigeHeute() aus den geladenen Daten. -->
+                <div id="heute-aufgaben" class="aufgaben" hidden></div>
                 <!-- Erste Schritte (NK-072): die Führung bei leerer Anwendung.
                      Verschwindet, sobald alle Pflichtschritte erledigt sind;
                      gezeichnet wird sie von zeigeErsteSchritte() in app.js. -->
@@ -881,7 +915,7 @@
                 <div id="analytics-leer" hidden></div>
 
                 <!-- Dynamische Navigation (Pills) -->
-                <div id="analytics-nav" style="display: flex; gap: 12px; margin-bottom: 32px; flex-wrap: wrap;">
+                <div id="analytics-nav" class="zeile-eng" style="margin-bottom: 32px; flex-wrap: wrap;">
                     <!-- Injected by JS -->
                 </div>
 
@@ -1136,6 +1170,26 @@
     <!-- NK-160: „Jahr abrechnen“ in fünf Schritten. Früh im Dokument, damit
          Rechnungs-, Ablese- und Anschreibendialog darüber liegen. Gerechnet
          wird über die vorhandenen Routen (generate, finalize). -->
+    <!-- Befehlspalette (Konzept D): Strg+K, siehe initBefehl() in app.js. -->
+    <div class="modal-overlay befehl-overlay" id="befehl-dialog">
+        <div class="modal befehl">
+            <h2 class="sr-only">Springen und suchen</h2>
+            <div class="befehl-eingabe">
+                <i class="ph ph-magnifying-glass" aria-hidden="true"></i>
+                <input type="text" id="befehl-feld" role="combobox" aria-expanded="true"
+                    aria-controls="befehl-liste" aria-autocomplete="list" autocomplete="off"
+                    aria-label="Seite, Mieter, Zähler oder Rechnung suchen"
+                    placeholder="z. B. „Stand Strom“ oder ein Mietername">
+            </div>
+            <div id="befehl-liste" class="befehl-liste" role="listbox" aria-label="Treffer"></div>
+            <div class="befehl-fuss" aria-hidden="true">
+                <span><kbd>↑</kbd><kbd>↓</kbd> wählen</span>
+                <span><kbd>Enter</kbd> öffnen</span>
+                <span><kbd>Esc</kbd> schließen</span>
+            </div>
+        </div>
+    </div>
+
     <div class="modal-overlay" id="jahr-modal">
         <div class="modal glass-panel dialog-breit">
             <div class="modal-header">

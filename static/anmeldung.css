@@ -1,11 +1,11 @@
 /* Anmelde-, Einrichtungs- und Passwortseite (NK-155, Layout K9).
    Dieselben Farben, Schrift und Maße wie die Anwendung (style.css,
-   Kontoblatt), aber eigenständig: die Seiten stehen vor der Anmeldung und
+   Konzept D „Aufgaben“), aber eigenständig: die Seiten stehen vor der Anmeldung und
    laden nicht die ganze Oberfläche. Werte hier ändern sich nur zusammen
    mit :root in style.css. Die Schriften liegen unter vendor/fonts/ und
    sind ohne Anmeldung erreichbar (auth.OEFFENTLICHE_ORDNER). */
-@import url('vendor/fonts/instrument-sans/instrument-sans.css');
-@import url('vendor/fonts/ibm-plex-mono/ibm-plex-mono.css');
+@import url('vendor/fonts/geist/geist.css');
+@import url('vendor/fonts/geist-mono/geist-mono.css');
 
 :root {
     --primary: #4F46E5;
@@ -13,17 +13,17 @@
     --primary-text: #3E36C2;
     --primary-tint: #EEEDFD;
     --on-primary: #FFFFFF;
-    --text-main: #1A1B2E;
-    --text-muted: #5A5C72;
-    --bg-color: #F5F5F8;
+    --text-main: #17182B;
+    --text-muted: #5B5D72;
+    --bg-color: #FAFAFB;
     --surface: #FFFFFF;
-    --border-color: #DEDFE8;
-    --control-border: #C9CBD9;
+    --border-color: #ECEDF2;
+    --control-border: #D4D5E0;
     --field-border: #8C8FA6;
-    --success-color: #3E36C2;
+    --success-color: #2F7D5B;
     --danger-color: #A3312A;
-    --font-sans: 'Instrument Sans', 'Segoe UI', system-ui, sans-serif;
-    --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+    --font-sans: 'Geist', 'Segoe UI', system-ui, sans-serif;
+    --font-mono: 'Geist Mono', ui-monospace, monospace;
     --radius-lg: 12px;
     --radius-md: 8px;
     --radius-sm: 4px;

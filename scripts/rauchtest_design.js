@@ -375,13 +375,13 @@ pruefe('K1: Immobilien-Seitenkopf trägt den Primärknopf',
 pruefe('K1: .kopf-aktionen in allen acht Köpfen mit Knöpfen (global + sieben Bereiche)',
     (ui.match(/class="kopf-aktionen"/g) || []).length === 8
     && css.includes('.kopf-aktionen {'));
-pruefe('K1: .section-untertitel statt Inline-Stil (fünf Köpfe)',
-    (ui.match(/class="section-untertitel"/g) || []).length === 5
+pruefe('K1: .section-untertitel statt Inline-Stil (sechs Köpfe, Heute eingeschlossen)',
+    (ui.match(/class="section-untertitel"/g) || []).length === 6
     && !ui.includes('color: var(--text-muted); margin-top: 4px;"')
     && css.includes('.section-untertitel {'));
-pruefe('K1: auch die Übersicht beginnt mit einem Seitenkopf',
-    html.indexOf('id="tab-dashboard"') < html.indexOf('<h2>Übersicht</h2>')
-    && html.indexOf('<h2>Übersicht</h2>') < html.indexOf('id="erste-schritte"'));
+pruefe('K1: auch „Heute“ beginnt mit einem Seitenkopf',
+    html.indexOf('id="tab-dashboard"') < html.indexOf('<h2>Heute</h2>')
+    && html.indexOf('<h2>Heute</h2>') < html.indexOf('id="erste-schritte"'));
 
 // --- NK-102: Leerzustand als eine Komponente (K4) ---
 const app = fs.readFileSync(path.join(__dirname, '..', 'static', 'app.js'), 'utf8');
@@ -1027,46 +1027,98 @@ async function ausschalterPruefen() {
         !!melden && /if \(!datum\) \{ showError\([^)]*\); return; \}/.test(melden[0]));
 }
 
-// --- NK-224: der Gruß steht nur auf der Übersicht ---------------------
-// Vorher stand „Willkommen …“ über jedem Tab, obwohl jede Seite ihre eigene
-// Überschrift trägt.
+// --- NK-224: der Gruß steht fest im Kopf von „Heute“ ------
+// Früher wurde ein globaler Gruß je Tab ein- und ausgeblendet; jetzt trägt
+// nur der Seitenkopf von „Heute“ ihn, und die Leiste zeigt den Bereich.
+pruefe('NK-224: der Gruß steht im Kopf von „Heute“ und nirgends sonst',
+    html.indexOf('id="begruessung"') > html.indexOf('id="tab-dashboard"')
+    && html.indexOf('id="begruessung"') < html.indexOf('id="erste-schritte"')
+    && !html.includes('class="greeting"'));
+
+// Konzept D: Klick auf einen Reiter schaltet den Leisteneintrag seines
+// Bereichs aktiv; die Leiste öffnet die zuletzt gezeigte Seite des Bereichs.
 {
-    const m = appQuelle.match(/function initTabs\(\)[\s\S]*?\n\}/);
-    const reiter = ['dashboard', 'meters', 'invoices'].map(name => {
-        const h = {};
-        return { dataset: { tab: name }, classList: { add() {}, remove() {} },
-            addEventListener: (typ, fn) => { h[typ] = fn; },
+    const quelle = (appQuelle.match(/function initTabs\(\)[\s\S]*?\n\}/) || [''])[0]
+        + (appQuelle.match(/const letzteSeite = \{\};\nfunction zeigeBereich\([\s\S]*?\n\}/) || [''])[0];
+    const element = (daten) => {
+        const h = {}; const attr = {}; const klassen = new Set(daten.aktiv ? ['active'] : []);
+        return { dataset: daten, hidden: false, style: {},
+            classList: { add: k => klassen.add(k), remove: k => klassen.delete(k),
+                toggle: (k, an) => an ? klassen.add(k) : klassen.delete(k), contains: k => klassen.has(k) },
+            setAttribute: (k, v) => { attr[k] = v; }, removeAttribute: k => { delete attr[k]; },
+            attr, addEventListener: (typ, fn) => { h[typ] = fn; },
             klick: () => h.click({ preventDefault() {} }) };
-    });
-    const gruss = { hidden: false };
-    const init = m && new Function('document', m[0] + '; return initTabs;')({
-        querySelectorAll: s => s === '.nav-item' ? reiter : [],
-        querySelector: s => s === '.greeting' ? gruss : null,
+    };
+    const reiter = [['dashboard', 'heute'], ['meters', 'haus'], ['tenants', 'haus'], ['invoices', 'kosten']]
+        .map(([tab, gruppe]) => element({ tab, gruppe }));
+    const leiste = ['heute', 'haus', 'kosten'].map(gruppe => element({ gruppe }));
+    const unter = { hidden: true, querySelectorAll: () => reiter };
+    const gewechselt = [];
+    const init = quelle.includes('zeigeBereich') && new Function('document', 'wechsleZuTab',
+        quelle + '; return initTabs;')({
+        querySelectorAll: s => s === '.nav-item' ? reiter : s === '.leiste-eintrag' ? leiste
+            : s === '.leiste-eintrag, .logo' ? leiste : [],
+        querySelector: s => s === '.unter-reiter' ? unter
+            : (s.match(/data-gruppe="(\w+)"/) ? reiter.find(r => r.dataset.gruppe === RegExp.$1) : null),
         getElementById: () => null,
-    });
-    const sichtbar = [];
+    }, tab => gewechselt.push(tab));
+    const aktiv = () => leiste.filter(e => e.classList.contains('active')).map(e => e.dataset.gruppe).join();
+    const stand = [];
     if (init) {
         init();
-        for (const r of [reiter[1], reiter[0], reiter[2]]) { r.klick(); sichtbar.push(!gruss.hidden); }
+        reiter[2].klick(); stand.push(aktiv(), String(unter.hidden));
+        reiter[3].klick(); stand.push(aktiv(), String(unter.hidden));
+        leiste[1].klick();
     }
-    pruefe('NK-224: der Gruß verschwindet auf anderen Tabs und kommt auf der Übersicht zurück',
-        sichtbar.join() === 'false,true,false');
+    pruefe('Konzept D: der Reiter „Mieter“ macht „Haus“ in der Leiste aktiv, „Rechnungen“ dann „Kosten“',
+        stand.join('|') === 'haus|false|kosten|true');
+    pruefe('Konzept D: „Haus“ in der Leiste öffnet die zuletzt gezeigte Seite (Mieter)',
+        gewechselt.join() === 'tenants' && leiste[1].attr['aria-current'] === undefined);
 }
 
-// Die Hilfe hat keinen Reiter; zeigeHilfe ließ den Gruß über „Hilfe“ stehen.
+// Die Hilfe hat keinen Reiter: zeigeHilfe nimmt der Leiste die Markierung.
 {
     const m = appQuelle.match(/function zeigeHilfe\([\s\S]*?\n\}/);
-    const gruss = { hidden: false };
+    let bereich;
     const hilfe = { classList: { add() {} }, style: {} };
     if (m) {
-        new Function('document', 'window', 'schliesseBegriffBlase', 'hilfeChecklisteLaden', 'ladeUeber',
+        new Function('document', 'window', 'schliesseBegriffBlase', 'hilfeChecklisteLaden', 'ladeUeber', 'zeigeBereich',
             m[0] + '; zeigeHilfe();')({
             querySelectorAll: () => [],
-            querySelector: s => s === '.greeting' ? gruss : null,
+            querySelector: () => null,
             getElementById: id => id === 'tab-hilfe' ? hilfe : null,
-        }, { scrollTo() {} }, () => {}, () => {}, () => {});
+        }, { scrollTo() {} }, () => {}, () => {}, () => {}, item => { bereich = item; });
     }
-    pruefe('NK-224: auch die Hilfe zeigt den Gruß nicht', !!m && gruss.hidden === true);
+    pruefe('NK-224: die Hilfe markiert keinen Bereich in der Leiste', !!m && bereich === null);
+}
+
+// Konzept D: die Befehlspalette markiert jedes Suchwort und maskiert den Rest.
+{
+    const funktion = name => (appQuelle.match(new RegExp('function ' + name + '\\([\\s\\S]*?\\n\\}')) || [''])[0];
+    const quelle = funktion('escapeHtml') + funktion('befehlMarkiert');
+    const markiert = quelle.includes('befehlMarkiert')
+        && new Function(quelle + '; return befehlMarkiert;')()('Strom <b>2. OG', ['strom', 'og']);
+    pruefe('Konzept D: Suchwörter in <mark>, Text maskiert',
+        markiert === '<mark>Strom</mark> &lt;b&gt;2. <mark>OG</mark>');
+}
+
+// Konzept D: „Heute“ nennt Zähler ohne Stand im laufenden Jahr und fällige
+// Abrechnungen; Beispielmieter erzeugen keine Aufgabe.
+{
+    const quelle = (appQuelle.match(/function heuteAufgaben\(\)[\s\S]*?\n\}/) || [''])[0];
+    const jahr = String(new Date().getFullYear());
+    const gruppen = quelle && new Function('echterBestand', 'tenants', 'abrechnungsVorschlaege',
+        'zaehlerArtName', 'datumText', 'openAddReadingModal', 'openBillingSelectionModal',
+        quelle + '; return heuteAufgaben();')(
+        () => ({ meters: [{ id: 1, category_name: 'Strom', meter_number: 'A1', property_name: 'Haus' },
+            { id: 2, category_name: 'Strom', meter_number: 'B2', property_name: 'Haus' }],
+        readings: [{ meter_id: 1, reading_date: jahr + '-03-01' }] }),
+        [{ id: 7, ist_beispiel: true }],
+        [{ tenant_id: 7, tenant_name: 'Beispiel' }, { tenant_id: 8, tenant_name: 'Echt', apartment_name: 'EG' }],
+        art => art, d => d, () => {}, () => {});
+    const stand = (gruppen || []).map(g => g.name + ':' + g.aufgaben.map(a => a.titel + '/' + a.chip).join(',')).join('|');
+    pruefe('Konzept D: Heute zeigt nur Zähler ohne Stand und echte fällige Abrechnungen',
+        stand === 'Erfassen:Strom B2/fehlt|Abrechnen:Echt (EG)/fällig');
 }
 
 // --- NK-225: „0 von 5“ trotz Beispielhaus wird erklärt -----------------
@@ -1078,9 +1130,10 @@ async function ausschalterPruefen() {
         const hole = id => (el[id] = el[id] || { id, hidden: beispiel, style: {},  // Start = Gegenteil der Erwartung
             replaceChildren() {}, appendChild() {} });
         new Function('document', 'properties', 'allApartments', 'tenants', 'invoices', 'meters',
-            'readings', 'payments', 'abrechnungsHistorie', quelle + '; zeigeErsteSchritte();')(
+            'readings', 'payments', 'abrechnungsHistorie', 'zeigeHeute', 'fuelleHausWahl',
+            quelle + '; zeigeErsteSchritte();')(
             { getElementById: hole, createElement: () => ({}) },
-            beispiel ? [{ id: 1, ist_beispiel: true }] : [], [], [], [], [], [], [], []);
+            beispiel ? [{ id: 1, ist_beispiel: true }] : [], [], [], [], [], [], [], [], () => {}, () => {});
         return el;
     };
     const mit = lauf(true), ohne = lauf(false);

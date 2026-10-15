@@ -103,6 +103,12 @@ AUSNAHMEN = {
     'intervalDays': 'Tage (Zahl)',
     'missingDays': 'Tage (Zahl)',
     'umschlag.version': 'Versionsnummer (Integer)',
+    'gi': 'Index der Aufgabengruppe (Zahl, Konzept D)',
+    'ai': 'Index der Aufgabe (Zahl, Konzept D)',
+    'i': 'Index des Befehlstreffers (Zahl, Konzept D)',
+    'stueck': 'escapeHtml(text.slice(...)) in befehlMarkiert',
+    'befehlMarkiert(e.titel, woerter)': 'setzt nur maskierte Stuecke zusammen',
+    'befehlMarkiert(e.info, woerter)': 'setzt nur maskierte Stuecke zusammen',
     # Adressen, gebaut mit dateiUrl()
     'imgUrl': 'dateiAdresse(art, Zahl) (NK-129)',
     'docUrl': 'dateiAdresse(art, Zahl) (NK-129)',
