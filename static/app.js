@@ -1069,6 +1069,9 @@ async function ladeUeber() {
 }
 
 function zeigeHilfe(abschnitt) {
+    // Wer die Hilfe öffnet, verlässt die Tour; sonst holt sie beim Schließen
+    // eines Dialogs ihren Reiter zurück.
+    tourBeenden();
     schliesseBegriffBlase();
     document.querySelectorAll('.nav-item').forEach(nav => nav.classList.remove('active'));
     document.querySelectorAll('.tab-content').forEach(tab => {
@@ -1307,6 +1310,7 @@ function tourAutostart() {
     // Dialog mehr offen ist, und nur starten, wenn noch kein Haus angelegt wurde.
     const versuch = () => {
         if (tourOffen() || echterBestand().properties.length > 0) return;
+        if (document.getElementById('tab-hilfe').classList.contains('active')) return;
         if (document.querySelector('.modal-overlay.active')) return setTimeout(versuch, 1000);
         tourStarten();
     };

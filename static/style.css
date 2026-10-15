@@ -2635,8 +2635,15 @@ a.btn-primary:hover {
         position: relative;
     }
 
+    /* Der Titel darf schrumpfen, sonst rutscht der Menüknopf unter ihn. */
+    .section-header > div:first-child {
+        flex: 1 1 0;
+        min-width: 0;
+    }
+
     .kopf-menue-knopf {
         display: inline-flex;
+        align-self: flex-start;
         justify-content: center;
         width: var(--knopf-hoehe);
         padding: 0;

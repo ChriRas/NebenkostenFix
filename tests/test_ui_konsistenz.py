@@ -382,3 +382,8 @@ def test_kopfaktionen_am_handy_im_menue():
     zu = re.search(r"\.kopf-aktionen\.mit-menue \{([^}]*)\}", schmal)
     assert zu and "display: none" in zu.group(1) and "position: absolute" in zu.group(1)
     assert re.search(r"\.kopf-aktionen\.mit-menue\.offen \{\s*display: flex;", schmal)
+    # Der Titel muss schrumpfen dürfen, sonst rutscht der Knopf bei langen
+    # Titeln (Mieter, Abrechnungen) unter ihn statt daneben.
+    titel = re.search(r"\.section-header > div:first-child \{([^}]*)\}", schmal)
+    assert titel and "min-width: 0" in titel.group(1) and "flex: 1 1 0" in titel.group(1)
+    assert re.search(r"\.kopf-menue-knopf \{\s*display: inline-flex;\s*align-self: flex-start;", schmal)

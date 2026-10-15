@@ -1094,17 +1094,22 @@ pruefe('NK-224: der Gruß steht im Kopf von „Heute“ und nirgends sonst',
 // Die Hilfe hat keinen Reiter: zeigeHilfe nimmt der Leiste die Markierung.
 {
     const m = appQuelle.match(/function zeigeHilfe\([\s\S]*?\n\}/);
-    let bereich;
+    let bereich, tourZu = 0;
     const hilfe = { classList: { add() {} }, style: {} };
     if (m) {
         new Function('document', 'window', 'schliesseBegriffBlase', 'hilfeChecklisteLaden', 'ladeUeber', 'zeigeBereich',
-            m[0] + '; zeigeHilfe();')({
+            'tourBeenden', m[0] + '; zeigeHilfe();')({
             querySelectorAll: () => [],
             querySelector: () => null,
             getElementById: id => id === 'tab-hilfe' ? hilfe : null,
-        }, { scrollTo() {} }, () => {}, () => {}, () => {}, item => { bereich = item; });
+        }, { scrollTo() {} }, () => {}, () => {}, () => {}, item => { bereich = item; }, () => { tourZu++; });
     }
     pruefe('NK-224: die Hilfe markiert keinen Bereich in der Leiste', !!m && bereich === null);
+    // Sonst holt die offene Tour beim Schließen eines Dialogs ihren Reiter zurück.
+    pruefe('die Hilfe beendet eine offene Einführungstour', tourZu === 1);
+    const versuch = (appQuelle.match(/const versuch = \(\) => \{[\s\S]*?\n    \};/) || [''])[0];
+    pruefe('die Einführung startet nicht von selbst über der offenen Hilfe',
+        /getElementById\('tab-hilfe'\)\.classList\.contains\('active'\)\) return;/.test(versuch));
 }
 
 // Die Befehlspalette markiert jedes Suchwort und maskiert den Rest.
