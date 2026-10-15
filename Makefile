@@ -59,6 +59,7 @@ kern:
 	  tests/test_jahreswechsel.py \
 	  tests/test_pruefstand.py \
 	  tests/test_belegeinsicht.py \
+	  tests/test_abrechnungstabelle.py \
 	  tests/test_heizung_kostenarten.py tests/test_zaehlerwechsel.py \
 	  -q --no-header \
 	  --cov=nebenkostenfix.rechenkern --cov-branch --cov-report=term-missing --cov-fail-under=95

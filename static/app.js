@@ -268,8 +268,9 @@ async function zeigeAngemeldetenBenutzer() {
     }
 }
 
-window.wrapInterpolated = (valStr, isInterpolated, infoObj) => {
-    if (!isInterpolated) return valStr;
+// Erklärtext und Klick zum Rechenweg einer Schätzung; geteilt vom ~-Wert
+// (KPIs) und vom Etikett „geschätzt“ der Abrechnungstabelle.
+function interpolationsTooltip(infoObj) {
     let ttStr = `Wert wurde interpoliert.`;
     if (infoObj) {
         if (infoObj.target_days) {
@@ -289,10 +290,20 @@ window.wrapInterpolated = (valStr, isInterpolated, infoObj) => {
 - ${rEnd} (${infoObj.r_end.total.toFixed(1)} ${escapeHtml(infoObj.unit)})`;
         }
     }
-    let clickAttr = '';
+    return ttStr;
+}
+
+function interpolationsKlickAttr(infoObj) {
     if (infoObj && infoObj.meter_id && infoObj.target_start_date && infoObj.target_end_date) {
-        clickAttr = `onclick="openInterpolationAudit(${infoObj.meter_id}, '${infoObj.target_start_date}', '${infoObj.target_end_date}')"`;
+        return `onclick="openInterpolationAudit(${infoObj.meter_id}, '${infoObj.target_start_date}', '${infoObj.target_end_date}')"`;
     }
+    return '';
+}
+
+window.wrapInterpolated = (valStr, isInterpolated, infoObj) => {
+    if (!isInterpolated) return valStr;
+    const ttStr = interpolationsTooltip(infoObj);
+    const clickAttr = interpolationsKlickAttr(infoObj);
     
     return `<span class="interpolated-wrapper">
         <span class="interpolated-value"><b style="color:var(--primary);margin-right:4px;">~</b> ${valStr}</span>
@@ -7482,6 +7493,193 @@ async function korrekturErstellen(id) {
     }
 }
 
+// Runde 7: eine Tabelle für „Abrechnungs-Details & Belege“ und die Vorschau.
+// Je Kostenart eine Zeile (Name, Zeitraum, Betrag, Beleg); die Aufschlüsselung
+// klappt per Klick auf. Stile stehen als abr-* in style.css.
+
+// Teilt „Name (Angaben)“ am ersten „ (“ in Titel und graue Angaben. Nur wenn
+// diese Klammer den Text abschließt; sonst bleibt der Text ganz (Wortlaut des
+// Rechenkerns, etwa „Eigenverbrauch (12,5 m³)“).
+function umlageTeile(text) {
+    const s = String(text ?? '');
+    const i = s.indexOf(' (');
+    if (i > 0 && s.endsWith(')')) {
+        let tiefe = 0;
+        for (let k = i + 1; k < s.length; k++) {
+            if (s[k] === '(') tiefe++;
+            else if (s[k] === ')' && --tiefe === 0) {
+                if (k === s.length - 1) return { titel: s.slice(0, i), info: s.slice(i + 2, -1) };
+                break;
+            }
+        }
+    }
+    return { titel: s, info: '' };
+}
+
+function umlageTextHtml(text) {
+    const { titel, info } = umlageTeile(text);
+    return `<span class="abr-text-titel">${escapeHtml(titel)}</span>`
+        + (info ? ` <span class="abr-text-info">${escapeHtml(info)}</span>` : '');
+}
+
+// Etikett statt „~“ und Rechner: der Tooltip erklärt die Schätzung, mit
+// Zähler und Zeitraum öffnet ein Klick den Rechenweg.
+function geschaetztHtml(infoObj) {
+    const klickAttr = interpolationsKlickAttr(infoObj);
+    const etikettHtml = klickAttr
+        ? `<button type="button" class="abr-geschaetzt" ${klickAttr}>geschätzt<span class="sr-only"> – Rechenweg ansehen</span></button>`
+        : `<span class="abr-geschaetzt" tabindex="0">geschätzt</span>`;
+    return `<span class="interpolated-wrapper">${etikettHtml}<span class="glass-tooltip" role="tooltip">${interpolationsTooltip(infoObj)}</span></span>`;
+}
+
+const formatiereVerbrauch = w => Number(w).toLocaleString('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+
+function saldoText(balance) {
+    const b = Number(balance || 0);
+    return b > 0 ? 'Nachzahlung des Mieters' : (b < 0 ? 'Guthaben des Mieters' : 'Saldobetrag');
+}
+
+// Ergebnis zuerst: was der Mieter zahlt oder zurückbekommt.
+function abrechnungsErgebnis(data) {
+    const b = Number(data.balance || 0);
+    const saldoAttr = b < 0 ? 'abr-guthaben' : '';
+    return `<div class="abr-ergebnis">
+        <div class="abr-ergebnis-feld"><span class="abr-ergebnis-name">Gesamtkosten</span><span class="abr-ergebnis-wert">${escapeHtml(euroText(data.total_amount))}</span></div>
+        <div class="abr-ergebnis-feld"><span class="abr-ergebnis-name">Vorauszahlungen</span><span class="abr-ergebnis-wert">− ${escapeHtml(euroText(data.prepaid_amount))}</span></div>
+        <div class="abr-ergebnis-feld abr-ergebnis-saldo ${saldoAttr}"><span class="abr-ergebnis-name">${escapeHtml(saldoText(b))}</span><span class="abr-ergebnis-wert">${escapeHtml(euroText(Math.abs(b)))}</span></div>
+    </div>`;
+}
+
+function abrPostenUmschalten(knopf) {
+    const offen = knopf.getAttribute('aria-expanded') !== 'true';
+    knopf.setAttribute('aria-expanded', String(offen));
+    document.getElementById(knopf.getAttribute('aria-controls')).hidden = !offen;
+}
+
+let abrDetailNr = 0;
+
+// Die Zeilen der Aufschlüsselung einer Kostenart, über die volle Breite.
+// Wann „geschätzt“ erscheint, ist dieselbe Regel wie zuvor am ~-Wert.
+function abrechnungsDetailZeilen(item) {
+    const md = item.meter_details || null;
+    const tm = md && md.tenant_meter;
+    const mm = md && md.main_meter;
+    const zeile = (symbolHtml, textHtml, betragHtml) => `<tr class="abr-unter">
+            <td><div class="abr-unter-text">${symbolHtml}<span>${textHtml}</span></div></td>
+            <td class="abr-zahl abr-unter-betrag">${betragHtml}</td>
+            <td></td>
+        </tr>`;
+    let zeilenHtml = '';
+    const hasSub = item.sub_items && item.sub_items.length > 0;
+    // Heizkosten: die Zeile nennt Vorschrift, Verteilschlüssel und einen
+    // Ersatzmaßstab (§ 9b); das steht in keinem Unterposten.
+    if (!hasSub || item.billing_type === 'heizkosten') {
+        let schaetzungHtml = '';
+        if (!hasSub && item.billing_type === 'direkt' && tm && tm.is_interpolated) schaetzungHtml = geschaetztHtml(tm);
+        else if (!hasSub && item.billing_type === 'nur_allgemein' && mm && mm.is_interpolated) schaetzungHtml = geschaetztHtml(mm);
+        zeilenHtml += zeile('', `${umlageTextHtml(item.description)} ${schaetzungHtml}`, '');
+    }
+    (hasSub ? item.sub_items : []).forEach(sub => {
+        const eigen = sub.type === 'eigenverbrauch';
+        let schaetzungHtml = '';
+        if (eigen && tm && tm.is_interpolated) schaetzungHtml = geschaetztHtml(tm);
+        else if (sub.type === 'allgemein' && mm && (mm.is_interpolated || (tm && tm.is_interpolated))) schaetzungHtml = geschaetztHtml(mm);
+        const symbolHtml = eigen
+            ? '<i class="ph ph-door abr-symbol abr-symbol-eigen" aria-hidden="true"></i>'
+            : '<i class="ph ph-house abr-symbol" aria-hidden="true"></i>';
+        zeilenHtml += zeile(symbolHtml, `${umlageTextHtml(sub.description)} ${schaetzungHtml}`, escapeHtml(euroText(sub.cost)));
+    });
+    if (md) {
+        // Ohne Verbrauchswert steht „keine Angabe“, wie früher „N/A“.
+        const verbrauchHtml = (wert, schaetzung) => wert == null
+            ? 'keine Angabe'
+            : `${escapeHtml(formatiereVerbrauch(wert))} ${escapeHtml(md.unit || '')} ${schaetzung ? geschaetztHtml(schaetzung) : ''}`;
+        const angaben = [];
+        if (tm && tm.status !== 'no_data') {
+            angaben.push(['Ihr Wohnungszähler', verbrauchHtml(md.tenant_consumption, tm.is_interpolated && tm)]);
+        }
+        if (mm && mm.status !== 'no_data') {
+            // Haus und Allgemein gelten für die ganze Rechnung (NK-213).
+            const hzZeitraum = mm.target_start_date && mm.target_end_date
+                ? ` (${datumText(mm.target_start_date)} bis ${datumText(mm.target_end_date)})`
+                : '';
+            const allgGeschaetzt = mm.is_interpolated || (tm && tm.is_interpolated);
+            angaben.push([`Hauptzähler${hzZeitraum}`, verbrauchHtml(md.main_consumption, mm.is_interpolated && mm)]);
+            angaben.push(['Allgemeinverbrauch', verbrauchHtml(md.allgemein_consumption, allgGeschaetzt && mm)]);
+            // NK-209 (B2): der Anteil, mit dem gerechnet wurde (Personentage)
+            if (md.allgemein_quote != null && md.allgemein_anteil != null) {
+                const prozent = (Number(md.allgemein_quote) * 100).toLocaleString('de-DE',
+                    { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                angaben.push(['Ihr Anteil am Allgemeinverbrauch', `${verbrauchHtml(md.allgemein_anteil, null)} (${escapeHtml(prozent)} %${md.preis_ht != null ? ', nach den Kosten von HT und NT gewichtet' : ''})`]);
+            }
+        }
+        if (angaben.length > 0) {
+            const angabenHtml = angaben.map(([name, wertHtml]) =>
+                `<div><dt>${escapeHtml(name)}</dt><dd>${wertHtml}</dd></div>`).join('');
+            zeilenHtml += `<tr class="abr-zaehler"><td colspan="3"><dl class="abr-zaehlerkasten">${angabenHtml}</dl></td></tr>`;
+        }
+    }
+    return zeilenHtml;
+}
+
+function abrechnungsTabelle(data) {
+    const posten = data.line_items || [];
+    const postenHtml = posten.map(item => {
+        const nr = ++abrDetailNr;
+        const belegHtml = item.doc_path && item.doc_name && item.invoice_id
+            ? `<a class="abr-beleg-link" href="${dateiAdresse('rechnung', item.invoice_id)}" target="_blank" rel="noopener" title="Beleg ansehen: ${escapeHtml(item.doc_name)}" aria-label="Beleg ansehen: ${escapeHtml(item.doc_name)}"><i class="ph ph-file-pdf" aria-hidden="true"></i></a>`
+            : '<span class="abr-ohne-beleg" aria-label="kein Beleg">–</span>';
+        return `<tbody class="abr-posten">
+            <tr class="abr-haupt">
+                <td>
+                    <button type="button" class="abr-umschalter" aria-expanded="false" aria-controls="abr-d-${nr}" onclick="abrPostenUmschalten(this)">
+                        <i class="ph ph-caret-right abr-pfeil" aria-hidden="true"></i>
+                        <span class="abr-kostenart">
+                            <span class="abr-name">${escapeHtml(item.category)}</span>
+                            <span class="abr-zeitraum">${escapeHtml(item.period)}</span>
+                        </span>
+                    </button>
+                </td>
+                <td class="abr-zahl">${escapeHtml(euroText(item.tenant_cost))}</td>
+                <td class="abr-beleg">${belegHtml}</td>
+            </tr>
+        </tbody>
+        <tbody class="abr-details" id="abr-d-${nr}" hidden>${abrechnungsDetailZeilen(item)}</tbody>`;
+    }).join('');
+    const leerHtml = posten.length === 0
+        ? '<tbody><tr><td colspan="3" class="abr-leer">Keine Kosten in diesem Zeitraum gefunden.</td></tr></tbody>'
+        : '';
+    return `<div class="data-table-container abr-rahmen">
+        <table class="data-table abr-tabelle">
+            <thead>
+                <tr>
+                    <th scope="col">Kostenart</th>
+                    <th scope="col" class="abr-zahl">Betrag</th>
+                    <th scope="col" class="abr-beleg">Beleg</th>
+                </tr>
+            </thead>
+            ${postenHtml}${leerHtml}
+            <tfoot>
+                <tr class="abr-summe">
+                    <th scope="row">Gesamtkosten der Periode</th>
+                    <td class="abr-zahl">${escapeHtml(euroText(data.total_amount))}</td>
+                    <td></td>
+                </tr>
+                <tr>
+                    <th scope="row">Abzüglich geleistete Vorauszahlungen</th>
+                    <td class="abr-zahl abr-minus">− ${escapeHtml(euroText(data.prepaid_amount))}</td>
+                    <td></td>
+                </tr>
+                <tr class="abr-saldo">
+                    <th scope="row">${escapeHtml(saldoText(data.balance))}</th>
+                    <td class="abr-zahl">${escapeHtml(euroText(Math.abs(Number(data.balance || 0))))}</td>
+                    <td></td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>`;
+}
+
 async function openReportDetails(id) {
     try {
         const res = await fetch(`/api/billing/reports/${id}/details`);
@@ -7490,10 +7688,6 @@ async function openReportDetails(id) {
         // NK-124: das Ergebnis steckt im Schnappschuss ("ergebnis"); beim
         // Altbestand ohne Version ist die Antwort selbst das Ergebnis.
         const data = umschlag.ergebnis || umschlag;
-        // Der Schnappschuss hält Beträge als Text ("828.32", json_sicher),
-        // damit sie exakt bleiben; .toFixed gibt es nur an Zahlen.
-        const formatiereBetrag = w => Number(w || 0).toFixed(2).replace('.', ',');
-        
         const modal = document.getElementById('report-details-modal');
         const body = document.getElementById('report-details-body');
         
@@ -7504,13 +7698,14 @@ async function openReportDetails(id) {
         const regelstandBlock = umschlag.veraltet ? regelstandHinweis(id, umschlag.regelstand_aenderungen) : '';
         
         let html = `
-            <div style="margin-bottom: 24px;">
-                <h3 style="margin: 0 0 8px 0; font-size: 18px;">Details zur Abrechnung</h3>
-                <p style="color: var(--text-muted); margin: 0;">Zeitraum: ${escapeHtml(datumText(umschlag.start_date || data.start_date))} - ${escapeHtml(datumText(umschlag.end_date || data.end_date))}</p>
-                ${umschlag.version ? `<p style="color: var(--text-muted); margin: 4px 0 0 0; font-size: 13px;">Version ${umschlag.version} · erstellt mit Software ${escapeHtml(umschlag.software_version || '')}, Regelstand ${escapeHtml(umschlag.regel_version || '')}</p>` : ''}
+            <div class="abr-kopf">
+                <h3>Details zur Abrechnung</h3>
+                <p>Zeitraum: ${escapeHtml(datumText(umschlag.start_date || data.start_date))} - ${escapeHtml(datumText(umschlag.end_date || data.end_date))}</p>
+                ${umschlag.version ? `<p class="abr-kopf-klein">Version ${umschlag.version} · erstellt mit Software ${escapeHtml(umschlag.software_version || '')}, Regelstand ${escapeHtml(umschlag.regel_version || '')}</p>` : ''}
                 ${regelstandBlock}
             </div>
-            <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px;">
+            ${abrechnungsErgebnis(data)}
+            <div class="abr-aktionen">
                 <a class="btn-secondary" href="/api/billing/reports/${id}/belege" download
                    title="Abrechnung, Rechenweg, Belege und Ablesefotos der eigenen Zähler als ZIP für den Mieter (§ 556 Abs. 4 BGB)">
                     <i class="ph ph-file-zip"></i> Belege herunterladen
@@ -7523,102 +7718,7 @@ async function openReportDetails(id) {
             ${zustellungsBlock}
             ${vorauszahlungsBlock(umschlag.vorauszahlung, umschlag.tenant_id)}
             ${versionenBlock}
-            <table class="data-table" style="width: 100%; border-collapse: collapse; text-align: left;">
-                <thead>
-                    <tr>
-                        <th>Kostenart</th>
-                        <th>Rechnungszeitraum</th>
-                        <th>Umlage-Details</th>
-                        <th style="text-align: right;">Betrag (€)</th>
-                        <th style="text-align: center;">Belege</th>
-                    </tr>
-                </thead>
-                <tbody>
-        `;
-        
-        data.line_items.forEach(item => {
-            let belegHtml = '-';
-            if (item.doc_path && item.doc_name && item.invoice_id) {
-                belegHtml = `<a href="${dateiAdresse('rechnung', item.invoice_id)}" target="_blank" style="color: var(--primary-color); text-decoration: underline;" title="${escapeHtml(item.doc_name)}">Beleg ansehen</a>`;
-            }
-            
-            const hasSub = item.sub_items && item.sub_items.length > 0;
-            
-            let itemDesc = escapeHtml(item.description);
-            if (!hasSub && item.meter_details) {
-                const md = item.meter_details;
-                if (item.billing_type === 'direkt' && md.tenant_meter && md.tenant_meter.is_interpolated) {
-                    itemDesc = window.wrapInterpolated(itemDesc, true, md.tenant_meter);
-                } else if (item.billing_type === 'nur_allgemein' && md.main_meter && md.main_meter.is_interpolated) {
-                    itemDesc = window.wrapInterpolated(itemDesc, true, md.main_meter);
-                }
-            }
-            
-            html += `
-                <tr style="border-bottom: ${hasSub ? 'none' : '1px solid var(--border-color)'};">
-                    <td style="font-weight: 500; padding: 12px 8px;">${escapeHtml(item.category)}</td>
-                    <td style="color: var(--text-muted); font-size: 13px; white-space: nowrap; padding: 12px 8px;">${escapeHtml(item.period)}</td>
-                    <td style="color: var(--text-muted); font-size: 13px; padding: 12px 8px;">${hasSub ? '' : itemDesc}</td>
-                    <td style="font-weight: 600; text-align: right; white-space: nowrap; padding: 12px 8px;">${formatiereBetrag(item.tenant_cost)} €</td>
-                    <td style="text-align: center; padding: 12px 8px;">${belegHtml}</td>
-                </tr>
-            `;
-            
-            if (hasSub) {
-                item.sub_items.forEach((sub, idx) => {
-                    const isLast = idx === item.sub_items.length - 1;
-                    const icon = sub.type === 'eigenverbrauch' ? '<i class="ph ph-door" style="margin-right: 8px; font-size: 1.1em; color: var(--primary);"></i>' : '<i class="ph ph-house" style="margin-right: 8px; font-size: 1.1em; color: var(--text-muted);"></i>';
-                    
-                    let subDesc = escapeHtml(sub.description);
-                    if (item.meter_details) {
-                        const md = item.meter_details;
-                        if (sub.type === 'eigenverbrauch' && md.tenant_meter && md.tenant_meter.is_interpolated) {
-                            subDesc = window.wrapInterpolated(subDesc, true, md.tenant_meter);
-                        } else if (sub.type === 'allgemein') {
-                            const isAllg = (md.main_meter && md.main_meter.is_interpolated) || (md.tenant_meter && md.tenant_meter.is_interpolated);
-                            if (isAllg && md.main_meter) {
-                                subDesc = window.wrapInterpolated(subDesc, true, md.main_meter);
-                            }
-                        }
-                    }
-                    
-                    html += `
-                        <tr style="border-bottom: ${isLast ? '1px solid var(--border-color)' : 'none'}; background-color: var(--bg-hover);">
-                            <td colspan="2" style="padding: 4px 8px;"></td>
-                            <td style="color: var(--text-muted); font-size: 13px; padding: 4px 8px; padding-left: 24px;">
-                                <div style="display: flex; align-items: center;">
-                                    ${icon} ${subDesc}
-                                </div>
-                            </td>
-                            <td style="color: var(--text-muted); font-size: 13px; text-align: right; padding: 4px 8px;">${formatiereBetrag(sub.cost)} €</td>
-                            <td></td>
-                        </tr>
-                    `;
-                });
-            }
-        });
-        
-        html += `
-                <tr style="border-top: 2px solid var(--text-color);">
-                    <td colspan="3" style="font-weight: 600; text-align: right; padding: 12px 8px;">Gesamtkosten der Periode:</td>
-                    <td style="font-weight: 600; text-align: right; padding: 12px 8px;">${formatiereBetrag(data.total_amount)} €</td>
-                    <td></td>
-                </tr>
-                <tr>
-                    <td colspan="3" style="font-weight: 600; text-align: right; padding: 12px 8px;">Abzüglich geleistete Vorauszahlungen:</td>
-                    <td style="font-weight: 600; text-align: right; padding: 12px 8px; color: var(--danger-color);">- ${formatiereBetrag(data.prepaid_amount)} €</td>
-                    <td></td>
-                </tr>
-                <tr style="background: var(--bg-hover);">
-                    <td colspan="3" style="font-weight: 600; text-align: right; padding: 16px 8px; font-size: 18px;">
-                        ${data.balance > 0 ? 'Nachzahlung des Mieters:' : (data.balance < 0 ? 'Guthaben des Mieters:' : 'Saldobetrag:')}
-                    </td>
-                    <td style="font-weight: 600; text-align: right; padding: 16px 8px; font-size: 18px; color: var(--primary-color);">
-                        ${formatiereBetrag(data.balance)} €
-                    </td>
-                    <td></td>
-                </tr>
-            </tbody></table>
+            ${abrechnungsTabelle(data)}
         `;
         html += mieterErklaerungHtml(data);
         
@@ -7848,11 +7948,12 @@ async function generateBillPreview(tenantId, startDate, endDate, categoryIds = n
         const body = document.getElementById('billing-preview-body');
         
         let html = `
-            <div style="margin-bottom: 24px;">
-                <h3 style="margin:0;">Abrechnung für ${escapeHtml(data.tenant_name)}</h3>
-                <p style="color: var(--text-muted); margin: 4px 0;">${escapeHtml(data.property)} - ${escapeHtml(data.apartment)}</p>
-                <p style="color: var(--text-muted); margin: 4px 0;">Zeitraum: ${escapeHtml(datumText(data.start_date))} bis ${escapeHtml(datumText(data.end_date))}</p>
+            <div class="abr-kopf">
+                <h3>Abrechnung für ${escapeHtml(data.tenant_name)}</h3>
+                <p>${escapeHtml(data.property)} - ${escapeHtml(data.apartment)}</p>
+                <p>Zeitraum: ${escapeHtml(datumText(data.start_date))} bis ${escapeHtml(datumText(data.end_date))}</p>
             </div>
+            ${abrechnungsErgebnis(data)}
         `;
         
         // Preflight Panel: nur echte Zaehler. Kacheln ohne Zaehler (Zeitraum,
@@ -7942,92 +8043,7 @@ async function generateBillPreview(tenantId, startDate, endDate, categoryIds = n
             </div>`;
         }
         html += vorauszahlungsBlock(data.vorauszahlung, null);
-        
-        html += `
-            <table class="data-table" style="width: 100%;">
-                <thead>
-                    <tr>
-                        <th>Kostenart</th>
-                        <th>Rechnungszeitraum</th>
-                        <th>Umlage-Details</th>
-                        <th style="text-align: right;">Betrag</th>
-                    </tr>
-                </thead>
-                <tbody>
-        `;
-        
-        if (data.line_items.length === 0) {
-            html += `<tr><td colspan="4" style="text-align: center;">Keine Kosten in diesem Zeitraum gefunden.</td></tr>`;
-        }
-        
-        data.line_items.forEach(item => {
-            let detailsHtml = escapeHtml(item.description);
-            
-            // Inject meter details if available
-            if (item.meter_details) {
-                const md = item.meter_details;
-                let mdStr = `<div style="margin-top: 8px; font-size: 13px; background: var(--bg-color); padding: 8px; border-radius: 4px; border: 1px dashed var(--control-border);">`;
-                if (md.tenant_meter && md.tenant_meter.status !== 'no_data') {
-                    let tCons = md.tenant_consumption !== null ? md.tenant_consumption.toFixed(1) : 'N/A';
-                    if (tCons !== 'N/A') tCons = window.wrapInterpolated(tCons, md.tenant_meter.is_interpolated, md.tenant_meter);
-                    mdStr += `<div><span style="font-weight:600;">Ihr Wohnungszähler:</span> ${tCons} ${escapeHtml(md.unit)}</div>`;
-                }
-                if (md.main_meter && md.main_meter.status !== 'no_data') {
-                    let mCons = md.main_consumption !== null ? md.main_consumption.toFixed(1) : 'N/A';
-                    if (mCons !== 'N/A') mCons = window.wrapInterpolated(mCons, md.main_meter.is_interpolated, md.main_meter);
-                    
-                    let aCons = md.allgemein_consumption !== null ? md.allgemein_consumption.toFixed(1) : 'N/A';
-                    const isAllgInterpolated = md.main_meter.is_interpolated || (md.tenant_meter && md.tenant_meter.is_interpolated);
-                    if (aCons !== 'N/A') aCons = window.wrapInterpolated(aCons, isAllgInterpolated, md.main_meter);
-                    
-                    // Haus und Allgemein gelten fuer die ganze Rechnung (NK-213).
-                    const mm = md.main_meter;
-                    const hzZeitraum = mm.target_start_date && mm.target_end_date
-                        ? ` (${datumText(mm.target_start_date)} bis ${datumText(mm.target_end_date)})`
-                        : '';
-                    mdStr += `<div><span style="font-weight:600;">Hauptzähler${escapeHtml(hzZeitraum)}:</span> ${mCons} ${escapeHtml(md.unit)}</div>`;
-                    mdStr += `<div><span style="font-weight:600;">Allgemeinverbrauch:</span> ${aCons} ${escapeHtml(md.unit)}</div>`;
-                    // NK-209: der Anteil, mit dem gerechnet wurde (Personentage)
-                    if (md.allgemein_quote != null && md.allgemein_anteil != null) {
-                        const prozent = (md.allgemein_quote * 100).toLocaleString('de-DE',
-                            { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                        mdStr += `<div><span style="font-weight:600;">Ihr Anteil am Allgemeinverbrauch:</span> ${md.allgemein_anteil.toFixed(1)} ${escapeHtml(md.unit)} (${prozent} %${md.preis_ht != null ? ', nach den Kosten von HT und NT gewichtet' : ''})</div>`;
-                    }
-                }
-                mdStr += `</div>`;
-                detailsHtml += mdStr;
-            }
-            
-            html += `
-                <tr style="border-bottom: 1px solid var(--border-color);">
-                    <td style="font-weight: 500; padding: 12px 8px; vertical-align: top;">${escapeHtml(item.category)}</td>
-                    <td style="color: var(--text-muted); font-size: 13px; white-space: nowrap; padding: 12px 8px; vertical-align: top;">${escapeHtml(item.period)}</td>
-                    <td style="color: var(--text-muted); font-size: 13px; padding: 12px 8px; vertical-align: top;">${detailsHtml}</td>
-                    <td style="text-align: right; font-weight: 500; padding: 12px 8px; vertical-align: top;">${escapeHtml(euroText(item.tenant_cost))}</td>
-                </tr>
-            `;
-        });
-        
-        html += `
-                </tbody>
-                <tfoot>
-                    <tr style="border-top: 2px solid var(--border-color);">
-                        <td colspan="3" style="text-align: right; padding: 12px 8px;">Gesamtkosten der Periode:</td>
-                        <td style="text-align: right; font-weight: 600; padding: 12px 8px;">${escapeHtml(euroText(data.total_amount))}</td>
-                    </tr>
-                    <tr>
-                        <td colspan="3" style="text-align: right; padding: 12px 8px;">Abzüglich geleistete Vorauszahlungen:</td>
-                        <td style="text-align: right; color: var(--danger-color); padding: 12px 8px;">- ${escapeHtml(euroText(data.prepaid_amount))}</td>
-                    </tr>
-                    <tr style="background: var(--bg-hover);">
-                        <td colspan="3" style="text-align: right; font-size: 18px; font-weight: 600; padding: 16px 8px;">
-                            ${data.balance > 0 ? 'Nachzahlung des Mieters' : (data.balance < 0 ? 'Guthaben des Mieters' : 'Saldobetrag')}
-                        </td>
-                        <td style="text-align: right; font-size: 18px; font-weight: 600; color: var(--primary-color); padding: 16px 8px;">${escapeHtml(euroText(data.balance))}</td>
-                    </tr>
-                </tfoot>
-            </table>
-        `;
+        html += abrechnungsTabelle(data);
         html += mieterErklaerungHtml(data);
         
         body.innerHTML = html;

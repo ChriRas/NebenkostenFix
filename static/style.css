@@ -1517,7 +1517,9 @@ td.text-right {
     border-color: var(--border-color) transparent transparent transparent;
 }
 
-.interpolated-wrapper:hover .glass-tooltip {
+/* Auch per Tastatur: das Etikett „geschätzt“ ist fokussierbar (Runde 7). */
+.interpolated-wrapper:hover .glass-tooltip,
+.interpolated-wrapper:focus-within .glass-tooltip {
     visibility: visible;
     opacity: 1;
 }
@@ -4299,5 +4301,369 @@ html.einflug .app-container {
         animation-duration: 1ms !important;
         animation-delay: 0ms !important;
         transition-duration: 1ms !important;
+    }
+}
+
+/* Runde 7: eine Abrechnungstabelle für „Details zur Abrechnung“ und die
+   Vorschau (abrechnungsTabelle in app.js). Ergebnis zuerst, je Kostenart eine
+   Zeile; die Aufschlüsselung klappt darunter über die volle Breite auf. */
+.abr-kopf {
+    margin-bottom: var(--space-5);
+}
+
+.abr-kopf h3 {
+    margin: 0 0 var(--space-2);
+}
+
+.abr-kopf p {
+    margin: 0 0 var(--space-1);
+    color: var(--text-muted);
+}
+
+.abr-kopf .abr-kopf-klein {
+    font-size: 13px;
+}
+
+.abr-ergebnis {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: var(--space-3);
+    margin-bottom: var(--space-5);
+}
+
+.abr-ergebnis-feld {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    min-width: 0;
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--surface);
+}
+
+.abr-ergebnis-name {
+    font-size: 13px;
+    color: var(--text-muted);
+}
+
+.abr-ergebnis-wert {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.abr-ergebnis-saldo {
+    background: var(--primary-tint);
+    border-color: var(--primary-tint);
+}
+
+.abr-ergebnis-saldo .abr-ergebnis-name,
+.abr-ergebnis-saldo .abr-ergebnis-wert {
+    color: var(--primary-text);
+}
+
+.abr-ergebnis-saldo.abr-guthaben {
+    background: var(--success-bg);
+    border-color: var(--success-bg);
+}
+
+.abr-ergebnis-saldo.abr-guthaben .abr-ergebnis-name,
+.abr-ergebnis-saldo.abr-guthaben .abr-ergebnis-wert {
+    color: var(--success-color);
+}
+
+.abr-aktionen {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin-bottom: var(--space-5);
+}
+
+.abr-rahmen {
+    margin-bottom: var(--space-5);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+}
+
+.abr-tabelle .abr-zahl {
+    text-align: right;
+    white-space: nowrap;
+}
+
+.abr-tabelle td.abr-zahl {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+}
+
+.abr-tabelle .abr-beleg {
+    width: 1%;
+    text-align: center;
+}
+
+.abr-beleg-link {
+    display: inline-flex;
+    padding: var(--space-1);
+    border-radius: var(--radius-sm);
+    color: var(--primary-text);
+    font-size: 20px;
+}
+
+.abr-beleg-link:hover {
+    background: var(--primary-tint);
+}
+
+.abr-ohne-beleg,
+.abr-leer {
+    color: var(--text-muted);
+}
+
+.abr-leer {
+    text-align: center;
+}
+
+/* Jeder Posten ist ein eigener tbody; die Linie darunter bleibt stehen. */
+.data-table.abr-tabelle .abr-posten tr td {
+    border-bottom: 1px solid var(--divider);
+}
+
+.data-table.abr-tabelle .abr-posten:has(+ .abr-details:not([hidden])) tr td {
+    border-bottom-color: transparent;
+}
+
+.abr-umschalter {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+    width: 100%;
+    margin: 0;
+    padding: var(--space-1) 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.abr-tabelle .abr-umschalter:active {
+    transform: none;
+}
+
+.abr-pfeil {
+    margin-top: var(--space-1);
+    color: var(--text-muted);
+    transition: transform var(--dauer-kurz) var(--kurve);
+}
+
+.abr-umschalter[aria-expanded="true"] .abr-pfeil {
+    transform: rotate(90deg);
+}
+
+.abr-kostenart {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.abr-name {
+    font-weight: 500;
+}
+
+.abr-zeitraum {
+    font-size: 13px;
+    color: var(--text-muted);
+}
+
+.data-table.abr-tabelle .abr-details {
+    background: var(--surface-alt);
+}
+
+.data-table.abr-tabelle .abr-details tr td {
+    height: auto;
+    padding-top: var(--space-1);
+    padding-bottom: var(--space-1);
+    border-bottom: 0;
+}
+
+.data-table.abr-tabelle .abr-details tr:first-child td {
+    padding-top: 0;
+}
+
+.data-table.abr-tabelle .abr-details tr:last-child td {
+    padding-bottom: var(--space-3);
+    border-bottom: 1px solid var(--divider);
+}
+
+.data-table.abr-tabelle .abr-details tr:hover {
+    background: transparent;
+}
+
+.abr-unter-text {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+    padding-left: var(--space-5);
+    font-size: 13px;
+}
+
+.abr-symbol {
+    margin-top: 2px;
+    color: var(--text-muted);
+}
+
+.abr-symbol-eigen {
+    color: var(--primary-text);
+}
+
+.abr-text-titel {
+    font-weight: 600;
+}
+
+.abr-text-info {
+    color: var(--text-muted);
+}
+
+.abr-unter-betrag {
+    font-size: 13px;
+}
+
+/* „geschätzt“ statt ~ und Rechner: Hover oder Fokus erklärt, Klick zeigt
+   den Rechenweg (openInterpolationAudit). */
+.abr-geschaetzt {
+    display: inline-flex;
+    align-items: center;
+    margin-left: var(--space-1);
+    padding: 0 var(--space-2);
+    border: 0;
+    border-radius: var(--radius-chip);
+    background: var(--primary-tint);
+    color: var(--primary-text);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 20px;
+    white-space: nowrap;
+    cursor: help;
+}
+
+button.abr-geschaetzt {
+    cursor: pointer;
+}
+
+.abr-zaehlerkasten {
+    display: grid;
+    gap: var(--space-1);
+    margin: var(--space-2) 0 0 var(--space-5);
+    padding: var(--space-3) var(--space-4);
+    border: 1px dashed var(--control-border);
+    border-radius: var(--radius-md);
+    background: var(--surface);
+    font-size: 13px;
+}
+
+.abr-zaehlerkasten > div {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 var(--space-2);
+}
+
+.abr-zaehlerkasten dt {
+    color: var(--text-muted);
+}
+
+.abr-zaehlerkasten dd {
+    margin: 0;
+    font-weight: 500;
+}
+
+.data-table.abr-tabelle tfoot th {
+    font-size: 15px;
+    font-weight: 500;
+    letter-spacing: 0;
+    text-transform: none;
+    white-space: normal;
+    color: var(--text-main);
+}
+
+.data-table.abr-tabelle tfoot th,
+.data-table.abr-tabelle tfoot td {
+    border-top: 1px solid var(--divider);
+    border-bottom: 0;
+}
+
+.abr-tabelle .abr-minus {
+    color: var(--text-muted);
+}
+
+.data-table.abr-tabelle .abr-saldo th,
+.data-table.abr-tabelle .abr-saldo td {
+    background: var(--primary-tint);
+    color: var(--primary-text);
+    font-weight: 600;
+}
+
+@media (max-width: 560px) {
+    .abr-unter-text {
+        padding-left: 0;
+    }
+
+    .abr-zaehlerkasten {
+        margin-left: 0;
+    }
+
+    /* Handy: drei Spalten passen nicht, jede Zeile wird ein Raster mit
+       Betrag und Beleg rechts übereinander; Kopf nur für Vorleser */
+    .abr-tabelle thead {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+    }
+
+    .abr-tabelle tbody:not([hidden]),
+    .abr-tabelle tfoot {
+        display: block;
+    }
+
+    .abr-tabelle tr {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+    }
+
+    .data-table.abr-tabelle td,
+    .data-table.abr-tabelle th {
+        height: auto;
+    }
+
+    .data-table.abr-tabelle td:first-child,
+    .data-table.abr-tabelle th:first-child {
+        padding-left: var(--space-4);
+        padding-right: var(--space-2);
+    }
+
+    .abr-haupt > td:first-child {
+        grid-row: span 2;
+    }
+
+    .data-table.abr-tabelle .abr-haupt td.abr-zahl {
+        border-bottom-color: transparent;
+    }
+
+    .abr-tabelle td[colspan] {
+        grid-column: 1 / -1;
+    }
+
+    .abr-tabelle tr > td:empty {
+        display: none;
+    }
+
+    .data-table.abr-tabelle .abr-zahl,
+    .data-table.abr-tabelle .abr-beleg {
+        width: auto;
+        padding-right: var(--space-4);
+        text-align: right;
     }
 }

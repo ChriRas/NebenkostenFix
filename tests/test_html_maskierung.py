@@ -43,22 +43,18 @@ AUSNAHMEN = {
     'getIcon(group.category)': 'liefert ein Emoji aus einer festen Tabelle',
     'valStr': 'Wert-HTML aus Zahlformat und maskierter Einheit',
     'ttStr': 'Tooltip aus Datum, Zahl und maskierter Einheit',
-    'subDesc': 'escapeHtml(sub.description), ggf. in wrapInterpolated',
-    "hasSub ? '' : itemDesc": 'escapeHtml(item.description), ggf. in wrapInterpolated',
-    'tCons': 'toFixed(1) in wrapInterpolated',
-    'mCons': 'toFixed(1) in wrapInterpolated',
-    'aCons': 'toFixed(1) in wrapInterpolated',
-    'prozent': 'toLocaleString der Allgemeinquote (NK-209)',
-    'pfTitle': 'feste Zeichenkette je Ampelstufe',
-    'umschlag.version ? `<p style="color: var(--text-muted); marg':
+    # Runde 7: gemeinsame Abrechnungstabelle, jeder Baustein maskiert seine Teile selbst
+    'interpolationsTooltip(infoObj)': 'Tooltip aus Datum, Zahl und maskierter Einheit',
+    'abrechnungsDetailZeilen(item)': 'Unterzeilen, Texte und Betraege einzeln maskiert',
+    'abrechnungsErgebnis(data)': 'Ergebnisfelder, Betraege per escapeHtml(euroText())',
+    'abrechnungsTabelle(data)': 'Tabelle, Texte und Betraege einzeln maskiert',
+    'nr': 'laufende Zahl fuer die ID der Detailzeilen',
+    'umschlag.version ? `<p class="abr-kopf-klein">Version ${umsc':
         'Versionsnummer (Zahl), Texte darin maskiert',
+    'pfTitle': 'feste Zeichenkette je Ampelstufe',
     'group.kaution > 0 ? ` <div style="display: flex; justify-con':
         'Betraege per toLocaleString',
     "k.last_login_at ? escapeHtml(k.last_login_at) : 'nie'": 'maskiert oder fest',
-    "data.balance > 0 ? 'Nachzahlung des Mieters' : (data.balance":
-        'verschachtelter Ternaer aus festen Zeichenketten',
-    "data.balance > 0 ? 'Nachzahlung des Mieters:' : (data.balanc":
-        'verschachtelter Ternaer aus festen Zeichenketten',
     "p.type === 'Miete' ? 'badge-primary' : (p.type === 'Nebenkos":
         'CSS-Klassen aus festen Zeichenketten',
     # Oberflaechentexte aus Code-Konstanten (Erste Schritte, Leerzustaende)
