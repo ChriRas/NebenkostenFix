@@ -203,12 +203,12 @@ window.wrapInterpolated = (valStr, isInterpolated, infoObj) => {
         if (infoObj.basis_readings && infoObj.basis_readings.length > 0) {
             ttStr += `<br>Basis-Ablesungen (stückweise):<br>`;
             infoObj.basis_readings.forEach(r => {
-                const rDate = new Date(r.date).toLocaleDateString('de-DE');
+                const rDate = datumText(r.date);
                 ttStr += `- ${rDate} (${r.total.toFixed(1)} ${escapeHtml(infoObj.unit)})<br>`;
             });
         } else if (infoObj.r_start && infoObj.r_end) {
-            const rStart = new Date(infoObj.r_start.date).toLocaleDateString('de-DE');
-            const rEnd = new Date(infoObj.r_end.date).toLocaleDateString('de-DE');
+            const rStart = datumText(infoObj.r_start.date);
+            const rEnd = datumText(infoObj.r_end.date);
             ttStr += `<br>Basis-Ablesungen:<br>
 - ${rStart} (${infoObj.r_start.total.toFixed(1)} ${escapeHtml(infoObj.unit)})<br>
 - ${rEnd} (${infoObj.r_end.total.toFixed(1)} ${escapeHtml(infoObj.unit)})`;
@@ -2162,11 +2162,11 @@ async function fetchTenants() {
                 
                 const tdIn = document.createElement('td');
                 tdIn.style.padding = "12px 8px";
-                tdIn.textContent = new Date(t.move_in_date).toLocaleDateString('de-DE');
+                tdIn.textContent = datumText(t.move_in_date);
                 
                 const tdOut = document.createElement('td');
                 tdOut.style.padding = "12px 8px";
-                tdOut.textContent = t.move_out_date ? new Date(t.move_out_date).toLocaleDateString('de-DE') : '-';
+                tdOut.textContent = t.move_out_date ? datumText(t.move_out_date) : '-';
                 
                 const tdContract = document.createElement('td');
                 tdContract.style.padding = "12px 8px";
@@ -2525,7 +2525,7 @@ async function ladeGesperrteMieter() {
             liste.map(t => `<tr>
                 <td style="padding: 8px;">${escapeHtml(t.name)}</td>
                 <td style="padding: 8px;">${escapeHtml(t.apartment_name)} (${escapeHtml(t.property_name)})</td>
-                <td style="padding: 8px;">${escapeHtml(new Date(t.gesperrt_bis).toLocaleDateString('de-DE'))}</td>
+                <td style="padding: 8px;">${escapeHtml(datumText(t.gesperrt_bis))}</td>
                 <td style="padding: 8px;"><button class="btn-secondary" onclick="exportiereMieter(${Number(t.id)})"
                     title="Auskunft nach Art. 15 DSGVO als ZIP">Auskunft herunterladen</button></td>
             </tr>`).join('') + '</tbody></table>';
@@ -2877,7 +2877,7 @@ function getReadingHtml(r, einheit) {
         valStr = `<strong><span style="color: var(--text-muted); font-size: 13px; font-weight: normal;">HT:</span> ${formatVal(r.value)}${escapeHtml(unit)} <span style="color: var(--text-muted); font-size: 13px; font-weight: normal; margin-left: 8px;">NT:</span> ${formatVal(r.value_nt)}${escapeHtml(unit)}</strong>`;
     }
     
-    let html = `${valStr} <br><small style="color:var(--text-muted)">${new Date(r.reading_date).toLocaleDateString('de-DE')}</small>`;
+    let html = `${valStr} <br><small style="color:var(--text-muted)">${escapeHtml(datumText(r.reading_date))}</small>`;
     
     if (r.document_path) {
         const imgUrl = dateiAdresse('ablesung', r.id);
@@ -3143,7 +3143,7 @@ function zeigeZaehlerDetail() {
     if (!m) return;
 
     const fmt = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 2 });
-    const datum = d => new Date(d).toLocaleDateString('de-DE');
+    const datum = d => datumText(d);
     const einheit = m.einheit ? ' ' + m.einheit : '';
     const staende = readings.filter(r => r.meter_id === m.id)
         .sort((a, b) => new Date(a.reading_date) - new Date(b.reading_date));
@@ -3557,7 +3557,7 @@ async function loadHouseholdSizes(tenantId) {
         const tr = document.createElement('tr');
         const tdDatum = document.createElement('td');
         tdDatum.style.padding = '8px';
-        tdDatum.textContent = new Date(h.gueltig_ab).toLocaleDateString('de-DE');
+        tdDatum.textContent = datumText(h.gueltig_ab);
         const tdAnzahl = document.createElement('td');
         tdAnzahl.style.padding = '8px';
         tdAnzahl.style.textAlign = 'right';
@@ -4144,7 +4144,7 @@ function ablesenZeilen(propertyId) {
             : 'zuletzt ' + (letzte.value_nt != null
                 ? `HT ${fmt.format(letzte.value)}${einheit}, NT ${fmt.format(letzte.value_nt)}${einheit}`
                 : `${fmt.format(letzte.value)}${einheit}`)
-              + ` am ${new Date(letzte.reading_date).toLocaleDateString('de-DE')}`);
+              + ` am ${datumText(letzte.reading_date)}`);
         const nameHtml = escapeHtml(`${m.is_main_meter ? 'Allgemein' : (m.apartment_name || '')} · ${zaehlerArtName(m.category_name)} (${m.meter_number})`);
         // NK-255: die Einheit gehört an das Feld, nicht nur in den letzten Stand.
         const stand = tarif => {
@@ -6133,7 +6133,7 @@ let jahrAktuell = 1;
 let jahrVorschau = {};
 
 const euroText = betrag => Number(betrag || 0).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
-const datumText = iso => iso ? new Date(`${iso}T00:00:00`).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—';
+const datumText = iso => iso ? new Date(`${String(iso).slice(0, 10)}T00:00:00`).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—';
 
 // Warnungen kompakt (F-116): ohne Kennung vorn, gleiche Meldungen für
 // mehrere Kostenarten zu einer zusammengefasst, Einzelheiten zum Aufklappen.
@@ -6571,8 +6571,8 @@ async function fetchBillingSuggestions() {
             // (Fund des Rundgangs mit der Beispielabrechnung, 390 px).
             card.className = 'dashboard-card glass-panel historie-zeile';
             
-            const startFmt = new Date(s.suggested_start).toLocaleDateString('de-DE');
-            const endFmt = new Date(s.suggested_end).toLocaleDateString('de-DE');
+            const startFmt = datumText(s.suggested_start);
+            const endFmt = datumText(s.suggested_end);
             
             card.innerHTML = `
                 <div>
@@ -6626,8 +6626,8 @@ async function fetchBillingHistory() {
             // (Fund des Rundgangs mit der Beispielabrechnung, 390 px).
             card.className = 'dashboard-card glass-panel historie-zeile';
             
-            const startFmt = new Date(r.start_date).toLocaleDateString('de-DE');
-            const endFmt = new Date(r.end_date).toLocaleDateString('de-DE');
+            const startFmt = datumText(r.start_date);
+            const endFmt = datumText(r.end_date);
             // Der Server schickt das Datum schon deutsch formatiert (zeit.als_ortszeit);
             // new Date('25.09.2026') ergäbe „Invalid Date“ (Fund im Beispiel, NK-159).
             const createdFmt = r.created_at || '';
@@ -6737,7 +6737,7 @@ function vorauszahlungsBlock(v, tenantId) {
         return kasten(`<p style="margin: 0; color: var(--text-muted);">Kein Vorschlag: ${escapeHtml(v.grund)}</p>`);
     }
     const euro = w => Number(w).toFixed(2).replace('.', ',') + ' €';
-    const ab = new Date(v.ab).toLocaleDateString('de-DE');
+    const ab = datumText(v.ab);
     const monate = String(v.monate).replace(/\.00$/, '').replace('.', ',');
     const warnung = v.kuenftige > 0
         ? `<p style="margin: 0 0 12px 0; color: var(--warning-text);">Ab ${escapeHtml(ab)} sind schon ${Number(v.kuenftige)} Vorauszahlungen gebucht. Ändern Sie diese, statt doppelt zu buchen.</p>`
@@ -6781,9 +6781,9 @@ function berichtZustellungsBlock(id, umschlag) {
                     <i class="ph ph-check-circle" style="color: var(--success-color);"></i> Zustellung gemeldet
                 </h4>
                 <p style="margin: 0; color: var(--text-muted);">
-                    Zugestellt am ${new Date(umschlag.zugestellt_am).toLocaleDateString('de-DE')}
-                    · Einwendungsfrist des Mieters bis ${new Date(umschlag.einwendungsfrist_ende).toLocaleDateString('de-DE')}
-                    · Nachforderungsfrist endete ${new Date(umschlag.frist_ende).toLocaleDateString('de-DE')}
+                    Zugestellt am ${escapeHtml(datumText(umschlag.zugestellt_am))}
+                    · Einwendungsfrist des Mieters bis ${escapeHtml(datumText(umschlag.einwendungsfrist_ende))}
+                    · Nachforderungsfrist endete ${escapeHtml(datumText(umschlag.frist_ende))}
                 </p>
             </div>`;
     }
@@ -6834,7 +6834,7 @@ function berichtVersionenBlock(id, umschlag) {
     if (versionen.length > 0) {
         liste = `<p style="margin: 0 0 8px 0; color: var(--text-muted); font-size: 13px;">`
             + versionen.map(v =>
-                `Version ${v.nummer} · ${new Date(v.erstellt_am).toLocaleDateString('de-DE')}`
+                `Version ${v.nummer} · ${datumText(v.erstellt_am)}`
             ).join(' · ')
             + `</p>`;
     }
@@ -6944,7 +6944,7 @@ async function openReportDetails(id) {
         let html = `
             <div style="margin-bottom: 24px;">
                 <h3 style="margin: 0 0 8px 0; font-size: 18px;">Details zur Abrechnung</h3>
-                <p style="color: var(--text-muted); margin: 0;">Zeitraum: ${new Date(umschlag.start_date || data.start_date).toLocaleDateString('de-DE')} - ${new Date(umschlag.end_date || data.end_date).toLocaleDateString('de-DE')}</p>
+                <p style="color: var(--text-muted); margin: 0;">Zeitraum: ${escapeHtml(datumText(umschlag.start_date || data.start_date))} - ${escapeHtml(datumText(umschlag.end_date || data.end_date))}</p>
                 ${umschlag.version ? `<p style="color: var(--text-muted); margin: 4px 0 0 0; font-size: 13px;">Version ${umschlag.version} · erstellt mit Software ${escapeHtml(umschlag.software_version || '')}, Regelstand ${escapeHtml(umschlag.regel_version || '')}</p>` : ''}
                 ${regelstandBlock}
             </div>
@@ -7194,8 +7194,8 @@ function openBillingSelectionModal(suggestion) {
     let html = `<p style="margin-bottom: 16px;">Bitte wählen Sie die Kategorien aus, die in diese Abrechnung einfließen sollen:</p>`;
     
     suggestion.categories.forEach(cat => {
-        const startFmt = new Date(cat.suggested_start).toLocaleDateString('de-DE');
-        const endFmt = new Date(cat.suggested_end).toLocaleDateString('de-DE');
+        const startFmt = datumText(cat.suggested_start);
+        const endFmt = datumText(cat.suggested_end);
         
         html += `
             <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px; border: 1px solid var(--border-color); border-radius: 8px; margin-bottom: 8px; background: var(--bg-hover);">
@@ -7203,7 +7203,7 @@ function openBillingSelectionModal(suggestion) {
                     <input type="checkbox" class="category-select-cb" value="${cat.category_id}" checked style="width: 18px; height: 18px;">
                     <div>
                         <div style="font-weight: 600;">${escapeHtml(cat.category_name)}</div>
-                        <div style="font-size: 13px; color: var(--text-muted);">${startFmt} - ${endFmt} (${cat.invoice_count} Rechnungen)</div>
+                        <div style="font-size: 13px; color: var(--text-muted);">${startFmt} - ${endFmt} (${cat.invoice_count} ${cat.invoice_count === 1 ? 'Rechnung' : 'Rechnungen'})</div>
                     </div>
                 </label>
             </div>
@@ -9096,7 +9096,7 @@ function openPaymentDetailsModal(tenantId) {
                 tr.title = 'Diese Einnahme liegt in der Zukunft (Prognose)';
             }
 
-            const dateStr = p.payment_date ? new Date(p.payment_date).toLocaleDateString('de-DE') : '-';
+            const dateStr = p.payment_date ? datumText(p.payment_date) : '-';
             tr.innerHTML = `
                 <td style="text-align: center;"><input type="checkbox" class="payment-row-cb" value="${p.id}" onchange="toggleDeleteSelectedButton()"></td>
                 <td>${dateStr}${isFuture ? ' <i class="ph ph-clock text-secondary" style="font-size: 13px; margin-left: 4px;" title="Zukunft"></i>' : ''}</td>
@@ -9394,7 +9394,7 @@ async function openInterpolationAudit(meter_id, start_date, end_date) {
                     const pct = getPct(r.date);
                     return `
                     <div class="timeline-marker" style="left: ${pct}%;">
-                        <div>${new Date(r.date).toLocaleDateString('de-DE')}</div>
+                        <div>${escapeHtml(datumText(r.date))}</div>
                         <div style="font-weight:600;">${r.total.toFixed(1)} ${escapeHtml(data.unit)}</div>
                     </div>`;
                 }).join('')}
@@ -9405,11 +9405,11 @@ async function openInterpolationAudit(meter_id, start_date, end_date) {
                 <!-- Target Span Marker -->
                 <div class="timeline-marker" style="left: ${targetStartPct}%; top: 60px; color: var(--primary);">
                     <div>Start Abrechnung</div>
-                    <div style="font-weight:600;">${new Date(data.target_start_date).toLocaleDateString('de-DE')}</div>
+                    <div style="font-weight:600;">${escapeHtml(datumText(data.target_start_date))}</div>
                 </div>
                 <div class="timeline-marker" style="left: ${targetEndPct}%; top: 60px; color: var(--primary);">
                     <div>Ende Abrechnung</div>
-                    <div style="font-weight:600;">${new Date(data.target_end_date).toLocaleDateString('de-DE')}</div>
+                    <div style="font-weight:600;">${escapeHtml(datumText(data.target_end_date))}</div>
                 </div>
                 
                 <!-- Overlaps -->

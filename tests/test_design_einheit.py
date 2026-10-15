@@ -555,3 +555,15 @@ def test_konzept_d_gerichtete_seitenwechsel_und_kopfzahl():
     hoch = hoch[:hoch.index('\n}')]
     # Ein neuer Lauf startet bei der sichtbaren Zahl, nicht beim alten Ziel (sonst Sprung).
     assert 'el.dataset.wert = wert' in hoch and 'el.dataset.wert = ziel' not in hoch
+
+
+def test_runde2_kleinfehler_datum_einzahl_zeitraum():
+    """Runde 2: Datumsanzeigen laufen über datumText (keine UTC-Verschiebung,
+    Zeitstempel erlaubt), „1 Rechnung“ in Einzahl, Von–bis-Felder bündig."""
+    import re
+    # Nur echte Date-Objekte (Überschneidungsprüfung) dürfen noch direkt formatieren.
+    assert not re.search(r"new Date\([^()]*\)\.toLocaleDateString\('de-DE'\)", SKRIPT)
+    assert "cat.invoice_count === 1 ? 'Rechnung' : 'Rechnungen'" in SKRIPT
+    assert '.zeitraum-felder {' in STIL
+    for feld in ('billing-period-start', 'frei-period-start'):
+        assert 'class="zeitraum-felder"' in SEITE[SEITE.index(f'id="{feld}"') - 300:SEITE.index(f'id="{feld}"')], feld

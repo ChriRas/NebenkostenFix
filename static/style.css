@@ -2319,6 +2319,14 @@ a.btn-primary:hover {
     gap: var(--space-2);
 }
 
+/* Von–bis-Felder: Eingaben bündig, auch wenn ein Label den Begriff-Knopf trägt */
+.zeitraum-felder {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: var(--space-3);
+}
+
 .spalte {
     display: flex;
     flex-direction: column;

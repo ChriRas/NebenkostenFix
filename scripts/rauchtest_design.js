@@ -36,6 +36,8 @@ function pruefe(name, bedingung) {
 
 // --- 1+2: app.js laden mit minimalem window/document ---
 const appQuelle = fs.readFileSync(path.join(__dirname, '..', 'static', 'app.js'), 'utf8');
+// Im Browser ist datumText global; die Sandboxen unten sehen es ebenso.
+globalThis.datumText = new Function(appQuelle.match(/const datumText = [^\n]*/)[0] + '; return datumText;')();
 
 const elemente = [];
 function erzeugeElement() {

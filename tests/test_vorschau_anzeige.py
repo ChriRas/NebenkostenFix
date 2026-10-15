@@ -91,6 +91,14 @@ def test_datum_und_betrag_im_deutschen_format():
     assert [t.replace(' ', ' ') for t in ergebnis] == ['01.09.2025', '53,00 €']
 
 
+@pytest.mark.skipif(shutil.which('node') is None, reason='node fehlt')
+def test_datum_mit_zeitstempel_und_leerwert():
+    # Berechnete Felder kommen per isoformat() auch mit Uhrzeit; ohne slice(0, 10) „Invalid Date“.
+    ergebnis = _node(_konstante('datumText')
+                     + 'console.log(JSON.stringify([datumText("2025-09-01T10:00:00"), datumText(null)]));')
+    assert ergebnis == ['01.09.2025', '—']
+
+
 def test_vorschau_trennt_hinweise_von_zaehlern():
     vorschau = _funktionsrumpf('generateBillPreview')
     assert 'c.meter_id != null' in vorschau and 'c.meter_id == null && c.message' in vorschau
