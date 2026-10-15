@@ -451,3 +451,19 @@ def test_ein_jahr_weiter_haelt_das_monatsende():
     assert ti._ein_jahr_weiter(date(2028, 2, 29)) == date(2029, 2, 28)
     assert ti._ein_jahr_weiter(date(2027, 2, 15)) == date(2028, 2, 15)
     assert ti._ein_jahr_weiter(date(2027, 12, 31)) == date(2028, 12, 31)
+
+
+def test_alias_trifft_nr_11_auch_unter_frueherem_namen(haus):
+    """Review 0.15.0: hat die Migration b4e7c1d92a58 übersprungen, weil es eine
+    eigene Kostenart „Allgemeinstrom“ gibt, heißt Nr. 11 noch wie früher. Ein
+    „Hausstrom“ aus der Tabelle gehört dann zu ihr, nicht zur eigenen."""
+    from nebenkostenfix.models import CostCategory, CostInvoice, db
+    nr11 = CostCategory.query.filter_by(betrkv_nr=11, name='Allgemeinstrom').one()
+    nr11.name = 'Beleuchtung (Allgemeinstrom)'
+    db.session.add(CostCategory(name='Allgemeinstrom', allocation_method='PER_SQM', betrkv_nr=17))
+    db.session.commit()
+    inhalt = _csv('Immobilie;Kostenart;Betrag (€);Zeitraum von;Zeitraum bis',
+                  'Musterhaus Lindenstraße;Hausstrom;120;01.01.2025;31.12.2025')
+    bericht = _lauf(haus, 'rechnungen', _lesen(haus, 'rechnungen', inhalt), 'uebernehmen').get_json()
+    assert bericht['fehler'] == [], bericht
+    assert CostInvoice.query.one().category.name == 'Beleuchtung (Allgemeinstrom)'

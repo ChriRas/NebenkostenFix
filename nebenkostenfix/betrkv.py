@@ -44,6 +44,7 @@ __all__ = [
     'NR_WARMWASSER',
     'NR_VERBUNDENE_ANLAGE',
     'NR_ALLGEMEINSTROM',
+    'FRUEHERE_NAMEN',
     'EINHEITEN',
     'RUBRIKEN',
     'BEREICHE',
@@ -71,6 +72,11 @@ NR_HEIZUNG = 4
 NR_WARMWASSER = 5
 NR_VERBUNDENE_ANLAGE = 6
 NR_ALLGEMEINSTROM = 11
+
+#: Fruehere Katalognamen und wie sie heute heissen. Die Migration
+#: b4e7c1d92a58 benennt den Bestand nur um, wo der neue Name frei ist;
+#: Ergebnisse finalisierter Versionen tragen den alten Namen weiter.
+FRUEHERE_NAMEN = {'Beleuchtung (Allgemeinstrom)': 'Allgemeinstrom'}
 
 #: Nummer aus § 2 BetrKV -> was der Vermieter dazu liest. Am Verordnungstext
 #: gekuerzt: die Sache, nicht die Abrechnungsvarianten.

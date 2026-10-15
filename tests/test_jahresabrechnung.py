@@ -119,3 +119,18 @@ def test_ungueltige_anfragen(auth_client, haus):
 
 def test_nur_angemeldet(anon_client):
     assert anon_client.get('/api/jahresabrechnung?property_id=1&jahr=2025').status_code == 401
+
+
+def test_allgemeinstrom_unter_frueherem_namen_ist_ueblich(auth_client):
+    """Review 0.15.0: hat die Migration b4e7c1d92a58 übersprungen (eigene
+    Kostenart „Allgemeinstrom“ daneben), heißt Nr. 11 noch wie früher -- der
+    Assistent fragt trotzdem nach ihr, nicht nur nach dem neuen Namen."""
+    from nebenkostenfix.models import CostCategory, Property, db
+    CostCategory.query.filter_by(betrkv_nr=11, name='Allgemeinstrom').one().name = \
+        'Beleuchtung (Allgemeinstrom)'
+    haus = Property(name='Leeres Haus')
+    db.session.add(haus)
+    db.session.commit()
+    stand = _stand(auth_client, haus.id, date.today().year - 1).get_json()
+    arten = {k['name']: k for k in stand['kostenarten']}
+    assert arten['Beleuchtung (Allgemeinstrom)']['zustand'] == 'offen'

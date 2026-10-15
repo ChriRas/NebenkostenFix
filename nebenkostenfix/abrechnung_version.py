@@ -28,6 +28,8 @@ from dataclasses import asdict, is_dataclass
 from datetime import date, datetime
 from decimal import Decimal
 
+from nebenkostenfix import betrkv
+
 # Die einzige Stelle der Versionsnummer (x.y.z). Docker-Abbild, Windows-
 # Installer und GitHub-Release lesen sie von hier; jeder Merge nach main
 # braucht eine neue Nummer, sonst lehnt die CI den Pull Request ab.
@@ -96,9 +98,51 @@ def _ohne_prosa(wert):
     return wert
 
 
+def _texte(wert):
+    if isinstance(wert, Mapping):
+        for k, v in wert.items():
+            yield k
+            yield from _texte(v)
+    elif isinstance(wert, list):
+        for v in wert:
+            yield from _texte(v)
+    elif isinstance(wert, str):
+        yield wert
+
+
+def _traegt(text, name):
+    # „Allgemeinstrom (Allgemeinverbrauch)“ und Ähnliches zählen mit.
+    return text == name or text.startswith(name + ' (')
+
+
+def _umbenannt(wert, frueher, heute):
+    if isinstance(wert, Mapping):
+        return {_umbenannt(k, frueher, heute): _umbenannt(v, frueher, heute)
+                for k, v in wert.items()}
+    if isinstance(wert, list):
+        return [_umbenannt(v, frueher, heute) for v in wert]
+    if isinstance(wert, str) and _traegt(wert, frueher):
+        return heute + wert[len(frueher):]
+    return wert
+
+
+def mit_heutigen_namen(alt, neu):
+    """Das alte Ergebnis mit den heutigen Katalognamen (betrkv.FRUEHERE_NAMEN).
+
+    Nur wo das neue Ergebnis den früheren Namen nicht mehr trägt: gibt es
+    ihn im Bestand noch (eigene Kostenart, Migration übersprungen), ist er
+    eine andere Kostenart und bleibt stehen.
+    """
+    texte = set(_texte(neu))
+    for frueher, heute in betrkv.FRUEHERE_NAMEN.items():
+        if not any(_traegt(t, frueher) for t in texte):
+            alt = _umbenannt(alt, frueher, heute)
+    return alt
+
+
 def gleich_gerechnet(alt, neu):
     """Ob zwei Ergebnisse dieselben Zahlen tragen, gleich wie sie beschrieben sind."""
-    return _ohne_prosa(alt) == _ohne_prosa(neu)
+    return _ohne_prosa(mit_heutigen_namen(alt, neu)) == _ohne_prosa(neu)
 
 
 def schnappschuss(vorgang, bill_data):

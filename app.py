@@ -286,7 +286,7 @@ from nebenkostenfix.heizung import (
 )
 from nebenkostenfix.models import db, User, Property, Apartment, Tenant, Haushaltsgroesse, CostCategory, CostInvoice, Meter, MeterReading, TenantCostProfile, InvoiceDocument, Provider, TenantBillingReport, BillingReportCategory, BillingReportVersion, AnschreibenVorlage, Vermieterdaten, Heizungsanlage, Payment, VorauszahlungSoll
 from nebenkostenfix.girocode_generator import iban_pruefen, iban_saeubern, vermieter_art, vermieter_ausweis
-from nebenkostenfix.abrechnung_version import schnappschuss, json_sicher, SOFTWARE_VERSION, REGEL_VERSION, aenderungen_seit, gleich_gerechnet
+from nebenkostenfix.abrechnung_version import schnappschuss, json_sicher, SOFTWARE_VERSION, REGEL_VERSION, aenderungen_seit, gleich_gerechnet, mit_heutigen_namen
 from nebenkostenfix.anschreiben import ARTEN, PLATZHALTER, text_fuer, vorgabe
 from nebenkostenfix.lohnausweis import ARTEN as ARTEN_35A
 from nebenkostenfix.anschreiben import anrede as anschreiben_anrede, saetze as anschreiben_saetze
@@ -3727,6 +3727,8 @@ def korrektur_vorschau(id):
         return jsonify({'error': str(e)}), 400
     version = report.aktuelle_version
     alt = version.ergebnis if version is not None else None
+    if alt is not None:
+        alt = mit_heutigen_namen(alt, neu)
 
     def paar(feld):
         return {'alt': str(alt[feld]) if alt and alt.get(feld) is not None else None,
