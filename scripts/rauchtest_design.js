@@ -334,10 +334,10 @@ pruefe('Gefahrenzone traegt die Klasse statt Inline-Farben',
     html.includes('dashboard-card glass-panel gefahrenzone'));
 pruefe('Datenbank-Knopf ist .btn-gefahr', html.includes('class="btn-gefahr"'));
 pruefe('Detailliertes PDF ist .btn-tint', html.includes('btn-secondary btn-tint'));
-// Vierzehn Pillen: Rechnungen (Eingang/Rechnungen, Liste/Zeitleiste), Einstellungen
+// Fünfzehn Pillen: Rechnungen (Eingang/Alle/Nach Kostenart, Liste/Zeitleiste), Einstellungen
 // (fünf Gruppen), Statistik (fünf Filter); dieselbe Zahl sichert test_ui_konsistenz.py.
-pruefe('Vierzehn Auswahlpillen, keine mit Inline-Stil',
-    (html.match(/class="filter-pill/g) || []).length === 14
+pruefe('Fünfzehn Auswahlpillen, keine mit Inline-Stil',
+    (html.match(/class="filter-pill/g) || []).length === 15
     && !/class="filter-pill[^"]*"[^>]*style=/.test(html));
 pruefe('Cache-Buster erhoeht (style.css)', /style\.css\?v=\d+/.test(html));
 pruefe('Cache-Buster erhoeht (app.js)', /app\.js\?v=\d+/.test(html));

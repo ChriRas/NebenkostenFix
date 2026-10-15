@@ -3237,19 +3237,35 @@ td .btn-icon,
     align-items: start;
 }
 
+.eingang-links {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    min-width: 0;
+}
+
+/* Viele Rechnungen: die Liste rollt für sich, Knopf und Hinweis bleiben stehen. */
 .eingang-liste {
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
+    max-height: calc(100vh - 376px);
+    min-height: 120px;
+    overflow-y: auto;
+    padding: 2px;
 }
 
-.eingang-liste:empty + .eingang-vorschau,
+.eingang-hinweis {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 13px;
+}
+
 .eingang-leer .eingang-vorschau {
     grid-column: 2 / -1;
-}
-
-.eingang-liste:empty + .eingang-vorschau {
-    grid-column: 1 / -1;
 }
 
 /* Das Formular bleibt als Kind stehen, darum zählt auch der leere Eingang. */
@@ -3285,11 +3301,17 @@ td .btn-icon,
     box-shadow: inset 3px 0 0 var(--primary);
 }
 
+/* Titel und Betrag in einer Zeile, Lieferant und Datum darunter über die volle Breite. */
 .beleg-text {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--space-1) var(--space-3);
+    flex: 1;
     min-width: 0;
+}
+
+.beleg-info {
+    grid-column: 1 / -1;
 }
 
 .beleg-name {
@@ -3302,6 +3324,31 @@ td .btn-icon,
 .beleg-info {
     color: var(--text-muted);
     font-size: 13px;
+}
+
+.beleg-betrag,
+#kosten-kopfzahl strong {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+#kosten-kopfzahl strong {
+    color: var(--text-main);
+}
+
+/* Enter speichert (type=submit); der Hinweis steht nur am Knopf, nicht im Text. */
+.als-spalte #btn-save-invoice::after {
+    content: "Enter" / "";
+    margin-left: var(--space-2);
+    padding: 0 6px;
+    border: 1px solid currentColor;
+    border-bottom-width: 2px;
+    border-radius: 6px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    line-height: 20px;
 }
 
 .eingang-vorschau {
@@ -3380,7 +3427,7 @@ td .btn-icon,
 
 .als-spalte .modal {
     max-width: none;
-    max-height: calc(100vh - 260px);
+    max-height: calc(100vh - 282px);
     padding-bottom: 0;
     animation: auftauchen var(--dauer-mittel) var(--kurve) backwards;
 }
@@ -3426,9 +3473,16 @@ td .btn-icon,
     }
 
     .eingang-formular,
-    .eingang-leer .eingang-vorschau,
-    .eingang-liste:empty + .eingang-vorschau {
+    .eingang-leer .eingang-vorschau {
         grid-column: auto;
+    }
+
+    .eingang-liste {
+        max-height: 40vh;
+    }
+
+    .eingang-hinweis {
+        display: none;
     }
 
     .beleg-blatt {

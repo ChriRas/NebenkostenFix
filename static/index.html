@@ -199,33 +199,42 @@
                 <div class="section-header">
                     <div>
                         <h2>Rechnungen &amp; Belege <button type="button" class="begriff-hilfe" aria-label="Begriff erklären" data-begriff="sammelrechnung"><i class="ph ph-question" aria-hidden="true"></i></button></h2>
-                        <p class="section-untertitel">Belege hochladen und als Rechnung übernehmen</p>
+                        <!-- Kopfzahl: Summe und Zahl der Rechnungen, per JS (zeigeKopfzahl). -->
+                        <p class="section-untertitel" id="kosten-kopfzahl">Belege hochladen und als Rechnung übernehmen</p>
                     </div>
-                    <!-- Konzept D: zwei Ansichten einer Seite. Im Eingang stehen die
-                         Belege; die Rechnung wird neben der Vorschau erfasst. -->
-                    <div class="zeile-eng" role="group" aria-label="Ansicht">
+                    <!-- Konzept D: drei Ansichten einer Seite. Eingang und „Alle Rechnungen“
+                         zeigen links die Liste, in der Mitte den Beleg, rechts das Formular. -->
+                    <div class="zeile-eng knopf-zeile" role="group" aria-label="Ansicht">
                         <button class="filter-pill" id="pill-eingang"
                             onclick="zeigeKostenAnsicht('eingang')">Eingang <span class="pill-zahl" id="eingang-zahl" hidden></span></button>
-                        <button class="filter-pill active" id="pill-rechnungen"
-                            onclick="zeigeKostenAnsicht('rechnungen')">Rechnungen</button>
+                        <button class="filter-pill active" id="pill-alle"
+                            onclick="zeigeKostenAnsicht('alle')">Alle Rechnungen</button>
+                        <button class="filter-pill" id="pill-kostenart"
+                            onclick="zeigeKostenAnsicht('kostenart')">Nach Kostenart</button>
                     </div>
                     <div class="kopf-aktionen">
-                        <button class="btn-secondary" onclick="openAddDocumentModal()"><i class="ph ph-upload-simple" aria-hidden="true"></i>
-                            Beleg hochladen</button>
+                        <button class="btn-secondary" onclick="openAddDocumentModal()"><i class="ph ph-stack" aria-hidden="true"></i>
+                            Sammelbeleg hochladen</button>
                     </div>
                 </div>
 
-                <!-- Eingang: Belegliste, Vorschau in der Mitte, Rechnung rechts.
+                <!-- Links Liste und Hochladen, Mitte Beleg, rechts Rechnung.
                      Das Rechnungsformular ist #invoice-modal, als Spalte eingehängt. -->
                 <div class="eingang" id="kosten-eingang" hidden>
-                    <div class="eingang-liste" id="documents-container"></div>
+                    <div class="eingang-links">
+                        <button type="button" class="btn-primary" onclick="document.getElementById('beleg-datei').click()"><i class="ph ph-upload-simple" aria-hidden="true"></i>
+                            Beleg hochladen</button>
+                        <input type="file" id="beleg-datei" accept=".pdf,.jpg,.jpeg,.png,.webp,.heic,.heif,application/pdf,image/jpeg,image/png,image/webp,image/heic" hidden onchange="belegGewaehlt(this)">
+                        <div class="eingang-liste" id="documents-container"></div>
+                        <p class="eingang-hinweis"><kbd>J</kbd> <kbd>K</kbd> blättern</p>
+                    </div>
                     <div class="eingang-vorschau" id="eingang-vorschau"></div>
                     <div class="eingang-formular" id="eingang-formular"></div>
                 </div>
 
                 <div id="kosten-rechnungen">
                 <div class="section-header">
-                    <h2>Alle Rechnungen</h2>
+                    <h2>Rechnungen nach Kostenart</h2>
                     <!-- Zeitleiste (NK-144): chronologisch nach Ausstellungsdatum,
                          statt die Auffistung nach Erfassung. Auswahl-Pille wie in
                          den Statistiken -- keine Schalter, also ohne Verb. -->

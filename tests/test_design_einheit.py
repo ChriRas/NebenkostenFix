@@ -389,6 +389,39 @@ def test_konzept_d_formular_wird_spalte_und_kehrt_zurueck():
     assert re.search(r'\.als-spalte \.modal-footer \.btn-secondary \{\s*display: none;', STIL)
 
 
+def test_konzept_d_drei_ansichten_mit_kopfzahl():
+    # Runde 2: Pillen Eingang · Alle Rechnungen · Nach Kostenart, darüber die Summe.
+    for ansicht in ('eingang', 'alle', 'kostenart'):
+        assert re.search(rf'id="pill-{ansicht}"\s+onclick="zeigeKostenAnsicht\(\'{ansicht}\'\)"', SEITE)
+    assert 'id="kosten-kopfzahl"' in SEITE
+    js = SKRIPT[SKRIPT.index('function zeigeKostenAnsicht'):]
+    js = js[:js.index('\n}\n')]
+    # Eingang und „Alle“ teilen den Dreispalter, nur „Nach Kostenart“ zeigt die Tabelle.
+    assert "document.getElementById('kosten-eingang').hidden = ansicht === 'kostenart';" in js
+    assert "kostenAnsicht === 'alle'" in SKRIPT and 'function renderAlleRechnungen' in SKRIPT
+
+
+def test_konzept_d_beleg_hochladen_links_und_blaettern():
+    # Links „Beleg hochladen“ und der Hinweis „J K blättern“ unter der Liste.
+    links = SEITE[SEITE.index('class="eingang-links"'):SEITE.index('id="eingang-vorschau"')]
+    assert 'onchange="belegGewaehlt(this)"' in links
+    assert '<kbd>J</kbd> <kbd>K</kbd> blättern' in links
+    gewaehlt = SKRIPT[SKRIPT.index('async function belegGewaehlt'):]
+    gewaehlt = gewaehlt[:gewaehlt.index('\n}\n')]
+    # Ungespeicherte Eingaben fragen nach, die Blob-Adresse wird wieder frei.
+    assert 'darfDialogSchliessen' in gewaehlt and 'URL.createObjectURL(datei)' in gewaehlt
+    assert 'URL.revokeObjectURL(neueDateiAdresse)' in SKRIPT
+    # Die Datei landet im Dateifeld des Formulars, Speichern lädt sie mit hoch.
+    assert "document.getElementById('invoice-file').files = uebergabe.files;" in SKRIPT
+    tasten = SKRIPT[SKRIPT.index('// J/K blättern'):]
+    tasten = tasten[:tasten.index('\n});\n')]
+    # Nicht in Eingabefeldern und nicht, solange ein Dialog offen ist.
+    assert "closest('input, textarea, select, [contenteditable]')" in tasten
+    assert "document.querySelector('.modal-overlay.active')" in tasten
+    # Enter speichert: der Hinweis kommt aus CSS, der Knopftext bleibt prüfbar.
+    assert re.search(r'\.als-spalte #btn-save-invoice::after \{\s*content: "Enter" / "";', STIL)
+
+
 def test_konzept_d_leerer_eingang_blendet_formular_aus():
     # #invoice-modal bleibt in der Spalte, :empty greift dann nicht (Sichtprüfung 2026-10-14).
     assert re.search(r'\.eingang-leer \.eingang-formular \{\s*display: none;', STIL)
