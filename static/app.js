@@ -1149,6 +1149,16 @@ function initKopfMenues() {
         knopf.setAttribute('aria-label', 'Aktionen');
         knopf.title = 'Aktionen';
         knopf.innerHTML = '<i class="ph ph-dots-three-vertical" aria-hidden="true"></i>';
+        // Konzept D: im App-Kopf ist es das Kontomenü, mit dem Namen als Aufschrift.
+        if (aktionen.parentElement.classList.contains('top-header')) {
+            knopf.classList.add('konto-knopf');
+            knopf.setAttribute('aria-label', 'Konto und Hilfe');
+            knopf.title = 'Konto und Hilfe';
+            knopf.innerHTML = '<i class="ph ph-user-circle" aria-hidden="true"></i>';
+            const name = document.getElementById('angemeldeterBenutzer');
+            if (name) knopf.append(name);
+            knopf.insertAdjacentHTML('beforeend', '<i class="ph ph-caret-down" aria-hidden="true"></i>');
+        }
         knopf.addEventListener('click', () => schalte(aktionen, !aktionen.classList.contains('offen')));
         aktionen.classList.add('mit-menue');
         // Direkt hinter den Titel, damit Filter-Pillen nicht dazwischen umbrechen.

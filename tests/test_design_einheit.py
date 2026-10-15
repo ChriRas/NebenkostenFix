@@ -153,10 +153,15 @@ def test_kontoblatt_halbtransparente_farben_nur_als_token():
 
 
 def test_kontoblatt_ohne_schatten_und_anheben():
-    for name, text in (('style.css', STIL), ('index.html', SEITE), ('app.js', SKRIPT)):
+    # Konzept D: Inhalte dürfen beim Erscheinen aufsteigen (nur in @keyframes),
+    # aber nichts hebt sich beim Überfahren.
+    ohne_keyframes = re.sub(r'@keyframes[^{]*\{(?:[^{}]*\{[^}]*\})*\s*\}', '', STIL)
+    for name, text in (('style.css', ohne_keyframes), ('index.html', SEITE), ('app.js', SKRIPT)):
         for wert in re.findall(r'box-shadow:\s*([^;"\'}]+)', text):
             assert wert.startswith(('none', 'inset')), f'{name}: box-shadow: {wert}'
         assert 'translateY' not in text, name
+    for regel in re.findall(r'[^{}]*:hover[^{]*\{[^}]*\}', STIL):
+        assert 'transform' not in regel.split('{')[1], regel.strip()
     assert 'background-blobs' not in SEITE and '.blob' not in STIL
 
 
@@ -328,3 +333,32 @@ def test_pruefskripte_wechseln_reiter_ueber_die_funktion():
     for skript in ('live_abgleich_ui.py', 'probe_ersteinrichtung.py'):
         text = (WURZEL / 'scripts' / skript).read_text(encoding='utf-8')
         assert 'wechsleZuTab(' in text, skript
+
+
+# --- Konzept D: Bewegung und Kontomenü --------------------------------------
+
+def test_konzept_d_bewegung_ueber_tokens_und_abschaltbar():
+    for token in ('--dauer-kurz:', '--dauer-mittel:', '--kurve:'):
+        assert token in STIL, token
+    for regel in ('.tab-content.active > *', '.modal-overlay.active > *', '.leiste-eintrag.active::before'):
+        block = STIL[STIL.index(regel + ' {'):]
+        block = block[:block.index('}')]
+        assert 'animation:' in block and 'var(--kurve)' in block, regel
+    # Wer weniger Bewegung wünscht, sieht keine; nur der Ladekreisel dreht weiter.
+    reduziert = STIL[STIL.rindex('@media (prefers-reduced-motion: reduce)'):]
+    assert '*:not(.ph-spin)' in reduziert
+    assert 'animation-duration: 1ms !important;' in reduziert
+    assert 'transition-duration: 1ms !important;' in reduziert
+
+
+def test_konzept_d_kontomenue_im_kopf_auf_jeder_breite():
+    js = SKRIPT[SKRIPT.index('function initKopfMenues'):]
+    js = js[:js.index('\n}\n')]
+    assert "knopf.classList.add('konto-knopf')" in js
+    assert "getElementById('angemeldeterBenutzer')" in js
+    # Am Schreibtisch klappt das Menü auf, statt drei Rahmenknöpfe zu zeigen.
+    assert re.search(r'^\.top-header > \.kopf-menue-knopf \{\s*display: inline-flex;', STIL, re.M)
+    menue = STIL[STIL.index('.top-header > .kopf-aktionen.mit-menue {'):]
+    menue = menue[:menue.index('}')]
+    assert 'display: none;' in menue and 'position: absolute;' in menue
+    assert re.search(r'\.top-header > \.kopf-aktionen\.mit-menue\.offen \{\s*display: flex;', STIL)

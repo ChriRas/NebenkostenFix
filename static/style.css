@@ -3150,3 +3150,134 @@ td .btn-icon,
     align-items: center;
     gap: var(--space-1);
 }
+
+/* Kontomenü (Konzept D): Hilfe, Drucken und Abmelden liegen auf jeder
+   Breite hinter dem Namen; der Kopf behält die Suche im Mittelpunkt. */
+.top-header > .kopf-menue-knopf {
+    display: inline-flex;
+    gap: var(--space-2);
+    flex-shrink: 0;
+}
+
+.top-header > .kopf-aktionen.mit-menue {
+    display: none;
+    position: absolute;
+    top: calc(100% - var(--space-2));
+    right: var(--seiten-rand);
+    z-index: 20;
+    min-width: 240px;
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-1);
+    padding: var(--space-2);
+    background: var(--surface);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+}
+
+.top-header > .kopf-aktionen.mit-menue.offen {
+    display: flex;
+    animation: auftauchen var(--dauer-kurz) var(--kurve) backwards;
+}
+
+.top-header > .kopf-aktionen.mit-menue button {
+    justify-content: flex-start;
+    border-color: transparent;
+}
+
+.top-header > .kopf-aktionen.mit-menue button:hover {
+    background: var(--bg-hover);
+}
+
+.konto-knopf .ph-caret-down {
+    font-size: 13px;
+    transition: transform var(--dauer-kurz) var(--kurve);
+}
+
+.konto-knopf[aria-expanded="true"] .ph-caret-down {
+    transform: rotate(180deg);
+}
+
+.konto-knopf .angemeldeter-benutzer {
+    max-width: 160px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: inherit;
+}
+
+@media (max-width: 560px) {
+    .konto-knopf .angemeldeter-benutzer,
+    .konto-knopf .ph-caret-down {
+        display: none;
+    }
+}
+
+/* Bewegung (Konzept D): kurz und gerichtet. Neue Inhalte steigen 8 px auf,
+   Dialoge wachsen aus 98 %. Wer weniger Bewegung wünscht, sieht keine. */
+:root {
+    --dauer-kurz: 140ms;
+    --dauer-mittel: 240ms;
+    --kurve: cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+@keyframes auftauchen {
+    from { opacity: 0; transform: translateY(8px); }
+}
+
+@keyframes hereinwachsen {
+    from { opacity: 0; transform: translateY(8px) scale(0.98); }
+}
+
+@keyframes marke-wachsen {
+    from { transform: scaleY(0); }
+}
+
+/* Seitenwechsel: die Blöcke der Seite folgen einander im Abstand von 40 ms. */
+.tab-content.active > * {
+    animation: auftauchen var(--dauer-mittel) var(--kurve) backwards;
+}
+
+.tab-content.active > :nth-child(2) { animation-delay: 40ms; }
+.tab-content.active > :nth-child(3) { animation-delay: 80ms; }
+.tab-content.active > :nth-child(n+4) { animation-delay: 120ms; }
+
+.modal-overlay.active > * {
+    animation: hereinwachsen var(--dauer-mittel) var(--kurve) backwards;
+}
+
+/* Leiste: der offene Bereich trägt links eine Indigo-Marke, die aufwächst. */
+.leiste-eintrag.active::before {
+    content: '';
+    position: absolute;
+    left: calc(-1 * var(--space-1));
+    top: var(--space-3);
+    bottom: var(--space-3);
+    width: 3px;
+    border-radius: var(--radius-chip);
+    background: var(--primary);
+    animation: marke-wachsen var(--dauer-mittel) var(--kurve) backwards;
+}
+
+/* Knöpfe geben beim Drücken einen Pixel nach. */
+button:not(:disabled):active,
+.btn:active {
+    transform: scale(0.98);
+}
+
+.aufgabe {
+    animation: auftauchen var(--dauer-mittel) var(--kurve) backwards;
+}
+
+.aufgabe:nth-child(3) { animation-delay: 40ms; }
+.aufgabe:nth-child(4) { animation-delay: 80ms; }
+.aufgabe:nth-child(n+5) { animation-delay: 120ms; }
+
+@media (prefers-reduced-motion: reduce) {
+    *:not(.ph-spin),
+    *::before,
+    *::after {
+        animation-duration: 1ms !important;
+        animation-delay: 0ms !important;
+        transition-duration: 1ms !important;
+    }
+}
