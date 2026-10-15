@@ -412,6 +412,13 @@ a:hover {
     font-weight: 500;
 }
 
+/* Gewählte Immobilie: der Filter gilt für die ganze App und bleibt sichtbar. */
+.top-header .haus-wahl.gefiltert select {
+    border-color: var(--primary);
+    background-color: var(--primary-tint);
+    color: var(--primary-text);
+}
+
 /* Offener Modus (NK-201): der Hinweis bleibt als Chip im Kopf sichtbar. */
 .chip-anmeldung {
     display: inline-flex;

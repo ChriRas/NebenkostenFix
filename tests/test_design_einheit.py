@@ -318,6 +318,34 @@ def test_konzept_d_hauswahl_im_feldstil():
     assert 'class="haus-wahl form-group" id="haus-wahl-feld" hidden' in SEITE
 
 
+def test_konzept_d_hausfilter_gilt_fuer_die_ganze_app():
+    """Vorher: die Auswahl oben rechts sprang nur zur Immobilie, Mieter und
+    Kosten zeigten weiter alle Immobilien. Jede geladene Liste läuft jetzt
+    durch imHaus, die Auswahl wird gemerkt."""
+    for zuweisung in ("allApartments = imHaus(await response.json(), 'wohnungen');",
+                      "tenants = imHaus(await response.json(), 'mieter');",
+                      "meters = imHaus(await res.json(), 'zaehler');",
+                      "readings = imHaus(await res.json());", "invoices = imHaus(await res.json());",
+                      "currentDocuments = imHaus(await res.json());",
+                      "const suggestions = imHaus(await res.json());",
+                      "const history = imHaus(await res.json());", "payments = imHaus(await res.json());",
+                      "properties = hausFilter ? alleHaeuser.filter(p => p.id === hausFilter.id) : alleHaeuser;"):
+        assert zuweisung in SKRIPT, zuweisung
+    init = SKRIPT[SKRIPT.index("function initApp("):]
+    init = init[:init.index("\n}\n")]
+    assert "hausFilterSetzen(gemerkterHausFilter());" in init
+    assert "fetchTenants();" not in init  # sonst liefe ein ungefilterter Abruf mit
+    setzen = SKRIPT[SKRIPT.index("async function hausFilterSetzen("):]
+    setzen = setzen[:setzen.index("\n}\n")]
+    assert "try {\n        localStorage.setItem('nk-haus-filter'" in setzen
+    assert "await ladeHausListen();" in setzen
+    wahl = SKRIPT[SKRIPT.index("function fuelleHausWahl("):]
+    assert "'<option value=\"\">Alle Immobilien</option>'" in wahl[:600]
+    assert "classList.toggle('gefiltert', !!hausFilter)" in wahl[:600]
+    assert '<span class="sr-only">Nach Immobilie filtern</span>' in SEITE
+    assert ".top-header .haus-wahl.gefiltert select {" in STIL
+
+
 def test_konzept_d_statistik_ansichten_als_filterpillen():
     menue = SKRIPT[SKRIPT.index('const pille = (ansicht, inhalt) =>'):]
     assert "'filter-pill active' : 'filter-pill'" in menue[:600]

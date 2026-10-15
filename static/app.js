@@ -263,14 +263,8 @@ function initApp() {
     initBarrierearm();
     initBefehl();
     initKopfMenues();
-    fetchProperties();
-    fetchTenants();
-    fetchAllApartments();
+    hausFilterSetzen(gemerkterHausFilter());
     fetchCategories();
-    fetchMeters();
-    fetchReadings();
-    fetchInvoices();
-    fetchDocuments();
     fetchProviders();
     fetchVermieterdaten();
     ladeKonten();
@@ -279,9 +273,6 @@ function initApp() {
     ladeGesperrteMieter();
     ladeUpdateEinstellung();
     ladeBegriffe();
-    fetchBillingSuggestions();
-    fetchBillingHistory();
-    fetchPayments();
     zeigeEinstellungsgruppe(gemerkteEinstellungsgruppe());
     startHinweise();
 }
@@ -598,6 +589,80 @@ function wechsleZuTab(tabName) {
 
 let abrechnungsVorschlaege = [];
 
+// --- Immobilienfilter (Kopf rechts) ----------------------------------------
+// Ist eine Immobilie gewählt, zeigt die ganze App nur noch ihre Daten. Die
+// Listen werden beim Laden gefiltert (imHaus), so greift jede Seite, die
+// Palette und jede Auswahl in Formularen ohne eigene Prüfung.
+let hausFilter = null;  // { id, wohnungen, zaehler, mieter } oder null = alle
+let alleHaeuser = [];   // ungefiltert, nur für die Auswahl im Kopf
+
+function gemerkterHausFilter() {
+    try {
+        return Number(localStorage.getItem('nk-haus-filter')) || null;
+    } catch (e) {
+        return null;
+    }
+}
+
+function gehoertZumHaus(x, f) {
+    if (x.property_id != null) return x.property_id === f.id;
+    if (x.apartment_id != null) return f.wohnungen.has(x.apartment_id);
+    if (x.meter_id != null) return f.zaehler.has(x.meter_id);
+    if (x.tenant_id != null) return f.mieter.has(x.tenant_id);
+    return true;  // keiner Immobilie zugeordnet (z. B. Beleg): immer zeigen
+}
+
+// merke: hält die Kennungen der Treffer fest, an denen Ablesungen,
+// Zahlungen und Vorschläge hängen ('wohnungen', 'zaehler', 'mieter').
+function imHaus(liste, merke) {
+    if (!hausFilter || !Array.isArray(liste)) return liste;
+    const treffer = liste.filter(x => gehoertZumHaus(x, hausFilter));
+    if (merke) hausFilter[merke] = new Set(treffer.map(x => x.id));
+    return treffer;
+}
+
+// Alles, was der Immobilienfilter einschränkt.
+function ladeHausListen() {
+    return Promise.all([fetchProperties(), fetchTenants(), fetchAllApartments(), fetchMeters(),
+        fetchReadings(), fetchInvoices(), fetchDocuments(), fetchBillingSuggestions(),
+        fetchBillingHistory(), fetchPayments()]);
+}
+
+async function hausFilterSetzen(id) {
+    hausFilter = null;
+    if (id) {
+        try {
+            const [wohnungen, zaehler, mieter] = await Promise.all(['/api/apartments', '/api/meters', '/api/tenants']
+                .map(async url => {
+                    const res = await fetch(url);
+                    if (!res.ok) throw await serverFehler(res);
+                    return res.json();
+                }));
+            hausFilter = { id, wohnungen: new Set(), zaehler: new Set(), mieter: new Set() };
+            // Reihenfolge zählt: Mieter hängen an Wohnungen.
+            imHaus(wohnungen, 'wohnungen');
+            imHaus(zaehler, 'zaehler');
+            imHaus(mieter, 'mieter');
+        } catch (e) {
+            hausFilter = null;
+            showError(meldungZu(e, 'Der Immobilienfilter ließ sich nicht laden. Es werden alle Immobilien gezeigt.'));
+        }
+    }
+    try {
+        localStorage.setItem('nk-haus-filter', hausFilter ? String(hausFilter.id) : '');
+    } catch (e) {
+        // privates Fenster: der Filter gilt dann nur bis zum Neuladen
+    }
+    await ladeHausListen();
+    // Offene Ansichten der vorigen Auswahl nachziehen.
+    if (propertyDetailsView.style.display === 'block') {
+        const haus = hausFilter && properties[0];
+        if (haus) showPropertyDetails(haus);
+        else propertyDetailsView.style.display = 'none';
+    }
+    if (document.querySelector('.nav-item.active')?.dataset.tab === 'reports') fetchAnalytics();
+}
+
 function heuteAufgaben() {
     const echt = echterBestand();
     const jahr = String(new Date().getFullYear());
@@ -670,17 +735,14 @@ function fuelleHausWahl() {
     const feld = document.getElementById('haus-wahl-feld');
     const wahl = document.getElementById('haus-wahl');
     if (!feld || !wahl) return;
-    feld.hidden = !properties.length;
-    wahl.innerHTML = '<option value="">Immobilie öffnen …</option>' + properties
+    feld.hidden = !alleHaeuser.length;
+    feld.classList.toggle('gefiltert', !!hausFilter);
+    wahl.innerHTML = '<option value="">Alle Immobilien</option>' + alleHaeuser
         .map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
+    wahl.value = hausFilter ? String(hausFilter.id) : '';
 }
-
 function hausWaehlen(wahl) {
-    const haus = properties.find(p => String(p.id) === wahl.value);
-    wahl.value = '';
-    if (!haus) return;
-    wechsleZuTab('properties');
-    showPropertyDetails(haus);
+    hausFilterSetzen(Number(wahl.value) || null);
 }
 window.hausWaehlen = hausWaehlen;
 
@@ -1464,7 +1526,12 @@ async function fetchProperties() {
     try {
         const response = await fetch('/api/properties');
         if (!response.ok) throw await serverFehler(response);
-        properties = await response.json();
+        alleHaeuser = await response.json();
+        if (hausFilter && !alleHaeuser.some(p => p.id === hausFilter.id)) {
+            hausFilterSetzen(null);  // gewählte Immobilie gelöscht
+            return;
+        }
+        properties = hausFilter ? alleHaeuser.filter(p => p.id === hausFilter.id) : alleHaeuser;
         updateDashboard();
         zeigeErsteSchritte();
     } catch (error) {
@@ -1670,7 +1737,7 @@ async function fetchAllApartments() {
     try {
         const response = await fetch('/api/apartments');
         if (!response.ok) throw await serverFehler(response);
-        allApartments = await response.json();
+        allApartments = imHaus(await response.json(), 'wohnungen');
         populateApartmentDropdown();
         zeigeErsteSchritte();
     } catch (e) {
@@ -1995,7 +2062,7 @@ async function fetchTenants() {
     try {
         const response = await fetch('/api/tenants');
         if (!response.ok) throw await serverFehler(response);
-        tenants = await response.json();
+        tenants = imHaus(await response.json(), 'mieter');
         
         // Ortszeit, nicht UTC: kurz nach Mitternacht waere sonst noch gestern
         const heute = new Date().toLocaleDateString('sv-SE');
@@ -2642,7 +2709,7 @@ async function fetchCategories() {
 async function fetchMeters() {
     try {
         const res = await fetch('/api/meters');
-        meters = await res.json();
+        meters = imHaus(await res.json(), 'zaehler');
         renderMeters();
         zeigeErsteSchritte();
     } catch(e) { console.error(e); }
@@ -2651,7 +2718,7 @@ async function fetchMeters() {
 async function fetchReadings() {
     try {
         const res = await fetch('/api/readings');
-        readings = await res.json();
+        readings = imHaus(await res.json());
         renderMeters(); // readings are shown inside meters
         zeigeErsteSchritte();
     } catch(e) { console.error(e); }
@@ -2660,7 +2727,7 @@ async function fetchReadings() {
 async function fetchInvoices() {
     try {
         const res = await fetch('/api/invoices');
-        invoices = await res.json();
+        invoices = imHaus(await res.json());
         renderInvoices();
         renderDocuments();
         zeigeErsteSchritte();
@@ -4394,7 +4461,7 @@ let neueDateiAdresse = '';  // Blob-Adresse dieser Datei für die Vorschau
 async function fetchDocuments() {
     try {
         const res = await fetch('/api/invoice_documents');
-        currentDocuments = await res.json();
+        currentDocuments = imHaus(await res.json());
         renderDocuments();
         zeigeHeute();
     } catch(e) { console.error('Belegabruf fehlgeschlagen', e); }
@@ -6424,7 +6491,7 @@ async function loescheAnschreibenVorlage() {
 async function fetchBillingSuggestions() {
     try {
         const res = await fetch('/api/billing/suggestions');
-        const suggestions = await res.json();
+        const suggestions = imHaus(await res.json());
         abrechnungsVorschlaege = suggestions;
         zeigeHeute();
         
@@ -6442,7 +6509,7 @@ async function fetchBillingSuggestions() {
             if (!mieterDa) {
                 try {
                     const antwort = await fetch('/api/tenants');
-                    mieterDa = antwort.ok && (await antwort.json()).length > 0;
+                    mieterDa = antwort.ok && imHaus(await antwort.json()).length > 0;
                 } catch (e) {
                     console.error('Mieter nicht ladbar', e);
                 }
@@ -6499,7 +6566,7 @@ async function fetchBillingHistory() {
     try {
         const res = await fetch('/api/billing/reports');
         if (!res.ok) throw await serverFehler(res);
-        const history = await res.json();
+        const history = imHaus(await res.json());
         anzahlAbrechnungen = history.length;
         abrechnungsHistorie = history;
         zeigeErsteSchritte();
@@ -7462,7 +7529,7 @@ let currentAnalyticsView = 'general';
 
 function populateAnalyticsPropertySelect() {
     const sel = document.getElementById('analytics-property-select');
-    if (sel.options.length === properties.length) return;
+    if ([...sel.options].map(o => o.value).join() === properties.map(p => String(p.id)).join()) return;
     
     const gewaehlt = sel.value;
     sel.replaceChildren();
@@ -8857,7 +8924,7 @@ async function fetchPayments() {
     try {
         const res = await fetch('/api/payments');
         if (!res.ok) throw await serverFehler(res);
-        payments = await res.json();
+        payments = imHaus(await res.json());
         renderPayments();
         updateDashboard();
     } catch (e) {

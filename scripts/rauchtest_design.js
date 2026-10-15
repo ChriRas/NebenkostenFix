@@ -1135,6 +1135,29 @@ pruefe('NK-224: der Gruß steht im Kopf von „Heute“ und nirgends sonst',
         stand === 'Erfassen:Strom B2/fehlt|Belege:Stadtwerke/offen|Abrechnen:Echt (EG)/fällig');
 }
 
+// --- Immobilienfilter im Kopf ----------------------------------------------
+// Vorher sprang die Auswahl nur zur Immobilie, Mieter und Kosten zeigten weiter
+// alles. Jetzt filtert imHaus jede geladene Liste über ihr Verknüpfungsfeld.
+{
+    const funktion = name => (appQuelle.match(new RegExp('function ' + name + '\\([\\s\\S]*?\\n\\}')) || [''])[0];
+    const filtere = (filter, liste, merke) => new Function('hausFilter', 'liste', 'merke',
+        funktion('gehoertZumHaus') + funktion('imHaus') + '; return [imHaus(liste, merke), hausFilter];')(filter, liste, merke);
+    const f = () => ({ id: 1, wohnungen: new Set([11]), zaehler: new Set([21]), mieter: new Set([31]) });
+    const ids = l => l.map(x => x.id).join(',');
+    pruefe('Hausfilter: ohne Auswahl bleibt jede Liste vollständig',
+        ids(filtere(null, [{ id: 1, property_id: 2 }])[0]) === '1');
+    const gemischt = [{ id: 1, property_id: 1 }, { id: 2, property_id: 2 }, { id: 3, apartment_id: 11 },
+        { id: 4, apartment_id: 12 }, { id: 5, meter_id: 21 }, { id: 6, meter_id: 22 },
+        { id: 7, tenant_id: 31 }, { id: 8, tenant_id: 32 }, { id: 9, property_id: null }];
+    pruefe('Hausfilter: Immobilie, Wohnung, Zähler und Mieter grenzen ein, Unzugeordnetes bleibt',
+        ids(filtere(f(), gemischt)[0]) === '1,3,5,7,9');
+    pruefe('Hausfilter: die Immobilie hat Vorrang vor der Wohnung',
+        ids(filtere(f(), [{ id: 1, property_id: 2, apartment_id: 11 }])[0]) === '');
+    const [, nach] = filtere(f(), [{ id: 11, property_id: 1 }, { id: 12, property_id: 2 }, { id: 13, property_id: 1 }], 'wohnungen');
+    pruefe('Hausfilter: neu geladene Wohnungen landen in der Menge, an der die Mieter hängen',
+        [...nach.wohnungen].join() === '11,13');
+}
+
 // --- NK-225: „0 von 5“ trotz Beispielhaus wird erklärt -----------------
 {
     const funktion = name => (appQuelle.match(new RegExp('function ' + name + '\\([\\s\\S]*?\\n\\}')) || [''])[0];
