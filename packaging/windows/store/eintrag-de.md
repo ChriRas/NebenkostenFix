@@ -25,17 +25,17 @@ Die Nebenkostenabrechnung für private Vermieter. Kostenlos, und Ihre Daten blei
 
 ## Neuerungen in dieser Version
 
-Version 0.14.0: Zählerwechsel und Eichfrist, Soll und Ist der Vorauszahlungen, Fristenkalender, geführter Jahreswechsel und Lohnanteile nach § 35a EStG. Die Rechenregeln bleiben unverändert.
+Version 0.15.0: Neues Design mit vier Arbeitsbereichen, Beleg-Eingang und Zählern mit Detailbereich. Die Rechenregeln bleiben unverändert.
 
-- Zähler lassen sich bearbeiten und tauschen. Beim Zählerwechsel läuft der Verbrauch über beide Zähler weiter, das Ende der Eichfrist wird vorgeschlagen.
-- Je Mieter zeigt „Vorauszahlungen“ Soll und Ist für jeden Monat. Bei Rückstand steht eine Zahlungserinnerung als Vorlage bereit.
-- Der Fristenkalender sammelt Abrechnungs-, Einwendungs- und Eichfristen und lässt sich als Kalenderdatei (.ics) laden.
-- „Neues Jahr beginnen“ führt durch Ablesen, Vorauszahlung und Rechnungen wie im Vorjahr. Vor dem Festsetzen zeigt ein Prüfstand Auffälliges und den Weg zur Behebung.
-- Die Wohnungsauswertung zeigt die Kosten je m² über mehrere Jahre.
-- Lohnanteile nach § 35a EStG lassen sich je Rechnung erfassen. Die Abrechnung weist sie in einer eigenen Tabelle aus.
-- Das Paket zur Belegeinsicht enthält Abrechnung, Rechenweg, Belege und die Ablesefotos der Wohnung.
-- Anrede je Mieter, Anschreiben in Ich- oder Wir-Form. Das PDF ist kürzer und trennt Wörter nicht mehr mitten im Wort.
-- Am Handy erscheinen Zähler als Karten und die Aktionen eines Bereichs in einem Menü.
+- Die Seitenleiste ordnet die App in Heute, Haus, Kosten und Abrechnung. „Heute“ sammelt offene Aufgaben, die Befehlspalette (Strg+K) findet jede Seite.
+- Im Beleg-Eingang stehen Belegliste, Beleg und Rechnungsformular nebeneinander, der nächste Beleg rückt nach. „Heute“ zeigt Belege ohne Rechnung.
+- Der Beleg-Viewer blättert, zoomt und zeigt die Seitenzahl, auch bei PDF-Belegen.
+- Zähler erscheinen als Liste mit Detailbereich und Verlauf.
+- Der Immobilienfilter im Kopf gilt für die ganze App. Hilfe, Drucken und Abmelden liegen im Kontomenü.
+- Die Abrechnungstabelle zeigt das Ergebnis oben, die Kostenarten lassen sich aufklappen.
+- Tabellen sortieren per Klick, eine Einführung führt durch die leere App, der Dunkelmodus lässt sich bei den Einstellungen einschalten.
+- Kostenart Nr. 11 heißt jetzt „Allgemeinstrom“. Der unveränderte Standardname wird beim Update umbenannt, eigene Namen bleiben.
+- Erzeugte PDFs und der GiroCode nutzen die Farben der App.
 
 ## Produktmerkmale
 

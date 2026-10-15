@@ -37,7 +37,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/bilder/uebersicht.png" width="880" alt="Die Übersicht von NebenkostenFix mit den ersten Schritten">
+  <img src="docs/bilder/uebersicht.png" width="880" alt="„Heute“ in NebenkostenFix mit den offenen Aufgaben der Beispielimmobilie">
 </p>
 
 Immobilien, Wohnungen, Mieter, Zählerstände und Rechnungen liegen an einer Stelle. Am Ende
@@ -49,6 +49,8 @@ Kurze Antworten stehen in den [häufigen Fragen](docs/handbuch/faq.md).
 
 ## Was es kann
 
+- **Oberfläche** mit vier Arbeitsbereichen (Heute, Haus, Kosten, Abrechnung), Befehlspalette (Strg+K)
+  und Beleg-Eingang: Beleg und Rechnungsformular nebeneinander; Dunkelmodus
 - **Immobilien und Wohnungen** mit beliebig vielen Einheiten und Umlageschlüsseln
 - **Mieter** mit Ein- und Auszug, anteilige Abrechnung und Leerstand inbegriffen, eigene Anrede je Mieter;
   Soll und Ist der Vorauszahlungen je Monat mit Zahlungserinnerung
