@@ -173,7 +173,10 @@
             <!-- TAB: METERS -->
             <section class="content-section tab-content" id="tab-meters">
                 <div class="section-header">
-                    <h2>Zähler &amp; Ablesungen</h2>
+                    <div>
+                        <h2>Zähler &amp; Ablesungen</h2>
+                        <p class="section-untertitel">Zähler der Wohnungen und ihre abgelesenen Stände</p>
+                    </div>
                     <div class="kopf-aktionen">
                         <button class="btn-secondary" onclick="oeffneImport('zaehlerstaende')"><i class="ph ph-file-xls" aria-hidden="true"></i>
                             Aus Excel importieren</button>
@@ -194,7 +197,10 @@
             <!-- TAB: INVOICES -->
             <section class="content-section tab-content" id="tab-invoices">
                 <div class="section-header">
-                    <h2>Rechnungen &amp; Belege <button type="button" class="begriff-hilfe" aria-label="Begriff erklären" data-begriff="sammelrechnung"><i class="ph ph-question" aria-hidden="true"></i></button></h2>
+                    <div>
+                        <h2>Rechnungen &amp; Belege <button type="button" class="begriff-hilfe" aria-label="Begriff erklären" data-begriff="sammelrechnung"><i class="ph ph-question" aria-hidden="true"></i></button></h2>
+                        <p class="section-untertitel">Belege hochladen und als Rechnung übernehmen</p>
+                    </div>
                     <!-- Konzept D: zwei Ansichten einer Seite. Im Eingang stehen die
                          Belege; die Rechnung wird neben der Vorschau erfasst. -->
                     <div class="zeile-eng" role="group" aria-label="Ansicht">
@@ -240,11 +246,11 @@
                     </div>
                 </div>
                 <div class="controls-bar" id="invoice-filter">
-                    <div class="form-group" style="flex: 2;">
+                    <div class="form-group">
                         <input type="text" id="invoice-search" placeholder="Suche nach Rechnungsnr. oder Anbieter..."
                             oninput="renderInvoices()">
                     </div>
-                    <div class="form-group feld-breit">
+                    <div class="form-group">
                         <select id="invoice-category-filter" onchange="renderInvoices()">
                             <option value="">Alle Kategorien</option>
                             <!-- populated dynamically in js -->
@@ -263,7 +269,10 @@
             <!-- TAB: PROPERTIES -->
             <section class="content-section tab-content" id="tab-properties">
                 <div class="section-header">
-                    <h2>Immobilien</h2>
+                    <div>
+                        <h2>Immobilien</h2>
+                        <p class="section-untertitel">Häuser und Wohnungen, die Sie abrechnen</p>
+                    </div>
                     <div class="kopf-aktionen">
                         <button class="btn-secondary" onclick="oeffneImport('wohnungen')"><i class="ph ph-file-xls" aria-hidden="true"></i>
                             Aus Excel importieren</button>
@@ -309,7 +318,10 @@
             <!-- TAB: TENANTS -->
             <section class="content-section tab-content" id="tab-tenants">
                 <div class="section-header">
-                    <h2>Mieter</h2>
+                    <div>
+                        <h2>Mieter</h2>
+                        <p class="section-untertitel">Wer in welcher Wohnung wohnt und seit wann</p>
+                    </div>
                     <div class="kopf-aktionen">
                         <button class="btn-secondary" onclick="oeffneImport('mieter')"><i class="ph ph-file-xls" aria-hidden="true"></i>
                             Aus Excel importieren</button>
@@ -1167,7 +1179,10 @@
             <!-- TAB: PAYMENTS -->
             <section class="content-section tab-content" id="tab-payments">
                 <div class="section-header">
-                    <h2>Zahlungen</h2>
+                    <div>
+                        <h2>Zahlungen</h2>
+                        <p class="section-untertitel">Miete, Vorauszahlungen und Nachzahlungen der Mieter</p>
+                    </div>
                     <div class="kopf-aktionen">
                         <button class="btn-secondary" onclick="oeffneImport('zahlungen')"><i class="ph ph-file-xls" aria-hidden="true"></i>
                             Aus Excel importieren</button>

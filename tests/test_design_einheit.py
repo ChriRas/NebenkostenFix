@@ -21,7 +21,7 @@ ANMELDUNG = (WURZEL / 'static' / 'anmeldung.css').read_text(encoding='utf-8')
 # Die Zahl sinkt nur. Wer einen Inline-Stil entfernt, senkt sie mit; wer
 # einen braucht, nimmt eine Klasse aus style.css (Abschnitt NK-156).
 # ``display: none;`` zählt nicht: das schaltet app.js um.
-INLINE_STILE_HOECHSTENS = 108
+INLINE_STILE_HOECHSTENS = 107
 
 KLEINE_SCHRIFT = re.compile(
     r'font-size:\s*(?:(?:[0-9]|1[0-2])(?:\.\d+)?px|0\.(?:[0-7]\d*|80?)(?:rem|em))\b')
@@ -440,3 +440,28 @@ def test_tabellen_zeilen_hover_einheitlich():
     assert '.zaehler-tabelle tr[data-zaehler]:not([aria-current="true"]):hover' in hover
     assert 'background: var(--bg-hover);' in hover
 
+
+
+def test_seitenband_titel_und_unterzeile_auf_jeder_seite():
+    # Konzept D: jedes Seitenband trägt Titel und eine Zeile, wozu die Seite da ist.
+    seite = _ohne_kommentare_html(SEITE)
+    seiten = re.findall(r'<section[^>]*\bid="(tab-\w+)"', seite)
+    assert len(seiten) == 10
+    for tab in seiten:
+        kopf = re.search(
+            rf'id="{tab}"[^>]*>\s*<div class="section-header">\s*<div>\s*<h2>.*?</h2>\s*'
+            r'<p class="section-untertitel">', seite, re.S)
+        assert kopf, f'{tab}: Seitenband ohne Titelblock mit Unterzeile'
+
+
+def test_rechnungsfilter_bricht_mobil_um():
+    # Inline flex: 2 und .feld-breit setzen die Basis auf 0: bei 390 px schrumpfte die Suche auf „Su“.
+    leiste = re.search(r'id="invoice-filter">(.*?)</select>', SEITE, re.S).group(1)
+    assert leiste.count('<div class="form-group">') == 2
+    assert 'flex: 1 1 280px;' in _regel('.controls-bar .form-group')
+
+
+def test_kategorie_chip_zaehlt_einzahl():
+    # Der Chip der Rechnungskategorie zeigte „1 Einträge“.
+    assert ' Einträge</span>' not in SKRIPT.replace("'Eintrag' : 'Einträge'}</span>", '')
+    assert "catInvoices.length === 1 ? 'Eintrag' : 'Einträge'" in SKRIPT

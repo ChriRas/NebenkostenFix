@@ -3263,7 +3263,7 @@ function renderInvoices() {
                     <div class="accordion-header-left">
                         <i class="ph ${icon} accordion-icon"></i>
                         <span>${escapeHtml(zaehlerArtName(catName))}</span>
-                        <span class="accordion-badge">${catInvoices.length} Einträge</span>
+                        <span class="accordion-badge">${catInvoices.length} ${catInvoices.length === 1 ? 'Eintrag' : 'Einträge'}</span>
                     </div>
                     <i class="ph ph-caret-down accordion-chevron"></i>
                 </div>

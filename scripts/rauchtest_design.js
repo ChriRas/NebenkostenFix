@@ -376,8 +376,8 @@ pruefe('K1: Immobilien-Seitenkopf trägt den Primärknopf',
 pruefe('K1: .kopf-aktionen in allen neun Köpfen mit Knöpfen (global + acht Bereiche)',
     (ui.match(/class="kopf-aktionen"/g) || []).length === 9
     && css.includes('.kopf-aktionen {'));
-pruefe('K1: .section-untertitel statt Inline-Stil (sechs Köpfe, Heute eingeschlossen)',
-    (ui.match(/class="section-untertitel"/g) || []).length === 6
+pruefe('K1: .section-untertitel statt Inline-Stil (elf Köpfe: jede Seite plus Historie)',
+    (ui.match(/class="section-untertitel"/g) || []).length === 11
     && !ui.includes('color: var(--text-muted); margin-top: 4px;"')
     && css.includes('.section-untertitel {'));
 pruefe('K1: auch „Heute“ beginnt mit einem Seitenkopf',
