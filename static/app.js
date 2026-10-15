@@ -3140,12 +3140,12 @@ function renderInvoiceZeitleiste(daten, ziel) {
 }
 
 // Zaehler zeigen ihre Kostenart unter einem Alltagsnamen (F-113). Haupt- und
-// Wohnungszaehler fuer Strom haengen an BetrKV Nr. 11 „Beleuchtung
-// (Allgemeinstrom)“, weil der Allgemeinstrom daraus gerechnet wird (Haupt-
+// Wohnungszaehler fuer Strom haengen an BetrKV Nr. 11 „Allgemeinstrom“,
+// weil der Allgemeinstrom daraus gerechnet wird (Haupt-
 // zaehler minus Wohnungszaehler). Am Zaehler selbst ist das schlicht Strom.
 // Der Rechnungen-Tab nennt die Stromrechnung ebenso (F-136). Kostenarten und
 // PDF behalten den Namen aus der BetrKV.
-const ZAEHLER_ANZEIGENAMEN = { 'Beleuchtung (Allgemeinstrom)': 'Strom' };
+const ZAEHLER_ANZEIGENAMEN = { 'Allgemeinstrom': 'Strom' };
 
 function zaehlerArtName(name) {
     return ZAEHLER_ANZEIGENAMEN[name] || name;

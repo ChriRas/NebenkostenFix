@@ -4,7 +4,7 @@ Befund aus der Abrechnung Mieter 3 auf 6061:
 
 * Die Kachel "Zeitraum (§ 556 Abs. 3 BGB)" stand als Zaehler mit
   "Zähler: N/A" und "Keine ausreichenden Daten" da; ihre Meldung fehlte.
-* Der Stromzaehler hiess "Beleuchtung (Allgemeinstrom)" (F-113 galt nur
+* Der Stromzaehler hiess "Allgemeinstrom" (F-113 galt nur
   fuer die Zaehlerliste).
 * Zwei gleiche Warnungen (Entwaesserung, Wasserversorgung) standen voll
   ausgeschrieben untereinander, mit der Kennung vorn.

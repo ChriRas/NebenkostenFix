@@ -990,6 +990,60 @@ kbd {
     color: var(--text-muted);
 }
 
+/* Runde 6: auch die geöffnete Liste im Design, gebaut wie das Kontomenü.
+   Customizable Select gibt es ab Chromium 135 (Edge, WebView2); andere
+   Browser zeigen weiter die Liste des Systems. Den Pfeil malt das Feld. */
+@supports (appearance: base-select) {
+    select,
+    .form-group select,
+    ::picker(select) {
+        appearance: base-select;
+    }
+
+    /* base-select macht das Feld zur Flexbox: Text sonst oben. */
+    select {
+        align-items: center;
+    }
+
+    select::picker-icon,
+    option::checkmark {
+        display: none;
+    }
+
+    ::picker(select) {
+        /* Wie die Systemliste nach unten; nach oben nur ohne Platz. */
+        position-try-order: normal;
+        margin-block: var(--space-1);
+        padding: var(--space-1);
+        background: var(--surface);
+        color: var(--text-main);
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-lg);
+    }
+
+    option {
+        padding: var(--space-2) var(--space-3);
+        border-radius: var(--radius-md);
+        font-size: 15px;
+    }
+
+    option:hover,
+    option:focus-visible {
+        background: var(--bg-hover);
+        outline: none;
+    }
+
+    option:checked {
+        background: var(--primary-tint);
+        color: var(--primary-text);
+        font-weight: 500;
+    }
+
+    option:disabled {
+        color: var(--text-muted);
+    }
+}
+
 /* Custom File Upload Button */
 .file-upload-wrapper {
     position: relative;

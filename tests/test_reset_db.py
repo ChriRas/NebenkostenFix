@@ -101,7 +101,7 @@ def test_reset_db_authorized_resets_db_and_reseeds(monkeypatch, auth_client):
     # Niederschlagswasser -- achtzehn Namen.
     assert len(cat_names) == 18
     assert "Niederschlagswasser" in cat_names
-    assert "Beleuchtung (Allgemeinstrom)" in cat_names
+    assert "Allgemeinstrom" in cat_names
 
 
 # --- NK-123: der Knopf folgt der Route, nicht einer Umgebungsvariablen -----

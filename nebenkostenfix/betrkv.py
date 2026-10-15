@@ -127,7 +127,7 @@ KATALOG = (
     {'nr': 8, 'name': 'Straßenreinigung und Müllbeseitigung', 'verteilung': 'PER_SQM', 'zaehler': False},
     {'nr': 9, 'name': 'Gebäudereinigung und Ungezieferbekämpfung', 'verteilung': 'PER_SQM', 'zaehler': False},
     {'nr': 10, 'name': 'Gartenpflege', 'verteilung': 'PER_SQM', 'zaehler': False},
-    {'nr': 11, 'name': 'Beleuchtung (Allgemeinstrom)', 'verteilung': 'PER_SQM', 'zaehler': False},
+    {'nr': 11, 'name': 'Allgemeinstrom', 'verteilung': 'PER_SQM', 'zaehler': False},
     {'nr': 12, 'name': 'Schornsteinreinigung', 'verteilung': 'PER_SQM', 'zaehler': False},
     {'nr': 13, 'name': 'Sach- und Haftpflichtversicherung', 'verteilung': 'PER_SQM', 'zaehler': False},
     {'nr': 14, 'name': 'Hauswart', 'verteilung': 'PER_SQM', 'zaehler': False},
@@ -347,7 +347,7 @@ def katalogeintrag(name) -> dict:
         >>> katalogeintrag('Abwasser')['name'], katalogeintrag('Regenwasser')['name']
         ('Entwässerung', 'Niederschlagswasser')
         >>> katalogeintrag('Strom')['name']
-        'Beleuchtung (Allgemeinstrom)'
+        'Allgemeinstrom'
     """
     nr = zuordnung(name)
     passend = [e for e in KATALOG if e['nr'] == nr]

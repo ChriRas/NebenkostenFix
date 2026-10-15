@@ -969,7 +969,7 @@ def test_vorpruefung_meldet_jede_kostenart_nur_einmal():
 
 # --- NK-105 (D-63): der Zählerweg gilt für jede Kostenart -------------------
 
-STROM = dict(id=11, name='Beleuchtung (Allgemeinstrom)')
+STROM = dict(id=11, name='Allgemeinstrom')
 
 
 def test_strom_mit_wohnungszaehler_rechnet_nach_verbrauch():

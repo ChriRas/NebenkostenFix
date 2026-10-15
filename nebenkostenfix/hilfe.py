@@ -124,7 +124,7 @@ def kurzanleitung_pdf() -> bytes:
     def fuss(leinwand, dokument):
         leinwand.saveState()
         leinwand.setFont('Helvetica', 11)
-        leinwand.setFillColor(HexColor('#4B5563'))
+        leinwand.setFillColor(HexColor('#5B5D72'))
         leinwand.drawString(20 * mm, 12 * mm, f'{marke.PRODUKT} — Kurzanleitung')
         leinwand.drawRightString(190 * mm, 12 * mm, f'Seite {dokument.page}')
         leinwand.restoreState()

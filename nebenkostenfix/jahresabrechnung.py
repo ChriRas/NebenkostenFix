@@ -41,7 +41,7 @@ UEBLICH = (
     'Entwässerung',
     'Straßenreinigung und Müllbeseitigung',
     'Sach- und Haftpflichtversicherung',
-    'Beleuchtung (Allgemeinstrom)',
+    'Allgemeinstrom',
 )
 STICHTAG_TOLERANZ = timedelta(days=31)
 WECHSEL_TOLERANZ = timedelta(days=7)

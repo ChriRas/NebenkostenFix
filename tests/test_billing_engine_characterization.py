@@ -15,7 +15,7 @@ NK-044 hat den Seed auf § 2 BetrKV gestellt. Wo hier frueher ``Strom``
 stand, steht jetzt ``Wasserversorgung``: die Zaehlerfaelle brauchen eine
 Kostenart, an der ein Zaehler haengt, und das ist im Gesetzeskatalog die
 Nr. 2. Die frei benannte Kostenart ``Strom`` ist zur Nr. 11 geworden,
-``Beleuchtung (Allgemeinstrom)`` -- Treppenhauslicht wird nach Flaeche
+``Allgemeinstrom`` -- Treppenhauslicht wird nach Flaeche
 verteilt, nicht je Wohnung gemessen. **Die Goldens sind unveraendert**:
 welche Kostenart die Rechnung traegt, aendert an der Rechnung nichts.
 

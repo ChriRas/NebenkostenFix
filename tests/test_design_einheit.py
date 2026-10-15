@@ -854,8 +854,10 @@ def test_runde5_pdf_viewer_mit_zoom_und_seitenzahl():
 def test_runde5_pdfs_tragen_die_farben_der_app():
     # PDFs gleichen der App: jede Farbe im PDF ist ein Token aus
     # style.css, Tabellen ohne Vollgitter, Abschnittskopf Indigo.
+    # Auch der GiroCode-Kasten und der Fuß des Hilfe-PDFs.
     pdf = {name: (WURZEL / 'nebenkostenfix' / name).read_text(encoding='utf-8')
-           for name in ('pdf_generator.py', 'pdf_cover_page.py')}
+           for name in ('pdf_generator.py', 'pdf_cover_page.py',
+                        'girocode_generator.py', 'hilfe.py')}
     app_farben = {h.lower() for h in re.findall(r'#[0-9a-fA-F]{6}\b', STIL)}
     for name, text in pdf.items():
         fremd = {h for h in re.findall(r'#[0-9a-fA-F]{6}\b', text)
@@ -865,3 +867,30 @@ def test_runde5_pdfs_tragen_die_farben_der_app():
         assert "'GRID'" not in text, f'{name}: Vollgitter'
     kopf = pdf['pdf_generator.py'].split('# Section Header', 1)[1][:400]
     assert "'BACKGROUND', (0, row_idx), (-1, row_idx), colors.HexColor('#4F46E5')" in kopf
+
+
+def test_runde6_geoeffnete_auswahllisten_im_design():
+    # Die Haus-Wahl zeigte geöffnet noch die Liste des Systems
+    # (blaue Markierung). Jede Auswahl der App und der Anmeldeseiten nimmt
+    # in Chromium die Tokens; ohne base-select bleibt die Systemliste.
+    for name, text in (('style.css', STIL), ('anmeldung.css', ANMELDUNG)):
+        block = text.split('@supports (appearance: base-select) {', 1)
+        assert len(block) == 2, f'{name}: kein base-select'
+        block = block[1].split('\n}\n', 1)[0]
+        assert 'appearance: base-select;' in block, name
+        liste = re.search(r'\n\n\s*::picker\(select\) \{([^}]*)\}', block).group(1)
+        for token in ('var(--surface)', 'var(--border-color)', 'var(--radius-lg)'):
+            assert token in liste, f'{name}: {token}'
+        assert 'var(--primary-tint)' in _regel('option:checked', block), name
+        assert 'option::checkmark' in block, name
+        assert not re.search(r'#[0-9a-fA-F]{3,6}\b|shadow', block), name
+        # Browserfunde: base-select macht das Feld zur Flexbox (Text sonst
+        # oben), das Dreieck des Browsers neben dem Chevron des Felds, und
+        # most-block-size klappte die Liste im Modal über das Feld darüber.
+        assert 'align-items: center;' in block, name
+        assert 'select::picker-icon' in block, name
+        assert 'position-try-order: normal;' in liste, name
+    # Global, nicht nur .form-group: die Haus-Wahl im Kopf steht außerhalb.
+    # .form-group select setzt appearance: none spezifischer, darum eigens.
+    assert re.search(r'@supports \(appearance: base-select\) \{\s*select,\s*'
+                     r'\.form-group select,', STIL)

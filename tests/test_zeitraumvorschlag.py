@@ -73,7 +73,7 @@ def test_zweiter_zeitraum_endet_vor_der_luecke(app_ctx):
     assert (v['beginn'], v['ende']) == ('2026-01-01', '2026-03-31')
     assert v['gruende'][0] == 'Abgerechnet ist bis 31.12.2025, weiter geht es ab 01.01.2026.'
     assert v['gruende'][1] == 'Der letzte Miettag ist der 30.09.2026.'
-    assert v['gruende'][2] == ('Ab 01.04.2026 fehlt die Rechnung für „Beleuchtung (Allgemeinstrom)“. '
+    assert v['gruende'][2] == ('Ab 01.04.2026 fehlt die Rechnung für „Allgemeinstrom“. '
                                'Deshalb endet der Vorschlag am 31.03.2026.')
     assert v['gruende'][3].startswith('Den Rest bis zum Auszug (01.04.2026–30.09.2026)')
 

@@ -132,8 +132,8 @@ for (const ton of ['--success-bg', '--danger-bg', '--warning-bg']) {
 // Wasserversorgung.“ Ursache war der requires_meter-Filter im Dialog. Der
 // Wächter ruft openAddMeterModal mit dem echten Katalog auf und zählt die
 // Optionen: 18 Stück (NK-117: Nr. 3 zweimal), jede Bezeichnung genau einmal.
-// Am Zähler steht der Alltagsname (F-113): „Strom“ statt „Beleuchtung
-// (Allgemeinstrom)“. Die Zuordnung kommt aus app.js selbst.
+// Am Zähler steht der Alltagsname (F-113): „Strom“ statt
+// „Allgemeinstrom“. Die Zuordnung kommt aus app.js selbst.
 function katalog_aus_quelle() {
     const betrkvQuelle = fs.readFileSync(path.join(__dirname, '..', 'nebenkostenfix', 'betrkv.py'), 'utf8');
     const zeilen = [];

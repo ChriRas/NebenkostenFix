@@ -15,11 +15,14 @@ from io import BytesIO
 from datetime import datetime
 
 import segno
-from reportlab.lib import colors
 from reportlab.lib.units import mm
 from reportlab.platypus import Paragraph, Spacer, Table, TableStyle, Image
 from reportlab.lib.styles import ParagraphStyle
 from nebenkostenfix.validation import EingabeFehler
+# Farben wie das Deckblatt (Tokens aus style.css)
+from nebenkostenfix.pdf_cover_page import (
+    COLOR_ACCENT, COLOR_BORDER, COLOR_DARK, COLOR_LIGHT_BG, COLOR_MUTED,
+)
 
 
 # --- IBAN (NK-124) ---
@@ -96,14 +99,6 @@ def vermieter_art():
     except RuntimeError:  # kein Anwendungskontext
         return None
     return zeile.art if zeile is not None else None
-
-
-# --- Color Palette (matching cover page) ---
-COLOR_DARK = colors.HexColor('#1f2937')
-COLOR_MUTED = colors.HexColor('#6b7280')
-COLOR_LIGHT_BG = colors.HexColor('#f8fafc')
-COLOR_BORDER = colors.HexColor('#e2e8f0')
-COLOR_ACCENT = colors.HexColor('#4f46e5')
 
 
 def _format_iban_display(iban):
