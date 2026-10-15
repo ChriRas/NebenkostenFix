@@ -43,7 +43,7 @@ AUSNAHMEN = {
     'getIcon(group.category)': 'liefert ein Emoji aus einer festen Tabelle',
     'valStr': 'Wert-HTML aus Zahlformat und maskierter Einheit',
     'ttStr': 'Tooltip aus Datum, Zahl und maskierter Einheit',
-    # Runde 7: gemeinsame Abrechnungstabelle, jeder Baustein maskiert seine Teile selbst
+    # Gemeinsame Abrechnungstabelle, jeder Baustein maskiert seine Teile selbst
     'interpolationsTooltip(infoObj)': 'Tooltip aus Datum, Zahl und maskierter Einheit',
     'abrechnungsDetailZeilen(item)': 'Unterzeilen, Texte und Betraege einzeln maskiert',
     'abrechnungsErgebnis(data)': 'Ergebnisfelder, Betraege per escapeHtml(euroText())',
@@ -100,13 +100,13 @@ AUSNAHMEN = {
     'intervalDays': 'Tage (Zahl)',
     'missingDays': 'Tage (Zahl)',
     'umschlag.version': 'Versionsnummer (Integer)',
-    'gi': 'Index der Aufgabengruppe (Zahl, Konzept D)',
-    'ai': 'Index der Aufgabe (Zahl, Konzept D)',
-    'i': 'Index des Befehlstreffers (Zahl, Konzept D)',
+    'gi': 'Index der Aufgabengruppe (Zahl)',
+    'ai': 'Index der Aufgabe (Zahl)',
+    'i': 'Index des Befehlstreffers (Zahl)',
     'stueck': 'escapeHtml(text.slice(...)) in befehlMarkiert',
     'befehlMarkiert(e.titel, woerter)': 'setzt nur maskierte Stuecke zusammen',
     'befehlMarkiert(e.info, woerter)': 'setzt nur maskierte Stuecke zusammen',
-    # Runde 4: sortierbare Tabellenkoepfe, Titel und Art nur als Konstanten im Code
+    # Sortierbare Tabellenkoepfe, Titel und Art nur als Konstanten im Code
     'art': "Sortierart 'text' oder 'zahl' aus sortierKopf-Aufrufen",
     "sortierKopf('Von', 'text')": 'Kopfzelle aus Konstanten',
     "sortierKopf('Bis', 'text')": 'Kopfzelle aus Konstanten',

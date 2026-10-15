@@ -291,7 +291,7 @@ def test_die_verbundene_anlage_geht_nicht_an_warmwasser():
 
 
 def test_nr_11_heisst_in_der_oberflaeche_allgemeinstrom():
-    """Runde 6: "Beleuchtung (Allgemeinstrom)" stand im Katalog und damit in
+    """Der Name "Beleuchtung (Allgemeinstrom)" stand im Katalog und damit in
     jeder Abrechnung. Der Name ist jetzt "Allgemeinstrom"; das Wort
     "Beleuchtung" bleibt nur als amtliche Kurzform in BEZEICHNUNGEN und als
     Erkennungswort fuer den Import."""
