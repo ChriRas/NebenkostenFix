@@ -437,7 +437,7 @@ def test_konzept_d_beleg_hochladen_links_und_blaettern():
     gewaehlt = SKRIPT[SKRIPT.index('async function belegGewaehlt'):]
     gewaehlt = gewaehlt[:gewaehlt.index('\n}\n')]
     # Ungespeicherte Eingaben fragen nach, die Blob-Adresse wird wieder frei.
-    assert 'darfDialogSchliessen' in gewaehlt and 'URL.createObjectURL(datei)' in gewaehlt
+    assert 'darfDialogSchliessen' in gewaehlt and 'huelle.vorschauAdresse(datei)' in gewaehlt
     assert 'URL.revokeObjectURL(neueDateiAdresse)' in SKRIPT
     # Die Datei landet im Dateifeld des Formulars, Speichern lädt sie mit hoch.
     assert "document.getElementById('invoice-file').files = uebergabe.files;" in SKRIPT

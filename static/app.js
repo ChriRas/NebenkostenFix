@@ -344,6 +344,11 @@ const huelle = {
         setTimeout(() => URL.revokeObjectURL(adresse), 1000);
     },
 
+    // Adresse für die Vorschau einer gewählten, noch nicht hochgeladenen Datei.
+    vorschauAdresse(datei) {
+        return URL.createObjectURL(datei);
+    },
+
     // Große Dateien (Umzugspaket, NK-164): im Browser direkt über einen Link,
     // ohne den ganzen Inhalt als Blob in den Speicher zu holen.
     async direktHerunterladen(adresse, dateiname) {
@@ -4741,7 +4746,7 @@ async function belegGewaehlt(input) {
     if (!datei || !(await darfDialogSchliessen(document.getElementById('invoice-modal')))) return;
     verwirfNeueDatei();
     neueDatei = datei;
-    neueDateiAdresse = URL.createObjectURL(datei);
+    neueDateiAdresse = huelle.vorschauAdresse(datei);
     eingangRechnung = 'neu';
     delete document.getElementById('eingang-vorschau').dataset.beleg;
     zeigeKostenAnsicht('alle');
