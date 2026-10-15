@@ -19,6 +19,9 @@
     <link rel="stylesheet" href="/static/vendor/phosphor/regular/style.css">
     <link rel="stylesheet" href="/static/vendor/phosphor/fill/style.css">
     <link rel="stylesheet" href="/static/style.css?v=12">
+    <!-- Einflug (Konzept D): kommt die Seite frisch von der Anmeldung
+         (formular.js, höchstens 15 s alt), zieht style.css die Indigo-Fläche weg. -->
+    <script>try { if (Date.now() - Number(sessionStorage.getItem('nk-einflug')) < 15000) document.documentElement.classList.add('einflug'); sessionStorage.removeItem('nk-einflug'); } catch (e) { /* ohne Speicher kein Einflug */ }</script>
     <script src="/static/vendor/chartjs/chart.umd.min.js"></script>
 </head>
 

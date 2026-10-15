@@ -186,3 +186,28 @@ body.anmeldung {
 @media (max-width: 560px) {
     .anmelde-karte { padding: var(--space-5); }
 }
+
+/* Swoosh nach dem Absenden (formular.js): Indigo wischt von links über die
+   Seite, Marke und Karte weichen nach links. Die App zieht die Fläche nach
+   rechts wieder weg (style.css, html.einflug). */
+body.anmeldung::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: 10;
+    background: var(--primary);
+    transform: scaleX(0);
+    transform-origin: left;
+    pointer-events: none;
+}
+body.anmeldung.swoosh::after { animation: wischen 360ms cubic-bezier(0.7, 0, 0.3, 1) forwards; }
+body.anmeldung.swoosh .anmelde-karte,
+body.anmeldung.swoosh .anmelde-marke { animation: weichen 300ms cubic-bezier(0.7, 0, 0.3, 1) forwards; }
+@keyframes wischen { to { transform: scaleX(1); } }
+@keyframes weichen { to { opacity: 0; transform: translateX(-48px); } }
+
+@media (prefers-reduced-motion: reduce) {
+    body.anmeldung.swoosh::after,
+    body.anmeldung.swoosh .anmelde-karte,
+    body.anmeldung.swoosh .anmelde-marke { animation: none; }
+}

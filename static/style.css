@@ -3753,6 +3753,57 @@ button:not(:disabled):active,
 .aufgabe:nth-child(4) { animation-delay: 80ms; }
 .aufgabe:nth-child(n+5) { animation-delay: 120ms; }
 
+/* Seitenwechsel mit Richtung (initTabs, seitenRichtung): ein Bereich weiter
+   oben in der Leiste sinkt von oben herein, Reiter desselben Bereichs
+   gleiten quer, ihr Seitenkopf bleibt dabei stehen. */
+@keyframes von-oben {
+    from { opacity: 0; transform: translateY(-8px); }
+}
+
+@keyframes von-rechts {
+    from { opacity: 0; transform: translateX(16px); }
+}
+
+@keyframes von-links {
+    from { opacity: 0; transform: translateX(-16px); }
+}
+
+.tab-content.active[data-richtung="zurueck"] > * { animation-name: von-oben; }
+.tab-content.active[data-richtung="rechts"] > * { animation-name: von-rechts; }
+.tab-content.active[data-richtung="links"] > * { animation-name: von-links; }
+.tab-content.active[data-richtung="rechts"] > .section-header,
+.tab-content.active[data-richtung="links"] > .section-header { animation: none; }
+
+/* Dialoge legen eine leichte Unschärfe über die Seite dahinter. */
+.modal-overlay.active {
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+}
+
+/* Einflug nach der Anmeldung (index.html, formular.js): die Indigo-Fläche
+   der Anmeldeseite gleitet nach rechts weg, die App rückt von links nach. */
+html.einflug body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    background: var(--primary);
+    pointer-events: none;
+    animation: deckblatt-weg 560ms cubic-bezier(0.7, 0, 0.3, 1) 120ms forwards;
+}
+
+html.einflug .app-container {
+    animation: einschieben 640ms var(--kurve) 160ms backwards;
+}
+
+@keyframes deckblatt-weg {
+    to { transform: translateX(100%); visibility: hidden; }
+}
+
+@keyframes einschieben {
+    from { opacity: 0; transform: translateX(-32px); }
+}
+
 @media (prefers-reduced-motion: reduce) {
     *:not(.ph-spin),
     *::before,

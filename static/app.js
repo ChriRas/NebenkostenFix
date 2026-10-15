@@ -472,6 +472,7 @@ function initTabs() {
     navItems.forEach(item => {
         item.addEventListener('click', (e) => {
             e.preventDefault();
+            const vorher = document.querySelector('.nav-item.active');
             navItems.forEach(nav => nav.classList.remove('active'));
             tabContents.forEach(tab => tab.classList.remove('active'));
             tabContents.forEach(tab => tab.style.display = 'none');
@@ -481,6 +482,7 @@ function initTabs() {
             const targetId = 'tab-' + item.dataset.tab;
             const targetTab = document.getElementById(targetId);
             if (targetTab) {
+                targetTab.dataset.richtung = seitenRichtung(vorher, item);
                 targetTab.classList.add('active');
                 targetTab.style.display = 'block';
                 
@@ -521,6 +523,17 @@ function initTabs() {
         });
     });
     zeigeBereich(document.querySelector('.nav-item.active'));
+}
+
+// Richtung des Seitenwechsels (Konzept D): ein Bereich weiter unten in der
+// Leiste steigt von unten auf, Reiter desselben Bereichs gleiten quer.
+function seitenRichtung(von, nach) {
+    if (!von || von === nach) return '';
+    if (von.dataset.gruppe === nach.dataset.gruppe) {
+        return von.compareDocumentPosition(nach) & Node.DOCUMENT_POSITION_FOLLOWING ? 'rechts' : 'links';
+    }
+    const gruppen = [...document.querySelectorAll('.leiste-eintrag')].map(e => e.dataset.gruppe);
+    return gruppen.indexOf(nach.dataset.gruppe) > gruppen.indexOf(von.dataset.gruppe) ? 'vor' : 'zurueck';
 }
 
 // Konzept D: die Leiste zeigt den Bereich, die Reiter im Seitenkopf seine
@@ -4480,6 +4493,27 @@ function zeigeKostenAnsicht(ansicht) {
     renderDocuments();
 }
 
+// Zahlen zählen kurz vom alten zum neuen Wert, statt zu springen. Ohne
+// Bewegungswunsch (oder ohne Bildtakt) steht sofort der Endwert da.
+function zaehleHoch(el, ziel, text) {
+    const start = Number(el.dataset.wert) || 0;  // die gerade sichtbare Zahl, auch mitten im Lauf
+    const zeige = (wert) => { el.dataset.wert = wert; el.textContent = text(wert); };
+    const lauf = el.zaehlLauf = (el.zaehlLauf || 0) + 1;
+    if (start === ziel || typeof requestAnimationFrame !== 'function'
+        || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+        zeige(ziel);
+        return;
+    }
+    const beginn = performance.now();
+    const schritt = (jetzt) => {
+        if (el.zaehlLauf !== lauf) return;  // ein neuerer Wert hat übernommen
+        const anteil = Math.min(1, (jetzt - beginn) / 600);
+        zeige(anteil < 1 ? start + (ziel - start) * (1 - (1 - anteil) ** 3) : ziel);
+        if (anteil < 1) requestAnimationFrame(schritt);
+    };
+    requestAnimationFrame(schritt);
+}
+
 // Kopfzahl wie im Entwurf: „12.345,67 € aus 8 Rechnungen“.
 function zeigeKopfzahl() {
     const kopf = document.getElementById('kosten-kopfzahl');
@@ -4487,8 +4521,8 @@ function zeigeKopfzahl() {
         kopf.textContent = 'Belege hochladen und als Rechnung übernehmen';
         return;
     }
-    const summe = document.createElement('strong');
-    summe.textContent = euroText(invoices.reduce((s, i) => s + Number(i.amount || 0), 0));
+    const summe = kopf.querySelector('strong') || document.createElement('strong');
+    zaehleHoch(summe, invoices.reduce((s, i) => s + Number(i.amount || 0), 0), euroText);
     kopf.replaceChildren(summe, invoices.length === 1 ? ' aus einer Rechnung' : ` aus ${invoices.length} Rechnungen`);
 }
 

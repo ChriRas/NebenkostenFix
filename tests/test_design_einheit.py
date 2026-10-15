@@ -526,3 +526,32 @@ def test_kategorie_chip_zaehlt_einzahl():
     # Der Chip der Rechnungskategorie zeigte „1 Einträge“.
     assert ' Einträge</span>' not in SKRIPT.replace("'Eintrag' : 'Einträge'}</span>", '')
     assert "catInvoices.length === 1 ? 'Eintrag' : 'Einträge'" in SKRIPT
+
+
+def test_konzept_d_login_swoosh_und_einflug():
+    """Runde 2: Nach „Anmelden“ wischt Indigo über die Seite, die App schiebt
+    sich danach herein. Beides entfällt ohne Bewegungswunsch."""
+    formular = (WURZEL / 'static' / 'formular.js').read_text(encoding='utf-8')
+    for teil in ("'nk-einflug'", 'requestSubmit', 'prefers-reduced-motion', "'pageshow'"):
+        assert teil in formular, teil
+    assert '@keyframes wischen' in ANMELDUNG
+    ruhig = ANMELDUNG[ANMELDUNG.rindex('prefers-reduced-motion'):]
+    assert '.swoosh' in ruhig and 'animation: none' in ruhig
+    assert "classList.add('einflug')" in SEITE and "removeItem('nk-einflug')" in SEITE
+    for teil in ('html.einflug body::after', '@keyframes deckblatt-weg', 'html.einflug .app-container'):
+        assert teil in STIL, teil
+    # Einflug-Regeln stehen vor dem zentralen Reduced-Motion-Block, der sie abschaltet.
+    assert STIL.index('@keyframes deckblatt-weg') < STIL.rindex('prefers-reduced-motion')
+
+
+def test_konzept_d_gerichtete_seitenwechsel_und_kopfzahl():
+    for richtung in ('zurueck', 'rechts', 'links'):
+        assert f'.tab-content.active[data-richtung="{richtung}"] > *' in STIL, richtung
+    assert 'targetTab.dataset.richtung = seitenRichtung(vorher, item)' in SKRIPT
+    assert 'backdrop-filter: blur(' in STIL
+    kopf = SKRIPT[SKRIPT.index('function zeigeKopfzahl'):]
+    assert 'zaehleHoch(summe' in kopf[:kopf.index('\n}')]
+    hoch = SKRIPT[SKRIPT.index('function zaehleHoch'):]
+    hoch = hoch[:hoch.index('\n}')]
+    # Ein neuer Lauf startet bei der sichtbaren Zahl, nicht beim alten Ziel (sonst Sprung).
+    assert 'el.dataset.wert = wert' in hoch and 'el.dataset.wert = ziel' not in hoch

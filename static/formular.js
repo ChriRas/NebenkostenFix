@@ -31,3 +31,19 @@ document.addEventListener('invalid', (e) => deutschPruefen(e.target), true);
 // liest beim Tippen die Meldung neu und zeigte dann den Systemtext
 // ("Please lengthen this text ... using 2 characters").
 ['input', 'change'].forEach(art => document.addEventListener(art, (e) => deutschPruefen(e.target), true));
+
+// Swoosh nach der Anmeldung (Konzept D): Indigo wischt über die Seite, dann
+// geht das Formular ab. Der Zeitstempel sagt der App, dass sie die Fläche
+// wieder wegziehen soll (index.html). Ohne Bewegungswunsch geht es sofort ab.
+document.addEventListener('submit', (e) => {
+    const form = e.target;
+    if (e.defaultPrevented || !form.classList.contains('anmelde-karte')) return;
+    try { sessionStorage.setItem('nk-einflug', String(Date.now())); } catch (err) { /* ohne Speicher kein Einflug */ }
+    if (document.body.classList.contains('swoosh') || !form.requestSubmit
+        || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    e.preventDefault();
+    document.body.classList.add('swoosh');
+    setTimeout(() => form.requestSubmit(e.submitter), 360);
+});
+// Zurück auf die Anmeldeseite (Seiten-Cache des Browsers): Fläche entfernen.
+window.addEventListener('pageshow', () => document.body.classList.remove('swoosh'));
