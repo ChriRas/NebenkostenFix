@@ -9,7 +9,8 @@ Job ein.
 
 Bilder und Paket gehen in einem Zip an FileUploadUrl. Das ersetzt das Zip, das
 publish hochgeladen hat, deshalb liegt die MSIX (aus msix/) mit darin. Fehlen
-Adresse oder MSIX, bleiben die alten Bilder und nur die Neuerungen wechseln.
+Adresse, offenes Paket oder MSIX oder scheitert der Upload, bleiben die alten
+Bilder und nur die Neuerungen wechseln.
 
     python scripts/store_neuerungen.py <produkt-id>
 
@@ -70,6 +71,9 @@ def packen(einreichung: dict, bilder: list[Path], msix: Path, ziel: Path) -> Non
     """Zip für FileUploadUrl: noch offene Pakete und die Bilder."""
     pakete = [paket['FileName'] for paket in einreichung.get('ApplicationPackages') or []
               if paket.get('FileStatus') == 'PendingUpload']
+    if not pakete:
+        # Ein Zip nur mit Bildern ersetzte das von publish samt Paket
+        raise FileNotFoundError('Die Einreichung hat kein offenes Paket.')
     fehlt = [name for name in pakete if not (msix / Path(name).name).is_file()]
     if fehlt:
         raise FileNotFoundError(f'Paket nicht in {msix}: {", ".join(fehlt)}')
@@ -99,6 +103,7 @@ def _msstore(*argumente: str) -> bytes:
 def main(produkt: str) -> None:
     einreichung = json.loads(_msstore('submission', 'get', produkt))
     setzen(einreichung, neuerungen(EINTRAG.read_text(encoding='utf-8')))
+    ohne_bilder = json.dumps(einreichung)
     bilder = sorted(BILDER.glob('*.png'))
     with tempfile.TemporaryDirectory() as ordner:
         archiv = Path(ordner) / 'paket.zip'
@@ -113,7 +118,15 @@ def main(produkt: str) -> None:
         datei.write_text(json.dumps(einreichung), encoding='utf-8')
         _msstore('submission', 'update', produkt, '--payload', str(datei))
         if archiv.exists():
-            hochladen(einreichung['FileUploadUrl'], archiv)
+            try:
+                hochladen(einreichung['FileUploadUrl'], archiv)
+            except OSError as fehler:
+                # Ohne Upload stünden die Bilder auf PendingUpload und der Commit
+                # scheiterte. Nur den Fehlertyp ausgeben: die Adresse ist signiert.
+                print(f'Store-Bilder bleiben unverändert: Upload gescheitert '
+                      f'({type(fehler).__name__})', file=sys.stderr)
+                datei.write_text(ohne_bilder, encoding='utf-8')
+                _msstore('submission', 'update', produkt, '--payload', str(datei))
 
 
 if __name__ == '__main__':

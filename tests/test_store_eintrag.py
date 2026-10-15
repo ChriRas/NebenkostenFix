@@ -175,7 +175,17 @@ def test_zip_enthaelt_offenes_paket_und_bilder(tmp_path):
         store_neuerungen.packen(einreichung, [bild], msix, tmp_path / 'neu.zip')
 
 
-def _ablauf(monkeypatch, tmp_path, einreichung):
+def test_zip_ohne_offenes_paket_wird_nicht_gebaut(tmp_path):
+    """Ein Zip nur mit Bildern ersetzte das von publish und damit das Paket."""
+    bild = _png(tmp_path / '1-heute.png', 1920, 1080)
+    ziel = tmp_path / 'paket.zip'
+    for pakete in ([], [{'FileName': 'NebenkostenFix-0.9.0.msix', 'FileStatus': 'Uploaded'}]):
+        with pytest.raises(FileNotFoundError):
+            store_neuerungen.packen({'ApplicationPackages': pakete}, [bild], tmp_path, ziel)
+        assert not ziel.exists()
+
+
+def _ablauf(monkeypatch, tmp_path, einreichung, hochladen=None):
     """main() ohne Netz: msstore und Upload werden mitgeschrieben."""
     import json
     aufrufe = []
@@ -187,8 +197,8 @@ def _ablauf(monkeypatch, tmp_path, einreichung):
         return b''
 
     monkeypatch.setattr(store_neuerungen, '_msstore', msstore)
-    monkeypatch.setattr(store_neuerungen, 'hochladen',
-                        lambda adresse, datei: aufrufe.append(('hochladen', adresse, datei.exists())))
+    monkeypatch.setattr(store_neuerungen, 'hochladen', hochladen or (
+        lambda adresse, datei: aufrufe.append(('hochladen', adresse, datei.exists()))))
     bilder = tmp_path / 'bilder'
     bilder.mkdir()
     _png(bilder / '1-heute.png', 1920, 1080)
@@ -222,3 +232,23 @@ def test_ohne_paket_bleiben_die_alten_bilder(monkeypatch, tmp_path):
     deutsch = aufrufe[0][1]['Listings']['de-de']['BaseListing']
     assert 'Images' not in deutsch
     assert deutsch['ReleaseNotes'] != 'alt'
+
+
+def test_gescheiterter_upload_nimmt_die_bilder_zurueck(monkeypatch, tmp_path):
+    """Nach dem Update stünden sonst Bilder auf PendingUpload, die nie ankommen,
+    und die Einreichung scheiterte beim Commit."""
+    (tmp_path / 'msix').mkdir()
+    (tmp_path / 'msix' / 'a.msix').write_bytes(b'paket')
+    einreichung = _einreichung()
+    einreichung['FileUploadUrl'] = 'https://blob.invalid/x?sig=y'
+    einreichung['ApplicationPackages'] = [{'FileName': 'a.msix', 'FileStatus': 'PendingUpload'}]
+
+    def scheitern(adresse, datei):
+        raise OSError('Verbindung abgebrochen')
+
+    aufrufe = _ablauf(monkeypatch, tmp_path, einreichung, hochladen=scheitern)
+    assert [a[0] for a in aufrufe] == ['update', 'update']
+    assert aufrufe[0][1]['Listings']['de-de']['BaseListing']['Images']
+    zurueck = aufrufe[1][1]['Listings']['de-de']['BaseListing']
+    assert 'Images' not in zurueck
+    assert zurueck['ReleaseNotes'] != 'alt'
