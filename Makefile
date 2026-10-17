@@ -55,7 +55,7 @@ kern:
 	  tests/test_zahlformat_umlage.py tests/test_lohnausweis_35a.py \
 	  tests/test_vorauszahlung.py tests/test_vorauszahlung_soll_ist.py tests/test_jahressprung.py \
 	  tests/test_zahlungsstand.py \
-	  tests/test_fristenkalender.py \
+	  tests/test_fristenkalender.py tests/test_kaltmiete_soll.py \
 	  tests/test_mehrjahresblick.py \
 	  tests/test_jahreswechsel.py \
 	  tests/test_pruefstand.py \

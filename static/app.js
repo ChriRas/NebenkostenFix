@@ -2521,6 +2521,15 @@ async function fetchTenants() {
                 vzBtn.setAttribute('aria-label', 'Vorauszahlungen');
                 vzBtn.onclick = () => openVorauszahlungModal(t);
 
+                // Phase 49: die vereinbarte Kaltmiete ab Stichtag; der
+                // Fristenkalender erinnert an die nächste Mieterhöhung.
+                const kmBtn = document.createElement('button');
+                kmBtn.className = 'btn-icon';
+                kmBtn.innerHTML = '<i class="ph ph-house-line" aria-hidden="true"></i>';
+                kmBtn.title = 'Kaltmiete';
+                kmBtn.setAttribute('aria-label', 'Kaltmiete');
+                kmBtn.onclick = () => openKaltmieteModal(t);
+
                 // NK-078: Auskunft als ZIP -- JSON mit allen Zeilen zum
                 // Mietverhaeltnis und die Dateien dazu.
                 const exportBtn = document.createElement('button');
@@ -2538,6 +2547,7 @@ async function fetchTenants() {
                 tdActions.appendChild(profileBtn);
                 tdActions.appendChild(householdBtn);
                 tdActions.appendChild(vzBtn);
+                tdActions.appendChild(kmBtn);
                 tdActions.appendChild(exportBtn);
                 tdActions.appendChild(deleteBtn);
                 
@@ -4075,6 +4085,80 @@ async function loescheVorauszahlungSoll(id, tenantId) {
         await ladeVorauszahlungen(tenantId);
     } catch (e) {
         showError(meldungZu(e, 'Fehler beim Löschen des Solls.'));
+    }
+}
+
+// --- Phase 49: Kaltmiete-Soll, Erinnerung an die Mieterhöhung ---
+
+async function openKaltmieteModal(tenant) {
+    document.getElementById('km-tenant-name').textContent = tenant.name;
+    document.getElementById('km-tenant-id').value = tenant.id;
+    document.getElementById('km-betrag').value = '';
+    document.getElementById('km-indexmiete').checked = false;
+    const daten = await ladeKaltmiete(tenant.id);
+    // Ohne Stichtag ist der Einzug der naheliegende erste.
+    document.getElementById('km-gueltig-ab').value =
+        daten && daten.soll.length === 0 ? String(tenant.move_in_date || '').slice(0, 10) : '';
+    document.getElementById('kaltmiete-modal').classList.add('active');
+}
+
+function closeKaltmieteModal() {
+    document.getElementById('kaltmiete-modal').classList.remove('active');
+}
+
+async function ladeKaltmiete(tenantId) {
+    let d;
+    try {
+        const res = await fetch(`/api/tenants/${tenantId}/kaltmiete`);
+        if (!res.ok) throw await serverFehler(res);
+        d = await res.json();
+    } catch (e) {
+        showError(meldungZu(e, 'Fehler beim Laden der Kaltmiete.'));
+        return null;
+    }
+    document.getElementById('km-soll-liste').innerHTML = d.soll.length === 0
+        ? '<tr><td colspan="3" class="text-muted" style="padding: 8px;">Noch keine Kaltmiete hinterlegt.</td></tr>'
+        : d.soll.map(s => `<tr>
+            <td style="padding: 8px;">${escapeHtml(datumText(s.gueltig_ab))}${s.indexmiete ? ' · Indexmiete (§ 557b)' : ''}</td>
+            <td style="padding: 8px; text-align: right;">${escapeHtml(euroText(s.betrag))}</td>
+            <td><button type="button" class="btn-icon" aria-label="Kaltmiete löschen" title="Kaltmiete löschen" onclick="loescheKaltmieteSoll(${Number(s.id)}, ${Number(tenantId)})"><i class="ph ph-trash" aria-hidden="true"></i></button></td>
+        </tr>`).join('');
+    return d;
+}
+
+async function saveKaltmieteSoll() {
+    const tenantId = document.getElementById('km-tenant-id').value;
+    const gueltigAb = document.getElementById('km-gueltig-ab').value;
+    const betrag = document.getElementById('km-betrag').value;
+    const indexmiete = document.getElementById('km-indexmiete').checked;
+    if (!gueltigAb || betrag === '') {
+        showError('Bitte geben Sie an, ab wann welche Kaltmiete gilt.');
+        return;
+    }
+    try {
+        const res = await fetch(`/api/tenants/${tenantId}/kaltmiete_soll`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ gueltig_ab: gueltigAb, betrag: betrag, indexmiete: indexmiete })
+        });
+        if (!res.ok) throw await serverFehler(res);
+        document.getElementById('km-gueltig-ab').value = '';
+        document.getElementById('km-betrag').value = '';
+        document.getElementById('km-indexmiete').checked = false;
+        await ladeKaltmiete(tenantId);
+    } catch (e) {
+        showError(meldungZu(e, 'Fehler beim Speichern der Kaltmiete.'));
+    }
+}
+
+async function loescheKaltmieteSoll(id, tenantId) {
+    if (!await frageLoeschen('Möchten Sie diese Kaltmiete wirklich löschen?')) return;
+    try {
+        const res = await fetch(`/api/kaltmiete_soll/${id}`, { method: 'DELETE' });
+        if (!res.ok) throw await serverFehler(res);
+        await ladeKaltmiete(tenantId);
+    } catch (e) {
+        showError(meldungZu(e, 'Fehler beim Löschen der Kaltmiete.'));
     }
 }
 

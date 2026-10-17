@@ -43,7 +43,8 @@ BASISREVISION = "63738d5329b4"
 # NK-261: ``d9a3f2c6e1b4`` legt die Tabelle ``vorauszahlung_soll`` an (R-VZ-02).
 # NK-268: ``a8c4e2f61d93`` fuegt ``cost_invoices.art_35a`` und ``lohnanteil`` hinzu (R-35A-01).
 # Runde 6: ``b4e7c1d92a58`` benennt Kostenart Nr. 11 in „Allgemeinstrom“ um (nur Daten).
-KOPFREVISION = "b4e7c1d92a58"
+# Phase 49: ``f7c2e9a4b6d1`` legt die Tabelle ``kaltmiete_soll`` an (Kaltmiete + Mieterhöhung).
+KOPFREVISION = "f7c2e9a4b6d1"
 
 
 def _umgebung(dbdatei: Path, tmp_path: Path) -> dict:

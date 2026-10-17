@@ -135,7 +135,7 @@ def test_umschalter_und_container_sind_verdrahtet():
     assert 'zeigeInvoiceZeitleiste()' in seite
     assert 'id="invoices-zeitleiste"' in seite
     assert 'style.css?v=14' in seite
-    assert 'app.js?v=30' in seite
+    assert 'app.js?v=31' in seite
     with open('static/app.js', encoding='utf-8') as datei:
         skript = datei.read()
     assert "fetch('/api/invoices/zeitleiste')" in skript

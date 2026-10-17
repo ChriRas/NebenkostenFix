@@ -8,6 +8,7 @@ RFC 5545 heraus. Die Eingaben sind schlichte Tupel; die Abfragen macht
 
 from __future__ import annotations
 
+import calendar
 from datetime import date, datetime, timedelta
 
 from nebenkostenfix.frist import einwendungsfrist
@@ -26,13 +27,38 @@ def naechste_ablesung(letztes_ende: date) -> date:
     return ein_jahr_nach(letztes_ende + timedelta(days=1)) - timedelta(days=1)
 
 
-def termine(berichte, letzte_zeitraeume, soll, zaehler, heute: date) -> list[dict]:
+def _monate_weiter(d: date, monate: int) -> date:
+    """``d`` um Kalendermonate weiter; ein fehlender Tag klemmt ans Monatsende.
+
+    Auf den 31.01. folgt 15 Monate spaeter der 30.04.: der Monat hat keinen
+    31., und die Frist rutscht deshalb nicht in den Folgemonat.
+    """
+    gesamt = d.month - 1 + monate
+    jahr, monat = d.year + gesamt // 12, gesamt % 12 + 1
+    letzter = calendar.monthrange(jahr, monat)[1]
+    return date(jahr, monat, min(d.day, letzter))
+
+
+def mietanpassung(letzte: date, indexmiete: bool = False) -> date:
+    """Der frueheste Tag, an dem die naechste Erhoehung verlangt werden darf.
+
+    § 558 BGB: mindestens 15 Monate muessen seit der letzten Erhoehung
+    vergangen sein -- am 15-Monats-Tag selbst ist es so weit. Bei der
+    Indexmiete nach § 557b BGB reicht ein Jahr seit der letzten Aenderung.
+    """
+    return _monate_weiter(letzte, 12 if indexmiete else 15)
+
+
+def termine(berichte, letzte_zeitraeume, soll, zaehler, heute: date,
+            kaltmiete=None) -> list[dict]:
     """Alle Termine ab ``heute``, nach Datum sortiert.
 
     ``berichte``: (id, wer, frist_ende, zugestellt_am) je Abrechnung.
     ``letzte_zeitraeume``: (haus_id, haus, Ende des letzten Zeitraums).
     ``soll``: (id, wer, gueltig_ab, betrag) je Vorauszahlungs-Soll.
     ``zaehler``: (id, was, geeicht_bis) je Zaehler, der nicht abgeloest ist.
+    ``kaltmiete``: (id, wer, gueltig_ab, indexmiete) je Kaltmiete-Soll --
+    nur der juengste Stichtag je Mieter, er ist die letzte Erhoehung.
     """
     liste = []
 
@@ -60,6 +86,9 @@ def termine(berichte, letzte_zeitraeume, soll, zaehler, heute: date) -> list[dic
         neu('vorauszahlung', sid, ab, f'Neue Vorauszahlung: {wer}, {euro} € je Monat')
     for zid, was, bis in zaehler:
         neu('eichfrist', zid, bis, f'Eichfrist endet: {was}')
+    for kid, wer, ab, indexmiete in (kaltmiete or []):
+        tag = mietanpassung(ab, indexmiete)
+        neu('mietanpassung', kid, tag, f'Früheste Mieterhöhung: {wer}')
     return sorted(liste, key=lambda t: (t['datum'], t['titel']))
 
 

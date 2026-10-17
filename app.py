@@ -152,6 +152,9 @@ Stammdaten -- Immobilie, Wohnung, Mieter, Anbieter, Kostenart
   GET         /api/tenants/<int:tenant_id>/vorauszahlungen -> get_vorauszahlungen
   POST        /api/tenants/<int:tenant_id>/vorauszahlung_soll -> save_vorauszahlung_soll
   DELETE      /api/vorauszahlung_soll/<int:id>             -> delete_vorauszahlung_soll
+  GET         /api/tenants/<int:tenant_id>/kaltmiete       -> get_kaltmiete
+  POST        /api/tenants/<int:tenant_id>/kaltmiete_soll  -> save_kaltmiete_soll
+  DELETE      /api/kaltmiete_soll/<int:id>                 -> delete_kaltmiete_soll
   GET         /api/fristen                                 -> get_fristen
   GET         /api/fristen.ics                             -> get_fristen_ics
   GET         /api/providers                               -> get_providers
@@ -284,7 +287,7 @@ from nebenkostenfix.heizung import (
     HeizungsFehler, pruefe_anteil, pruefe_kostenart, pruefe_versorgungsart,
     pruefe_warmwasserweg,
 )
-from nebenkostenfix.models import db, User, Property, Apartment, Tenant, Haushaltsgroesse, CostCategory, CostInvoice, Meter, MeterReading, TenantCostProfile, InvoiceDocument, Provider, TenantBillingReport, BillingReportCategory, BillingReportVersion, AnschreibenVorlage, Vermieterdaten, Heizungsanlage, Payment, VorauszahlungSoll
+from nebenkostenfix.models import db, User, Property, Apartment, Tenant, Haushaltsgroesse, CostCategory, CostInvoice, Meter, MeterReading, TenantCostProfile, InvoiceDocument, Provider, TenantBillingReport, BillingReportCategory, BillingReportVersion, AnschreibenVorlage, Vermieterdaten, Heizungsanlage, Payment, VorauszahlungSoll, KaltmieteSoll
 from nebenkostenfix.girocode_generator import iban_pruefen, iban_saeubern, vermieter_art, vermieter_ausweis
 from nebenkostenfix.abrechnung_version import schnappschuss, json_sicher, SOFTWARE_VERSION, REGEL_VERSION, aenderungen_seit, gleich_gerechnet, mit_heutigen_namen
 from nebenkostenfix.anschreiben import ARTEN, PLATZHALTER, text_fuer, vorgabe
@@ -1370,6 +1373,62 @@ def delete_vorauszahlung_soll(id):
     return jsonify({'message': 'Soll gelöscht'}), 200
 
 
+# --- Phase 49: die vereinbarte Kaltmiete ab Stichtag ---
+def _kaltmiete_setzen(tenant, gueltig_ab, betrag, indexmiete):
+    """Wie beim Vorauszahlungs-Soll: derselbe Stichtag berichtigt."""
+    vorhanden = next(
+        (s for s in tenant.kaltmiete_soll if s.gueltig_ab == gueltig_ab), None)
+    if vorhanden:
+        vorhanden.betrag = betrag
+        vorhanden.indexmiete = indexmiete
+        return vorhanden, False
+    eintrag = KaltmieteSoll(tenant_id=tenant.id, gueltig_ab=gueltig_ab,
+                            betrag=betrag, indexmiete=indexmiete)
+    db.session.add(eintrag)
+    return eintrag, True
+
+
+@app.route('/api/tenants/<int:tenant_id>/kaltmiete', methods=['GET'])
+def get_kaltmiete(tenant_id):
+    """Der Stichtagsverlauf der Kaltmiete; der Soll/Ist-Abgleich folgt in Phase 53."""
+    tenant = Tenant.query.get_or_404(tenant_id)
+    return jsonify({'soll': [
+        {'id': s.id, 'gueltig_ab': s.gueltig_ab.isoformat(),
+         'betrag': f'{s.betrag:.2f}', 'indexmiete': s.indexmiete}
+        for s in tenant.kaltmiete_soll]}), 200
+
+
+@app.route('/api/tenants/<int:tenant_id>/kaltmiete_soll', methods=['POST'])
+def save_kaltmiete_soll(tenant_id):
+    """Wie bei der Vorauszahlung: derselbe Stichtag berichtigt."""
+    tenant = Tenant.query.get_or_404(tenant_id)
+    eingabe = Eingabe.aus_request()
+    gueltig_ab = eingabe.datum('gueltig_ab', pflicht=True)
+    betrag = eingabe.geldbetrag('betrag', pflicht=True, min_wert=0)
+    indexmiete = eingabe.wahrheit('indexmiete')
+    if gueltig_ab < tenant.move_in_date:
+        raise EingabeFehler(
+            f'Der Stichtag {gueltig_ab.isoformat()} liegt vor dem Einzug am '
+            f'{tenant.move_in_date.isoformat()}.', 'gueltig_ab')
+    if tenant.move_out_date and gueltig_ab > tenant.move_out_date:
+        raise EingabeFehler(
+            f'Der Stichtag {gueltig_ab.isoformat()} liegt nach dem Auszug am '
+            f'{tenant.move_out_date.isoformat()}.', 'gueltig_ab')
+    eintrag, neu = _kaltmiete_setzen(tenant, gueltig_ab, betrag, indexmiete)
+    db.session.commit()
+    if neu:
+        return jsonify({'message': 'Soll angelegt', 'id': eintrag.id}), 201
+    return jsonify({'message': 'Soll aktualisiert', 'id': eintrag.id}), 200
+
+
+@app.route('/api/kaltmiete_soll/<int:id>', methods=['DELETE'])
+def delete_kaltmiete_soll(id):
+    eintrag = KaltmieteSoll.query.get_or_404(id)
+    db.session.delete(eintrag)
+    db.session.commit()
+    return jsonify({'message': 'Soll gelöscht'}), 200
+
+
 # --- Fristenkalender (NK-262, R-FRIST-05) ---
 def _fristen(heute):
     """Alle Termine ab heute, ueber alle Immobilien; gesperrte Mieter fehlen."""
@@ -1399,7 +1458,14 @@ def _fristen(heute):
         [(s.id, s.tenant.name, s.gueltig_ab, s.betrag) for s in VorauszahlungSoll.query.all()
          if s.tenant.gesperrt_bis is None
          and not (s.tenant.move_out_date and s.gueltig_ab > s.tenant.move_out_date)],
-        zaehler, heute)
+        zaehler, heute,
+        # Phase 49: je Mieter nur der jüngste Stichtag -- er ist die letzte
+        # Erhöhung, von der die Frist zählt. Ältere Stichtage sind überholt.
+        [(s.id, s.tenant.name, s.gueltig_ab, s.indexmiete)
+         for s in KaltmieteSoll.query.order_by(KaltmieteSoll.gueltig_ab).all()
+         if s.tenant.gesperrt_bis is None
+         and not (s.tenant.move_out_date and s.gueltig_ab > s.tenant.move_out_date)
+         and s.id == max(k.id for k in s.tenant.kaltmiete_soll)])
 
 
 @app.route('/api/fristen', methods=['GET'])

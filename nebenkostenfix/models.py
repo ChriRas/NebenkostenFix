@@ -1,6 +1,8 @@
 from flask_sqlalchemy import SQLAlchemy
 from datetime import date, datetime
 
+import sqlalchemy as sa
+
 from nebenkostenfix import zeit
 from nebenkostenfix.abrechnungsart import GUELTIG, VORGABE
 from nebenkostenfix.betrkv import NUMMERN as BETRKV_NUMMERN
@@ -108,6 +110,11 @@ class Tenant(db.Model):
     vorauszahlung_soll = db.relationship(
         'VorauszahlungSoll', backref='tenant', lazy=True,
         cascade="all, delete-orphan", order_by='VorauszahlungSoll.gueltig_ab')
+    # Phase 49: die vereinbarte Kaltmiete ab Stichtag, mit Erinnerung an
+    # die nächste Mieterhöhung im Fristenkalender.
+    kaltmiete_soll = db.relationship(
+        'KaltmieteSoll', backref='tenant', lazy=True,
+        cascade="all, delete-orphan", order_by='KaltmieteSoll.gueltig_ab')
 
     def personenanzahl_am(self, stichtag: date) -> int:
         """Wie viele Personen an diesem Tag in der Einheit wohnten.
@@ -177,6 +184,33 @@ class VorauszahlungSoll(db.Model):
         db.UniqueConstraint('tenant_id', 'gueltig_ab',
                             name='uq_vorauszahlung_soll_tenant_gueltig_ab'),
         db.CheckConstraint('betrag >= 0', name='ck_vorauszahlung_soll_betrag'),
+    )
+
+
+class KaltmieteSoll(db.Model):
+    """Die vereinbarte Kaltmiete je Monat ab einem Stichtag (Phase 49).
+
+    Nach dem Muster der Vorauszahlung: ein Eintrag gilt ab gueltig_ab bis
+    zum naechsten. Er traegt den Betrag, der nirgends mehr stand, und
+    speist die Erinnerung an die naechste Mieterhoehung im Fristenkalender
+    (§ 558: 15 Monate, Indexmiete § 557b: 12 Monate).
+    """
+
+    __tablename__ = 'kaltmiete_soll'
+    id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(db.Integer, db.ForeignKey('tenants.id'), nullable=False)
+    gueltig_ab = db.Column(db.Date, nullable=False)
+    betrag = db.Column(Geld, nullable=False)
+    # Eine Indexanpassung (§ 557b) ist die letzte Aenderung; ab ihr zaehlt
+    # der Kalender ein Jahr, sonst 15 Monate (§ 558). Der Server-Grundwert
+    # steht hier wie in der Migration, damit der Schema-Abgleich ruhig bleibt.
+    indexmiete = db.Column(db.Boolean, nullable=False, default=False,
+                           server_default=sa.false())
+
+    __table_args__ = (
+        db.UniqueConstraint('tenant_id', 'gueltig_ab',
+                            name='uq_kaltmiete_soll_tenant_gueltig_ab'),
+        db.CheckConstraint('betrag >= 0', name='ck_kaltmiete_soll_betrag'),
     )
 
 class TenantCostProfile(db.Model):

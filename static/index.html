@@ -1904,6 +1904,54 @@
         </div>
     </div>
 
+    <!-- Phase 49: Kaltmiete-Soll mit Erinnerung an die Mieterhöhung -->
+    <div class="modal-overlay" id="kaltmiete-modal">
+        <div class="modal glass-panel dialog-vorauszahlung">
+            <div class="modal-header">
+                <h2>Kaltmiete: <span id="km-tenant-name"></span></h2>
+                <button class="btn-icon" aria-label="Schließen" onclick="closeKaltmieteModal()"><i class="ph ph-x"></i></button>
+            </div>
+            <div class="modal-body">
+                <p class="karten-text">
+                    Die vereinbarte Kaltmiete gilt ab ihrem Stichtag bis zum nächsten.
+                    An der letzten Erhöhung misst der Fristenkalender, wann die nächste
+                    verlangt werden darf: 15 Monate nach § 558 BGB, bei der Indexmiete
+                    (§ 557b BGB) 12 Monate. Den VPI tragen Sie von Hand ein.
+                </p>
+                <input type="hidden" id="km-tenant-id">
+                <table class="tabelle tabelle-luftig abstand-unten-klein">
+                    <thead>
+                        <tr>
+                            <th>Gültig ab</th>
+                            <th class="text-right">Kaltmiete je Monat</th>
+                            <th class="spalte-knopf"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="km-soll-liste"></tbody>
+                </table>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="km-gueltig-ab">Gültig ab</label>
+                        <input type="date" id="km-gueltig-ab">
+                    </div>
+                    <div class="form-group">
+                        <label for="km-betrag">Kaltmiete je Monat (€)</label>
+                        <input type="number" id="km-betrag" step="0.01" min="0">
+                    </div>
+                    <div class="form-group">
+                        <label for="km-indexmiete">
+                            <input type="checkbox" id="km-indexmiete"> Indexmiete (§ 557b)
+                        </label>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-secondary" onclick="closeKaltmieteModal()">Schließen</button>
+                <button type="button" class="btn-primary" onclick="saveKaltmieteSoll()">Soll speichern</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Add Meter Modal -->
     <div class="modal-overlay" id="meter-modal">
         <div class="modal glass-panel">
@@ -2771,7 +2819,7 @@
     </div>
     <script src="/static/formular.js?v=2"></script>
     <script src="/static/umzug.js?v=1"></script>
-    <script src="/static/app.js?v=30"></script>
+    <script src="/static/app.js?v=31"></script>
 </body>
 
 </html>

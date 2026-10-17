@@ -625,6 +625,79 @@ async function vorauszahlungPruefen() {
         && html.includes('id="vorauszahlung-modal"'));
 }
 
+// --- Phase 49: Kaltmiete-Soll und Erinnerung an die Mieterhöhung -------------
+// Wie beim VZ-Soll: Laden mit gestubbtem fetch, Speichern schickt Stichtag,
+// Betrag und Indexmiete-Flag und lädt neu.
+async function kaltmietePruefen() {
+    const funktion = name => {
+        const m = appQuelle.match(new RegExp(`async function ${name}\\([^)]*\\) \\{[\\s\\S]*?\\n\\}`));
+        if (!m) throw new Error(`${name} nicht gefunden`);
+        return m[0];
+    };
+    const quelltext = funktion('ladeKaltmiete') + funktion('saveKaltmieteSoll');
+    const lauf = (felder, antworten) => {
+        const aufrufe = [];
+        const meldungen = [];
+        const dokument = {
+            getElementById(id) {
+                if (!(id in felder)) felder[id] = { value: '', innerHTML: '', textContent: '', hidden: false, checked: false };
+                return felder[id];
+            },
+        };
+        const holen = (url, opt = {}) => {
+            aufrufe.push({ url, methode: opt.method || 'GET', koerper: opt.body });
+            const daten = antworten.shift() ?? {};
+            return Promise.resolve({ ok: true, json: () => Promise.resolve(daten) });
+        };
+        const fns = new Function('document', 'fetch', 'showError', 'serverFehler', 'meldungZu',
+            'escapeHtml', 'datumText', 'euroText',
+            quelltext + '; return { ladeKaltmiete, saveKaltmieteSoll };')(
+            dokument, holen, m => meldungen.push(m), async () => new Error('Server'),
+            (e, ersatz) => ersatz, t => String(t).replace(/</g, '&lt;'), iso => 'D' + iso,
+            v => Number(v).toFixed(2) + ' €');
+        return { fns, aufrufe, meldungen, felder };
+    };
+
+    const leer = lauf({}, [{ soll: [] }]);
+    await leer.fns.ladeKaltmiete(7);
+    pruefe('Phase 49: ohne Kaltmiete ein Hinweis statt einer leeren Liste',
+        leer.aufrufe[0].url === '/api/tenants/7/kaltmiete'
+        && /Noch keine Kaltmiete hinterlegt/.test(leer.felder['km-soll-liste'].innerHTML));
+
+    const voll = lauf({}, [{ soll: [
+        { id: 9, gueltig_ab: '2024-01-01', betrag: '700.00', indexmiete: false },
+        { id: 12, gueltig_ab: '2025-08-01', betrag: '750.00', indexmiete: true },
+    ] }]);
+    await voll.fns.ladeKaltmiete(7);
+    pruefe('Phase 49: Stichtage mit Betrag, Indexmiete gekennzeichnet, Knopf zum Löschen',
+        /D2024-01-01/.test(voll.felder['km-soll-liste'].innerHTML)
+        && /Indexmiete \(§ 557b\)/.test(voll.felder['km-soll-liste'].innerHTML)
+        && voll.felder['km-soll-liste'].innerHTML.includes('loescheKaltmieteSoll(9, 7)'));
+
+    const ohneTag = lauf({ 'km-tenant-id': { value: '7' }, 'km-betrag': { value: '750' } }, []);
+    await ohneTag.fns.saveKaltmieteSoll();
+    pruefe('Phase 49: ohne Stichtag geht nichts hinaus',
+        ohneTag.aufrufe.length === 0 && ohneTag.meldungen.length === 1);
+
+    const gut = lauf({
+        'km-tenant-id': { value: '7' },
+        'km-gueltig-ab': { value: '2025-08-01' },
+        'km-betrag': { value: '750' },
+        'km-indexmiete': { checked: true },
+    }, [{ id: 12 }, { soll: [] }]);
+    await gut.fns.saveKaltmieteSoll();
+    const post = gut.aufrufe[0] || {};
+    pruefe('Phase 49: Speichern schickt POST mit Stichtag, Betrag und Indexmiete, lädt dann neu',
+        post.methode === 'POST' && post.url === '/api/tenants/7/kaltmiete_soll'
+        && post.koerper === JSON.stringify({ gueltig_ab: '2025-08-01', betrag: '750', indexmiete: true })
+        && gut.aufrufe.length === 2 && gut.aufrufe[1].url === '/api/tenants/7/kaltmiete'
+        && gut.meldungen.length === 0);
+
+    pruefe('Phase 49: Mieterzeile hat den Knopf, die Seite den Dialog',
+        appQuelle.includes('kmBtn.onclick = () => openKaltmieteModal(t);')
+        && html.includes('id="kaltmiete-modal"'));
+}
+
 // --- NK-262: Fristenkalender in der Datenqualität ----------------------------
 async function fristenPruefen() {
     const m = appQuelle.match(/async function ladeFristen\(\) \{[\s\S]*?\n\}/);
@@ -1766,12 +1839,14 @@ warnLeistePruefen()
                                     .catch(e => pruefe('NK-258: Zählerpflege-Prüfung lief durch — ' + e.message, false))
                                     .then(() => vorauszahlungPruefen()
                                         .catch(e => pruefe('NK-261: Vorauszahlung-Prüfung lief durch — ' + e.message, false))
-                                        .then(() => fristenPruefen()
-                                            .catch(e => pruefe('NK-262: Fristen-Prüfung lief durch — ' + e.message, false))
+                                        .then(() => kaltmietePruefen()
+                                            .catch(e => pruefe('Phase 49: Kaltmiete-Prüfung lief durch — ' + e.message, false))
+                                            .then(() => fristenPruefen()
+                                                .catch(e => pruefe('NK-262: Fristen-Prüfung lief durch — ' + e.message, false))
                                             .then(() => mehrjahresblickPruefen()
                                                 .catch(e => pruefe('NK-263: Mehrjahresblick-Prüfung lief durch — ' + e.message, false))
                                                 .then(() => jahreswechselPruefen()
                                                     .catch(e => pruefe('NK-267: Jahreswechsel-Prüfung lief durch — ' + e.message, false))
                                                     .then(() => pruefstandPruefen()
                                                         .catch(e => pruefe('NK-265: Prüfstand-Prüfung lief durch — ' + e.message, false))
-                                                        .then(() => process.exit(fehler ? 1 : 0)))))))))))))));
+                                                        .then(() => process.exit(fehler ? 1 : 0))))))))))))))));
