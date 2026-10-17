@@ -120,6 +120,9 @@ AUSNAHMEN = {
     # Adressen, gebaut mit dateiUrl()
     'imgUrl': 'dateiAdresse(art, Zahl) (NK-129)',
     'docUrl': 'dateiAdresse(art, Zahl) (NK-129)',
+    # Phase 53: Kaltmiete-Soll
+    'pill': 'statische Pille „geplant", ohne Mieter-Daten',
+    'serie': 'Serienknopf aus Number(tenantId), escapeHtml(s.betrag), escapeHtml(s.gueltig_ab)',
 }
 
 

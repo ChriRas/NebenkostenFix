@@ -189,6 +189,7 @@ oder ein Pflichtbegriff in der Oberfläche kein „?“ hat.
 | abrechnungszeitraum | Abrechnungszeitraum | Die Zeit, über die abgerechnet wird: höchstens zwölf Monate, meist ein Kalenderjahr; bei Ein- oder Auszug zählen nur die Monate, in denen der Mieter dort gewohnt hat. |
 | guthaben | Guthaben | Hat der Mieter mehr vorausgezahlt, als an Kosten angefallen ist, bekommt er den Unterschied zurück. |
 | hauptzaehler | Hauptzähler | Der Zähler des Versorgers für das ganze Haus; nach ihm stellt der Versorger seine Rechnung. |
+| kaltmiete | Kaltmiete-Soll | Die vereinbarte Kaltmiete mit ihrem Stichtagsverlauf; das Modal stellt sie den erfassten Mietzahlungen je Monat gegenüber. Gezählt wird nur, was als Zahlung vom Typ „Miete" erfasst ist — kein Kontoabgleich. Künftige Stufen sind als geplant markiert. |
 | kostenprofil | Kostenprofil | Für jeden Mieter und jede Kostenart die Angabe, wie seine Wohnung beteiligt ist: nach Wohnfläche, nach Personen, nach eigenem Zähler oder gar nicht. |
 | leerstand | Leerstand | Zeiten, in denen eine Wohnung nicht vermietet war; ihren Anteil an den Kosten tragen Sie als Vermieter, nicht die übrigen Mieter. |
 | nachzahlung | Nachzahlung | Waren die Kosten höher als die Vorauszahlungen, zahlt der Mieter den Unterschied nach. |

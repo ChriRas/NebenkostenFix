@@ -1908,7 +1908,7 @@
     <div class="modal-overlay" id="kaltmiete-modal">
         <div class="modal glass-panel dialog-vorauszahlung">
             <div class="modal-header">
-                <h2>Kaltmiete: <span id="km-tenant-name"></span></h2>
+                <h2>Kaltmiete <button type="button" class="begriff-hilfe" aria-label="Begriff erklären" data-begriff="kaltmiete"><i class="ph ph-question" aria-hidden="true"></i></button>: <span id="km-tenant-name"></span></h2>
                 <button class="btn-icon" aria-label="Schließen" onclick="closeKaltmieteModal()"><i class="ph ph-x"></i></button>
             </div>
             <div class="modal-body">
@@ -1917,6 +1917,8 @@
                     An der letzten Erhöhung misst der Fristenkalender, wann die nächste
                     verlangt werden darf: 15 Monate nach § 558 BGB, bei der Indexmiete
                     (§ 557b BGB) 12 Monate. Den VPI tragen Sie von Hand ein.
+                    Gezählt wird nur, was Sie hier als Zahlung vom Typ „Miete" erfassen
+                    haben — das ist kein Kontoabgleich.
                 </p>
                 <input type="hidden" id="km-tenant-id">
                 <table class="tabelle tabelle-luftig abstand-unten-klein">
@@ -1929,6 +1931,26 @@
                     </thead>
                     <tbody id="km-soll-liste"></tbody>
                 </table>
+                <p id="km-saldo" class="karten-text"></p>
+                <div class="tabellen-rolle">
+                    <table class="tabelle tabelle-kompakt">
+                        <thead>
+                            <tr>
+                                <th>Monat</th>
+                                <th class="text-right">Soll</th>
+                                <th class="text-right">Ist</th>
+                                <th class="text-right">Differenz</th>
+                                <th>Stand</th>
+                            </tr>
+                        </thead>
+                        <tbody id="km-monate"></tbody>
+                    </table>
+                </div>
+                <div id="km-erinnerung-block" hidden>
+                    <h3 class="zwischentitel">Zahlungserinnerung</h3>
+                    <label for="km-erinnerung" class="karten-text">Vorlage zum Anpassen; zum Übernehmen in Ihr Schreiben markieren und kopieren (Strg+A, Strg+C)</label>
+                    <textarea id="km-erinnerung" rows="12" class="breite-voll"></textarea>
+                </div>
                 <div class="form-row">
                     <div class="form-group">
                         <label for="km-gueltig-ab">Gültig ab</label>
@@ -2819,7 +2841,7 @@
     </div>
     <script src="/static/formular.js?v=2"></script>
     <script src="/static/umzug.js?v=1"></script>
-    <script src="/static/app.js?v=31"></script>
+    <script src="/static/app.js?v=32"></script>
 </body>
 
 </html>

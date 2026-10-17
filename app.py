@@ -153,6 +153,7 @@ Stammdaten -- Immobilie, Wohnung, Mieter, Anbieter, Kostenart
   POST        /api/tenants/<int:tenant_id>/vorauszahlung_soll -> save_vorauszahlung_soll
   DELETE      /api/vorauszahlung_soll/<int:id>             -> delete_vorauszahlung_soll
   GET         /api/tenants/<int:tenant_id>/kaltmiete       -> get_kaltmiete
+  GET         /api/tenants/<int:tenant_id>/miete           -> get_miete
   POST        /api/tenants/<int:tenant_id>/kaltmiete_soll  -> save_kaltmiete_soll
   DELETE      /api/kaltmiete_soll/<int:id>                 -> delete_kaltmiete_soll
   GET         /api/fristen                                 -> get_fristen
@@ -1340,6 +1341,27 @@ def get_vorauszahlungen(tenant_id):
         ergebnis, anschreiben_anrede(tenant.name, tenant.anrede),
         tenant.apartment.name, anschreiben_saetze(vermieter_art())['bekanntes_konto'],
         vermieter_ausweis()[0])
+    return jsonify(ergebnis), 200
+
+
+@app.route('/api/tenants/<int:tenant_id>/miete', methods=['GET'])
+def get_miete(tenant_id):
+    """Soll und Ist der Kaltmiete (Phase 53) -- getrennt von den Vorauszahlungen."""
+    tenant = Tenant.query.get_or_404(tenant_id)
+    heute = zeit.als_ortsdatum(zeit.jetzt_utc())
+    zahlungen = Payment.query.filter_by(tenant_id=tenant.id, type='Miete').all()
+    ergebnis = vz.soll_ist(
+        [(s.gueltig_ab, s.betrag) for s in tenant.kaltmiete_soll],
+        [(p.payment_date, p.amount) for p in zahlungen],
+        tenant.move_in_date, tenant.move_out_date, heute)
+    ergebnis['soll'] = [
+        {'id': s.id, 'gueltig_ab': s.gueltig_ab.isoformat(), 'betrag': f'{s.betrag:.2f}',
+         'geplant': s.gueltig_ab > heute}
+        for s in tenant.kaltmiete_soll]
+    ergebnis['erinnerung'] = vz.erinnerung(
+        ergebnis, anschreiben_anrede(tenant.name, tenant.anrede),
+        tenant.apartment.name, anschreiben_saetze(vermieter_art())['bekanntes_konto'],
+        vermieter_ausweis()[0], art='Mietzahlungen')
     return jsonify(ergebnis), 200
 
 

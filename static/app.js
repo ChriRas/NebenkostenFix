@@ -4014,6 +4014,24 @@ function closeVorauszahlungModal() {
     document.getElementById('vorauszahlung-modal').classList.remove('active');
 }
 
+// Je Monat eine Zeile der Soll/Ist-Tabelle; genutzt von Vorauszahlungen und Kaltmiete.
+function monatsZeilen(monate) {
+    // Der jüngste Monat oben: dort schaut man zuerst hin.
+    return [...monate].reverse().map(m => {
+        const [klasse, stand] = m.laufend ? ['text-muted', 'laufend']
+            : m.rueckstand ? ['dq-status-badge red', 'Rückstand']
+            : m.soll === null ? ['text-muted', 'kein Soll']
+            : ['dq-status-badge green', 'bezahlt'];
+        return `<tr>
+            <td style="padding: 8px;">${escapeHtml(m.monat.slice(5) + '/' + m.monat.slice(0, 4))}</td>
+            <td style="padding: 8px; text-align: right;">${escapeHtml(m.soll === null ? '–' : euroText(m.soll))}</td>
+            <td style="padding: 8px; text-align: right;">${escapeHtml(euroText(m.ist))}</td>
+            <td style="padding: 8px; text-align: right;">${escapeHtml(m.differenz === null ? '–' : euroText(m.differenz))}</td>
+            <td style="padding: 8px;"><span class="${escapeHtml(klasse)}">${escapeHtml(stand)}</span></td>
+        </tr>`;
+    }).join('');
+}
+
 async function ladeVorauszahlungen(tenantId) {
     let d;
     try {
@@ -4032,19 +4050,7 @@ async function ladeVorauszahlungen(tenantId) {
             <td><button type="button" class="btn-icon" aria-label="Soll löschen" title="Soll löschen" onclick="loescheVorauszahlungSoll(${Number(s.id)}, ${Number(tenantId)})"><i class="ph ph-trash" aria-hidden="true"></i></button></td>
         </tr>`).join('');
     // Der jüngste Monat oben: dort schaut man zuerst hin.
-    document.getElementById('vz-monate').innerHTML = [...d.monate].reverse().map(m => {
-        const [klasse, stand] = m.laufend ? ['text-muted', 'laufend']
-            : m.rueckstand ? ['dq-status-badge red', 'Rückstand']
-            : m.soll === null ? ['text-muted', 'kein Soll']
-            : ['dq-status-badge green', 'bezahlt'];
-        return `<tr>
-            <td style="padding: 8px;">${escapeHtml(m.monat.slice(5) + '/' + m.monat.slice(0, 4))}</td>
-            <td style="padding: 8px; text-align: right;">${escapeHtml(m.soll === null ? '–' : euroText(m.soll))}</td>
-            <td style="padding: 8px; text-align: right;">${escapeHtml(euroText(m.ist))}</td>
-            <td style="padding: 8px; text-align: right;">${escapeHtml(m.differenz === null ? '–' : euroText(m.differenz))}</td>
-            <td style="padding: 8px;"><span class="${escapeHtml(klasse)}">${escapeHtml(stand)}</span></td>
-        </tr>`;
-    }).join('');
+    document.getElementById('vz-monate').innerHTML = monatsZeilen(d.monate);
     const saldo = Number(d.saldo);
     document.getElementById('vz-saldo').textContent = saldo > 0
         ? `Offen sind insgesamt ${euroText(saldo)} (fällige Monate, Überzahlungen gegengerechnet).`
@@ -4109,7 +4115,7 @@ function closeKaltmieteModal() {
 async function ladeKaltmiete(tenantId) {
     let d;
     try {
-        const res = await fetch(`/api/tenants/${tenantId}/kaltmiete`);
+        const res = await fetch(`/api/tenants/${tenantId}/miete`);
         if (!res.ok) throw await serverFehler(res);
         d = await res.json();
     } catch (e) {
@@ -4118,11 +4124,24 @@ async function ladeKaltmiete(tenantId) {
     }
     document.getElementById('km-soll-liste').innerHTML = d.soll.length === 0
         ? '<tr><td colspan="3" class="text-muted" style="padding: 8px;">Noch keine Kaltmiete hinterlegt.</td></tr>'
-        : d.soll.map(s => `<tr>
-            <td style="padding: 8px;">${escapeHtml(datumText(s.gueltig_ab))}${s.indexmiete ? ' · Indexmiete (§ 557b)' : ''}</td>
+        : d.soll.map(s => {
+            const pill = s.geplant ? ' <span class="chip chip-warn">geplant</span>' : '';
+            const serie = s.geplant
+                ? `<button type="button" class="btn-icon" aria-label="Serienbuchung anlegen" title="Serienbuchung anlegen" onclick="serienbuchungAnlegen(${Number(tenantId)}, '${escapeHtml(s.betrag)}', '${escapeHtml(s.gueltig_ab)}', 0, 'Miete')"><i class="ph ph-repeat" aria-hidden="true"></i></button>`
+                : '';
+            return `<tr>
+            <td style="padding: 8px;">${escapeHtml(datumText(s.gueltig_ab))}${s.indexmiete ? ' · Indexmiete (§ 557b)' : ''}${pill}</td>
             <td style="padding: 8px; text-align: right;">${escapeHtml(euroText(s.betrag))}</td>
-            <td><button type="button" class="btn-icon" aria-label="Kaltmiete löschen" title="Kaltmiete löschen" onclick="loescheKaltmieteSoll(${Number(s.id)}, ${Number(tenantId)})"><i class="ph ph-trash" aria-hidden="true"></i></button></td>
-        </tr>`).join('');
+            <td>${serie}<button type="button" class="btn-icon" aria-label="Kaltmiete löschen" title="Kaltmiete löschen" onclick="loescheKaltmieteSoll(${Number(s.id)}, ${Number(tenantId)})"><i class="ph ph-trash" aria-hidden="true"></i></button></td>
+        </tr>`;
+        }).join('');
+    document.getElementById('km-monate').innerHTML = monatsZeilen(d.monate);
+    const saldo = Number(d.saldo);
+    document.getElementById('km-saldo').textContent = saldo > 0
+        ? `Offen sind insgesamt ${euroText(saldo)} (fällige Monate, Überzahlungen gegengerechnet).`
+        : saldo < 0 ? `Überzahlt um ${euroText(-saldo)}.` : 'Kein Rückstand.';
+    document.getElementById('km-erinnerung').value = d.erinnerung || '';
+    document.getElementById('km-erinnerung-block').hidden = !d.erinnerung;
     return d;
 }
 
@@ -7469,16 +7488,17 @@ function vorauszahlungsBlock(v, tenantId) {
             </p>${warnung}${knopf}`);
 }
 
-async function serienbuchungAnlegen(tenantId, betrag, ab, kuenftige) {
+async function serienbuchungAnlegen(tenantId, betrag, ab, kuenftige, art = 'Nebenkostenvorauszahlung') {
     "Öffnet den Zahlungsdialog vorbefüllt; gespeichert wird erst dort."
-    if (kuenftige > 0 && !await frage(`Ab diesem Datum sind schon ${kuenftige} Vorauszahlungen gebucht. Trotzdem eine weitere Serie anlegen?`,
-        'Trotzdem anlegen', false, 'Vorauszahlungen schon gebucht')) return;
+    const artLabel = art === 'Miete' ? 'Mietzahlungen' : 'Vorauszahlungen';
+    if (kuenftige > 0 && !await frage(`Ab diesem Datum sind schon ${kuenftige} ${artLabel} gebucht. Trotzdem eine weitere Serie anlegen?`,
+        'Trotzdem anlegen', false, `${artLabel} schon gebucht`)) return;
     document.getElementById('report-details-modal').classList.remove('active');
     openAddPaymentModal();
     document.getElementById('payment-tenant').value = String(tenantId);
     document.getElementById('payment-date').value = ab;
     document.getElementById('payment-amount').value = betrag;
-    document.getElementById('payment-type').value = 'Nebenkostenvorauszahlung';
+    document.getElementById('payment-type').value = art;
     document.getElementById('payment-recurring').checked = true;
     togglePaymentRecurring();
     toggleBillingReportField();

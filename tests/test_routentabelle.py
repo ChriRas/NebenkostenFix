@@ -143,6 +143,7 @@ ROUTEN_INVENTAR = frozenset({
     'get_kaltmiete',
     'save_kaltmiete_soll',
     'delete_kaltmiete_soll',
+    'get_miete',
     'get_fristen',
     'get_fristen_ics',
     'save_tenant_profiles',

@@ -549,11 +549,11 @@ async function haushaltPruefen() {
 // schickt Stichtag und Betrag und lädt neu.
 async function vorauszahlungPruefen() {
     const funktion = name => {
-        const m = appQuelle.match(new RegExp(`async function ${name}\\([^)]*\\) \\{[\\s\\S]*?\\n\\}`));
+        const m = appQuelle.match(new RegExp(`(async )?function ${name}\\([^)]*\\) \\{[\\s\\S]*?\\n\\}`));
         if (!m) throw new Error(`${name} nicht gefunden`);
         return m[0];
     };
-    const quelltext = funktion('ladeVorauszahlungen') + funktion('saveVorauszahlungSoll');
+    const quelltext = funktion('monatsZeilen') + funktion('ladeVorauszahlungen') + funktion('saveVorauszahlungSoll');
     const lauf = (felder, antworten) => {
         const aufrufe = [];
         const meldungen = [];
@@ -630,11 +630,11 @@ async function vorauszahlungPruefen() {
 // Betrag und Indexmiete-Flag und lädt neu.
 async function kaltmietePruefen() {
     const funktion = name => {
-        const m = appQuelle.match(new RegExp(`async function ${name}\\([^)]*\\) \\{[\\s\\S]*?\\n\\}`));
+        const m = appQuelle.match(new RegExp(`(async )?function ${name}\\([^)]*\\) \\{[\\s\\S]*?\\n\\}`));
         if (!m) throw new Error(`${name} nicht gefunden`);
         return m[0];
     };
-    const quelltext = funktion('ladeKaltmiete') + funktion('saveKaltmieteSoll');
+    const quelltext = funktion('monatsZeilen') + funktion('ladeKaltmiete') + funktion('saveKaltmieteSoll');
     const lauf = (felder, antworten) => {
         const aufrufe = [];
         const meldungen = [];
@@ -658,21 +658,36 @@ async function kaltmietePruefen() {
         return { fns, aufrufe, meldungen, felder };
     };
 
-    const leer = lauf({}, [{ soll: [] }]);
+    const leer = lauf({}, [{ soll: [], monate: [], saldo: '0.00', erinnerung: null }]);
     await leer.fns.ladeKaltmiete(7);
-    pruefe('Phase 49: ohne Kaltmiete ein Hinweis statt einer leeren Liste',
-        leer.aufrufe[0].url === '/api/tenants/7/kaltmiete'
-        && /Noch keine Kaltmiete hinterlegt/.test(leer.felder['km-soll-liste'].innerHTML));
+    pruefe('Phase 49/53: ohne Kaltmiete ein Hinweis statt einer leeren Liste',
+        leer.aufrufe[0].url === '/api/tenants/7/miete'
+        && /Noch keine Kaltmiete hinterlegt/.test(leer.felder['km-soll-liste'].innerHTML)
+        && leer.felder['km-saldo'].textContent === 'Kein Rückstand.'
+        && leer.felder['km-erinnerung-block'].hidden === true);
 
     const voll = lauf({}, [{ soll: [
-        { id: 9, gueltig_ab: '2024-01-01', betrag: '700.00', indexmiete: false },
-        { id: 12, gueltig_ab: '2025-08-01', betrag: '750.00', indexmiete: true },
-    ] }]);
+        { id: 9, gueltig_ab: '2026-10-01', betrag: '700.00', indexmiete: false, geplant: false },
+        { id: 12, gueltig_ab: '2027-01-01', betrag: '800.00', indexmiete: true, geplant: true },
+    ], monate: [
+        { monat: '2026-09', soll: '700.00', ist: '700.00', differenz: '0.00', rueckstand: false, laufend: false },
+        { monat: '2026-10', soll: '700.00', ist: '0.00', differenz: '-700.00', rueckstand: false, laufend: true },
+    ], saldo: '0.00', erinnerung: 'Guten Tag A, ...' }]);
     await voll.fns.ladeKaltmiete(7);
-    pruefe('Phase 49: Stichtage mit Betrag, Indexmiete gekennzeichnet, Knopf zum Löschen',
-        /D2024-01-01/.test(voll.felder['km-soll-liste'].innerHTML)
+    pruefe('Phase 49/53: Stichtage mit Betrag, geplante Stufe gekennzeichnet, Indexmiete erläutert',
+        /D2026-10-01/.test(voll.felder['km-soll-liste'].innerHTML)
         && /Indexmiete \(§ 557b\)/.test(voll.felder['km-soll-liste'].innerHTML)
+        && /geplant<\/span>/.test(voll.felder['km-soll-liste'].innerHTML)
+        && voll.felder['km-soll-liste'].innerHTML.includes("serienbuchungAnlegen(7, '800.00', '2027-01-01', 0, 'Miete')")
         && voll.felder['km-soll-liste'].innerHTML.includes('loescheKaltmieteSoll(9, 7)'));
+
+    pruefe('Phase 53: Monattabelle geteilt gebaut, Saldo und Erinnerung gesetzt',
+        /09\/2026/.test(voll.felder['km-monate'].innerHTML)
+        && /bezahlt/.test(voll.felder['km-monate'].innerHTML)
+        && /laufend/.test(voll.felder['km-monate'].innerHTML)
+        && /Offen sind insgesamt|Kein Rückstand/.test(voll.felder['km-saldo'].textContent)
+        && voll.felder['km-erinnerung'].value === 'Guten Tag A, ...'
+        && voll.felder['km-erinnerung-block'].hidden === false);
 
     const ohneTag = lauf({ 'km-tenant-id': { value: '7' }, 'km-betrag': { value: '750' } }, []);
     await ohneTag.fns.saveKaltmieteSoll();
@@ -684,13 +699,13 @@ async function kaltmietePruefen() {
         'km-gueltig-ab': { value: '2025-08-01' },
         'km-betrag': { value: '750' },
         'km-indexmiete': { checked: true },
-    }, [{ id: 12 }, { soll: [] }]);
+    }, [{ id: 12 }, { soll: [], monate: [], saldo: '0.00', erinnerung: null }]);
     await gut.fns.saveKaltmieteSoll();
     const post = gut.aufrufe[0] || {};
     pruefe('Phase 49: Speichern schickt POST mit Stichtag, Betrag und Indexmiete, lädt dann neu',
         post.methode === 'POST' && post.url === '/api/tenants/7/kaltmiete_soll'
         && post.koerper === JSON.stringify({ gueltig_ab: '2025-08-01', betrag: '750', indexmiete: true })
-        && gut.aufrufe.length === 2 && gut.aufrufe[1].url === '/api/tenants/7/kaltmiete'
+        && gut.aufrufe.length === 2 && gut.aufrufe[1].url === '/api/tenants/7/miete'
         && gut.meldungen.length === 0);
 
     pruefe('Phase 49: Mieterzeile hat den Knopf, die Seite den Dialog',
