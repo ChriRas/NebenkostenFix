@@ -103,8 +103,9 @@ def test_index_nutzt_die_designklassen_statt_inline_farben():
     assert 'class="btn-gefahr"' in html
     assert 'btn-secondary btn-tint' in html
     # NK-144: zwei Auswahlpillen im Rechnungen-Tab (Liste / Zeitleiste);
-    # NK-156: fünf Gruppen der Einstellungen (K8); Konzept D: Eingang / Alle / Nach Kostenart.
-    assert len(re.findall(r'class="filter-pill', html)) == 15
+    # NK-156: fünf Gruppen der Einstellungen (K8); Konzept D: Eingang / Alle / Nach Kostenart;
+    # Phase 47: „Nur offene Zahlungen“ in der Historie.
+    assert len(re.findall(r'class="filter-pill', html)) == 16
 
 
 def test_kein_off_palette_farbliteral_in_inline_styles():

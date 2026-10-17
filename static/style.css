@@ -3452,6 +3452,12 @@ td .btn-icon,
     color: var(--danger-color);
 }
 
+/* Phase 47: beglichen. */
+.chip-ok {
+    background: var(--success-bg);
+    color: var(--success-color);
+}
+
 .chip-ind {
     background: var(--primary-tint);
     color: var(--primary-text);

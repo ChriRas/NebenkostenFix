@@ -689,8 +689,8 @@ function wechsleZuTab(tabName) {
 
 // --- Heute (Konzept D) --------------------------------------------------------
 // Was jetzt zu tun ist, abgelesen aus den geladenen Daten: Zähler ohne Stand
-// im laufenden Jahr, Belege ohne Rechnung und fällige Abrechnungen. Zahlungen
-// haben keinen Status, an dem sich „offen“ ablesen ließe; sie fehlen darum hier.
+// im laufenden Jahr, Belege ohne Rechnung, fällige Abrechnungen und zugestellte
+// Abrechnungen, deren Nachzahlung oder Guthaben noch offen ist (Phase 47).
 
 let abrechnungsVorschlaege = [];
 
@@ -807,6 +807,19 @@ function heuteAufgaben() {
                 chip: 'fällig', art: 'ind', aktion: 'Offene Kosten abrechnen',
                 los: () => openBillingSelectionModal(v),
             })) },
+        { name: 'Zahlungen', aufgaben: abrechnungsHistorie
+            .filter(r => r.zugestellt_am && Number(r.offen_betrag) && !beispielMieter.has(r.tenant_id))
+            .sort((a, b) => a.zugestellt_am.localeCompare(b.zugestellt_am)).map(r => {
+                const schuldet = Number(r.offen_betrag) > 0;
+                return {
+                    titel: `${r.tenant_name} (${r.apartment_name})`,
+                    info: `${schuldet ? 'Nachzahlung offen' : 'Guthaben noch auszahlen'}: `
+                        + `${euroText(Math.abs(Number(r.offen_betrag)))} · zugestellt am ${datumText(r.zugestellt_am)}`,
+                    chip: schuldet ? 'offen' : 'auszahlen', art: schuldet ? 'rot' : 'warn',
+                    aktion: 'Zahlung erfassen',
+                    los: () => zahlungZurAbrechnung(r.id, r.tenant_id, r.offen_betrag),
+                };
+            }) },
     ].filter(gruppe => gruppe.aufgaben.length);
 }
 
@@ -7188,6 +7201,14 @@ async function fetchBillingSuggestions() {
     }
 }
 
+// Phase 47: die Historie zeigt auf Wunsch nur Abrechnungen mit offenem Rest.
+let historieNurOffen = false;
+
+function historieFilterUmschalten() {
+    historieNurOffen = !historieNurOffen;
+    fetchBillingHistory();
+}
+
 async function fetchBillingHistory() {
     try {
         const res = await fetch('/api/billing/reports');
@@ -7201,6 +7222,9 @@ async function fetchBillingHistory() {
         if (!container) return;
         
         container.innerHTML = '';
+        const filterKnopf = document.getElementById('historie-nur-offen');
+        filterKnopf?.classList.toggle('active', historieNurOffen);
+        filterKnopf?.setAttribute('aria-pressed', String(historieNurOffen));
         
         if (history.length === 0) {
             container.innerHTML = leerzustand({
@@ -7211,8 +7235,18 @@ async function fetchBillingHistory() {
             });
             return;
         }
+        const liste = historieNurOffen ? history.filter(r => Number(r.offen_betrag)) : history;
+        if (liste.length === 0) {
+            container.innerHTML = leerzustand({
+                icon: 'ph-check-circle',
+                titel: 'Keine Zahlung offen',
+                text: 'Jede Nachzahlung ist eingegangen und jedes Guthaben ausgezahlt.',
+                aktion: { label: 'Alle Abrechnungen zeigen', fn: 'historieFilterUmschalten()' },
+            });
+            return;
+        }
         
-        history.forEach(r => {
+        liste.forEach(r => {
             const card = document.createElement('div');
             // NK-159: auf schmalen Fenstern rutschen die Knöpfe unter den Text
             // (Fund des Rundgangs mit der Beispielabrechnung, 390 px).
@@ -7251,6 +7285,7 @@ async function fetchBillingHistory() {
                     <h3 style="margin:0; font-size: 18px;">${escapeHtml(r.tenant_name)} <span style="font-size: 13px; color: var(--text-muted); font-weight: normal;">(${escapeHtml(r.apartment_name)} - ${escapeHtml(r.property_name)})</span></h3>
                     <p style="margin: 8px 0 0 0; color: var(--text-muted);">
                         Zeitraum: ${startFmt} - ${endFmt} | Erstellt am: ${createdFmt}
+                        ${zahlungsstandPille(r)}
                     </p>
                     ${regelstandBlock}
                 </div>
@@ -7363,6 +7398,57 @@ async function serienbuchungAnlegen(tenantId, betrag, ab, kuenftige) {
     document.getElementById('payment-recurring').checked = true;
     togglePaymentRecurring();
     toggleBillingReportField();
+}
+
+// --- Phase 47: Zahlungsstand je Abrechnung ---
+// Der Server leitet Stand und Rest aus Ergebnis und zugeordneten Zahlungen ab;
+// ein ausgezahltes Guthaben ist eine negative Nebenkostenzahlung.
+function zahlungsstandPille(r) {
+    const [text, art] = {
+        offen: ['offen', 'rot'], teilweise: ['teilweise beglichen', 'warn'],
+        beglichen: ['beglichen', 'ok'], ausgeglichen: ['ausgeglichen', 'ok'],
+        ueberzahlt: ['überzahlt', 'warn'],
+    }[r.zahlungsstand] || [];
+    return text ? `<span class="chip chip-${art}">${text}</span>` : '';
+}
+
+function zahlungsstandBlock(id, umschlag) {
+    "Was von Nachzahlung oder Guthaben noch offen ist, mit dem Weg zur Zahlung."
+    if (!umschlag.zahlungsstand) return '';
+    const rest = Number(umschlag.offen_betrag);
+    const satz = rest > 0 ? `Der Mieter schuldet noch ${euroText(rest)}.`
+        : rest < 0 ? `An den Mieter auszuzahlen: ${euroText(-rest)}.`
+        : 'Es ist nichts mehr offen.';
+    const knopf = rest
+        ? `<button class="btn-primary" onclick="zahlungZurAbrechnung(${id}, ${umschlag.tenant_id}, '${escapeHtml(umschlag.offen_betrag)}')">Zahlung erfassen</button>`
+        : '';
+    return `
+        <div class="dashboard-card glass-panel" style="margin-bottom: 24px; padding: 16px;">
+            <h4 style="margin: 0 0 8px 0; display: flex; align-items: center; gap: 8px;">
+                <i class="ph ph-wallet"></i> Zahlungsstand ${zahlungsstandPille(umschlag)}
+            </h4>
+            <p style="margin: 0 0 12px 0; color: var(--text-muted);">${satz}</p>
+            ${knopf}
+        </div>`;
+}
+
+async function zahlungZurAbrechnung(reportId, tenantId, betrag) {
+    "Öffnet den Zahlungsdialog mit Mieter, Abrechnung und Restbetrag; gespeichert wird erst dort."
+    document.getElementById('report-details-modal').classList.remove('active');
+    openAddPaymentModal();
+    document.getElementById('payment-tenant').value = String(tenantId);
+    document.getElementById('payment-type').value = 'Nebenkostenzahlung';
+    await toggleBillingReportField();
+    document.getElementById('payment-billing-report').value = String(reportId);
+    document.getElementById('payment-amount').value = betrag;
+    zahlungsBetragBeschriften(betrag);
+}
+
+function zahlungsBetragBeschriften(betrag) {
+    "Ein negativer Betrag ist ein ausgezahltes Guthaben; das Formular sagt es."
+    const guthaben = Number(betrag) < 0;
+    document.getElementById('label-payment-amount').textContent = guthaben ? 'Guthaben ausgezahlt (€)' : 'Betrag (€)';
+    document.getElementById('payment-hinweis').hidden = !guthaben;
 }
 
 // --- NK-124: Zustellung, Frist, Korrektur und Versionen im Detaildialog ---
@@ -7737,6 +7823,7 @@ async function openReportDetails(id) {
                     <i class="ph ph-file-csv"></i> Positionen als CSV herunterladen
                 </a>
             </div>
+            ${zahlungsstandBlock(id, umschlag)}
             ${zustellungsBlock}
             ${vorauszahlungsBlock(umschlag.vorauszahlung, umschlag.tenant_id)}
             ${versionenBlock}
@@ -9798,6 +9885,7 @@ function openAddPaymentModal() {
     
     document.getElementById('payment-date').value = new Date().toLocaleDateString('sv-SE');
     document.getElementById('payment-amount').value = '';
+    zahlungsBetragBeschriften('');
     document.getElementById('payment-type').value = 'Miete';
     
     document.getElementById('payment-recurring').checked = false;
@@ -9847,10 +9935,12 @@ async function toggleBillingReportField() {
                         try {
                             const detailsRes = await fetch(`/api/billing/reports/${selectedId}/details`);
                             const umschlag = await detailsRes.json();
-                            // Der Saldo steckt im Schnappschuss ("ergebnis") und ist Text.
-                            const saldo = Number((umschlag.ergebnis || umschlag).balance);
+                            // Phase 47: vorgeschlagen wird, was noch offen ist; beim
+                            // Altbestand ohne Stand der Saldo aus dem Schnappschuss (Text).
+                            const saldo = Number(umschlag.offen_betrag ?? (umschlag.ergebnis || umschlag).balance);
                             if (saldo) {
                                 document.getElementById('payment-amount').value = saldo.toFixed(2);
+                                zahlungsBetragBeschriften(saldo);
                             }
                         } catch(e) {
                             console.error('Failed to load balance', e);
@@ -9918,6 +10008,7 @@ async function savePayment() {
         closeAddPaymentModal();
         showSuccess('Zahlung erfolgreich erfasst.');
         fetchPayments();
+        fetchBillingHistory();
     } catch (e) {
         showError(meldungZu(e, 'Fehler beim Speichern der Zahlung.'));
     }
@@ -9934,6 +10025,7 @@ async function deletePayment(id) {
         payments = payments.filter(p => p.id !== id);
         renderPayments();
         updateDashboard();
+        fetchBillingHistory();
         
         // If details modal is open, re-render it
         if (paymentDetailsModal.classList.contains('active')) {

@@ -291,6 +291,7 @@ from nebenkostenfix.anschreiben import ARTEN, PLATZHALTER, text_fuer, vorgabe
 from nebenkostenfix.lohnausweis import ARTEN as ARTEN_35A
 from nebenkostenfix.anschreiben import anrede as anschreiben_anrede, saetze as anschreiben_saetze
 from nebenkostenfix import vorauszahlung as vz
+from nebenkostenfix.zahlungsstand import zahlungsstand
 from nebenkostenfix import fristenkalender
 from nebenkostenfix.ablage import Ablage
 from nebenkostenfix.auth import init_auth
@@ -3200,6 +3201,8 @@ def get_all_billing_reports():
             'document_path_detailed': r.document_path_detailed,
             'veraltet': _regelstand_veraltet(r),
             'regelstand_aenderungen': _regelstand_aenderungen(r),
+            'zugestellt_am': r.zugestellt_am.isoformat() if r.zugestellt_am else None,
+            **_zahlungsstand(r),
         })
     return jsonify(res)
 
@@ -3394,6 +3397,7 @@ def get_billing_report_details(id):
             'veraltet': _regelstand_veraltet(report),
             'regelstand_aenderungen': _regelstand_aenderungen(report),
             'ergebnis': version.ergebnis,
+            **_zahlungsstand(report),
             # NK-124: die Umschlagdaten und die Versionen, damit die
             # Oberflaeche Zustellung, Frist und Korrektur an diesem Ort
             # zeigen kann, statt nur die Zahlen.
@@ -3647,6 +3651,19 @@ def get_billing_report_csv(id):
     return send_file(BytesIO(inhalt.encode('utf-8')),
                      mimetype='text/csv; charset=utf-8', as_attachment=True,
                      download_name=dateiname(report))
+
+
+def _zahlungsstand(report) -> dict:
+    """Phase 47: Stand und Rest aus dem Ergebnis der gültigen Version.
+
+    Altbestand ohne Version hat kein festgehaltenes Ergebnis, also keinen Stand.
+    """
+    version = report.aktuelle_version
+    if version is None:
+        return {'zahlungsstand': None, 'offen_betrag': None}
+    stand, rest = zahlungsstand(version.ergebnis['balance'],
+                                [p.amount for p in report.payments])
+    return {'zahlungsstand': stand, 'offen_betrag': f'{rest:.2f}'}
 
 
 def _regelstand_veraltet(report) -> bool:

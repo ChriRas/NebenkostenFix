@@ -30,6 +30,9 @@ der Test bricht `make check` ab, wenn er zurückkehrt.
 | **Ablesung** | Ein erfasster Zählerstand zu einem Datum — der Vorgang und der Datensatz. | „Zählerstand“ als Name des Vorgangs oder Knopfs |
 | **Abrechnung** | Das Ergebnis für einen Mieter über einen Zeitraum: die Berechnung samt erzeugtem PDF. | „Report“, „Bericht“, „Abrechnungslauf“ |
 | **Zahlung** | Ein erfasster Betrag, den ein Mieter gezahlt hat (Miete, Vorauszahlung, Nachzahlung). | „Einnahme“ als Name des Vorgangs oder Knopfs |
+| **Zahlungsstand** | Wie weit das Ergebnis einer Abrechnung bezahlt ist: Nachzahlung oder Guthaben gegen die Nebenkostenzahlungen, die der Abrechnung zugeordnet sind. Ein ausgezahltes Guthaben ist eine negative Zahlung. Wird abgeleitet, nie gespeichert. | „Status“, „Zahlstatus“, „Saldo“ als Name des Stands |
+| **offen** | Zahlungsstand: zur Abrechnung ist noch nichts gezahlt oder ausgezahlt. Teilzahlungen heißen „teilweise beglichen“. | „unbezahlt“, „ausstehend“ |
+| **beglichen** | Zahlungsstand: Nachzahlung vollständig eingegangen oder Guthaben vollständig ausgezahlt. Ein Ergebnis von 0 € heißt „ausgeglichen“. | „bezahlt“, „erledigt“ |
 | **Einnahmen** | Kennzahl (Summe): die Zahlungen eines Zeitraums. Nur als Überschrift von Kennzahlen, nie als Knopf. | „Umsatz“, „YTD“, „Income“ |
 | **Vorauszahlung** | Die Abschläge des Mieters auf Betriebskosten während des Abrechnungsjahres. | „Abschlag“ in Knöpfen und Feldbeschriftungen |
 | **Kurzbrief** | Der Abrechnungslauf über weniger als ein Jahr (Einzug, Auszug, Eigentumswechsel). | — |

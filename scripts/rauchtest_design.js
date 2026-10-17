@@ -340,10 +340,11 @@ pruefe('Gefahrenzone traegt die Klasse statt Inline-Farben',
     html.includes('dashboard-card glass-panel gefahrenzone'));
 pruefe('Datenbank-Knopf ist .btn-gefahr', html.includes('class="btn-gefahr"'));
 pruefe('Detailliertes PDF ist .btn-tint', html.includes('btn-secondary btn-tint'));
-// Fünfzehn Pillen: Rechnungen (Eingang/Alle/Nach Kostenart, Liste/Zeitleiste), Einstellungen
-// (fünf Gruppen), Statistik (fünf Filter); dieselbe Zahl sichert test_ui_konsistenz.py.
-pruefe('Fünfzehn Auswahlpillen, keine mit Inline-Stil',
-    (html.match(/class="filter-pill/g) || []).length === 15
+// Sechzehn Pillen: Rechnungen (Eingang/Alle/Nach Kostenart, Liste/Zeitleiste), Einstellungen
+// (fünf Gruppen), Statistik (fünf Filter), Historie (Nur offene Zahlungen, Phase 47);
+// dieselbe Zahl sichert test_ui_konsistenz.py.
+pruefe('Sechzehn Auswahlpillen, keine mit Inline-Stil',
+    (html.match(/class="filter-pill/g) || []).length === 16
     && !/class="filter-pill[^"]*"[^>]*style=/.test(html));
 pruefe('Cache-Buster erhoeht (style.css)', /style\.css\?v=\d+/.test(html));
 pruefe('Cache-Buster erhoeht (app.js)', /app\.js\?v=\d+/.test(html));
@@ -1123,13 +1124,15 @@ pruefe('NK-224: der Gruß steht im Kopf von „Heute“ und nirgends sonst',
 }
 
 // Konzept D: „Heute“ nennt Zähler ohne Stand im laufenden Jahr, Belege ohne
-// Rechnung und fällige Abrechnungen; Beispieldaten erzeugen keine Aufgabe.
+// Rechnung, fällige Abrechnungen und offene Zahlungen zugestellter Abrechnungen
+// (Phase 47); Beispieldaten erzeugen keine Aufgabe.
 {
     const quelle = (appQuelle.match(/function heuteAufgaben\(\)[\s\S]*?\n\}/) || [''])[0];
     const jahr = String(new Date().getFullYear());
     const gruppen = quelle && new Function('echterBestand', 'tenants', 'abrechnungsVorschlaege',
         'zaehlerArtName', 'datumText', 'openAddReadingModal', 'openBillingSelectionModal',
         'currentDocuments', 'belegOffen', 'wechsleZuTab', 'zeigeKostenAnsicht',
+        'abrechnungsHistorie', 'euroText', 'zahlungZurAbrechnung',
         quelle + '; return heuteAufgaben();')(
         () => ({ properties: [{ id: 1 }], meters: [{ id: 1, category_name: 'Strom', meter_number: 'A1', property_name: 'Haus' },
             { id: 2, category_name: 'Strom', meter_number: 'B2', property_name: 'Haus' }],
@@ -1140,10 +1143,13 @@ pruefe('NK-224: der Gruß steht im Kopf von „Heute“ und nirgends sonst',
         [{ id: 5, property_id: 1, description: 'Stadtwerke', property_name: 'Haus', upload_date: '2026-02-01T10:00:00' },
             { id: 6, property_id: 1, description: 'Erledigt', property_name: 'Haus', upload_date: '2026-02-01T10:00:00' },
             { id: 7, property_id: 9, description: 'Beispiel', property_name: 'Beispielhaus', upload_date: '2026-02-01T10:00:00' }],
-        d => d.id !== 6, () => {}, () => {});
+        d => d.id !== 6, () => {}, () => {},
+        [{ id: 3, tenant_id: 8, tenant_name: 'Echt', apartment_name: 'EG', zugestellt_am: '2026-02-01', offen_betrag: '12.00' },
+            { id: 4, tenant_id: 8, tenant_name: 'Bezahlt', apartment_name: 'EG', zugestellt_am: '2026-02-01', offen_betrag: '0.00' }],
+        b => b + ' €', () => {});
     const stand = (gruppen || []).map(g => g.name + ':' + g.aufgaben.map(a => a.titel + '/' + a.chip).join(',')).join('|');
-    pruefe('Konzept D: Heute zeigt nur Zähler ohne Stand, offene Belege und echte fällige Abrechnungen',
-        stand === 'Erfassen:Strom B2/fehlt|Belege:Stadtwerke/offen|Abrechnen:Echt (EG)/fällig');
+    pruefe('Konzept D: Heute zeigt nur Zähler ohne Stand, offene Belege, echte fällige Abrechnungen und offene Zahlungen',
+        stand === 'Erfassen:Strom B2/fehlt|Belege:Stadtwerke/offen|Abrechnen:Echt (EG)/fällig|Zahlungen:Echt (EG)/offen');
 }
 
 // --- Immobilienfilter im Kopf ----------------------------------------------

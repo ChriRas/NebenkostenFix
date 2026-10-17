@@ -18,7 +18,7 @@
     <link rel="stylesheet" href="/static/vendor/fonts/geist-mono/geist-mono.css">
     <link rel="stylesheet" href="/static/vendor/phosphor/regular/style.css">
     <link rel="stylesheet" href="/static/vendor/phosphor/fill/style.css">
-    <link rel="stylesheet" href="/static/style.css?v=13">
+    <link rel="stylesheet" href="/static/style.css?v=14">
     <!-- Einflug (Konzept D): kommt die Seite frisch von der Anmeldung
          (formular.js, höchstens 15 s alt), zieht style.css die Indigo-Fläche weg. -->
     <script>try { if (Date.now() - Number(sessionStorage.getItem('nk-einflug')) < 15000) document.documentElement.classList.add('einflug'); sessionStorage.removeItem('nk-einflug'); } catch (e) { /* ohne Speicher kein Einflug */ }</script>
@@ -392,6 +392,9 @@
                         <h2>Historie</h2>
                         <p class="section-untertitel">Bereits erstellte Abrechnungen</p>
                     </div>
+                    <!-- Phase 47: nur Abrechnungen, deren Nachzahlung oder Guthaben offen ist. -->
+                    <button type="button" class="filter-pill" id="historie-nur-offen" aria-pressed="false"
+                        onclick="historieFilterUmschalten()">Nur offene Zahlungen</button>
                 </div>
                 <div class="properties-grid raster-einspaltig" id="billing-history-container">
                     <div class="skelett" role="status" aria-label="Wird geladen"><span></span><span></span><span></span></div>
@@ -1702,8 +1705,9 @@
                     </div>
                 </div>
                 <div class="form-group abstand-oben">
-                    <label for="payment-amount">Betrag (€)</label>
-                    <input type="number" id="payment-amount" step="0.01">
+                    <label for="payment-amount" id="label-payment-amount">Betrag (€)</label>
+                    <input type="number" id="payment-amount" step="0.01" oninput="zahlungsBetragBeschriften(this.value)">
+                    <small class="feld-hilfe" id="payment-hinweis" hidden>Ein Guthaben wird als negative Nebenkostenzahlung gebucht.</small>
                 </div>
             </div>
             <div class="modal-footer">
@@ -2767,7 +2771,7 @@
     </div>
     <script src="/static/formular.js?v=2"></script>
     <script src="/static/umzug.js?v=1"></script>
-    <script src="/static/app.js?v=29"></script>
+    <script src="/static/app.js?v=30"></script>
 </body>
 
 </html>
