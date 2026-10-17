@@ -3940,6 +3940,12 @@ def add_payment():
     is_recurring = eingabe.wahrheit('is_recurring')
     billing_report_id = eingabe.ganzzahl('billing_report_id')
     end_date = eingabe.datum('end_date')
+    if billing_report_id is not None and type_ == 'Nebenkostenzahlung':
+        # Phase 47: die Zahlung zählt im Zahlungsstand dieser Abrechnung.
+        bericht = db.session.get(TenantBillingReport, billing_report_id)
+        if bericht is None or bericht.tenant_id != tenant_id:
+            raise EingabeFehler('Die Abrechnung gehört nicht zu diesem Mieter.',
+                                'billing_report_id')
 
     # Das umschliessende try ist weg (NK-030). Es machte aus jedem Fehler eine
     # 400 mit englischem Wortlaut -- auch aus einem Datenbankausfall, der

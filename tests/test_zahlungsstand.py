@@ -240,3 +240,23 @@ def test_liste_zeigt_pille_und_filtert_offene():
 def test_glossar_kennt_die_begriffe():
     for begriff in ('**Zahlungsstand**', '**offen**', '**beglichen**'):
         assert begriff in GLOSSAR
+
+
+def test_zahlung_nur_an_eine_abrechnung_desselben_mieters(auth_client, app_ctx):
+    # Seit Phase 47 zählt jede Zahlung an der Abrechnung in deren Stand: eine
+    # fremde oder erfundene Abrechnung würde den Stand verfälschen.
+    mieter, report = _abrechnung(auth_client, 1800.0)
+    fremd = tenant(apt(house('Nachbarhaus'), 'OG', 40.0), 'Nico Nachbar',
+                   move_in=date(2024, 1, 1))
+    for tenant_id, report_id in [(fremd.id, report.id), (mieter.id, report.id + 99)]:
+        antwort = auth_client.post('/api/payments', json={
+            'tenant_id': tenant_id, 'amount': '100', 'payment_date': '2026-03-01',
+            'type': 'Nebenkostenzahlung', 'billing_report_id': report_id})
+        assert antwort.status_code == 400
+        assert antwort.get_json()['feld'] == 'billing_report_id'
+    assert _stand(auth_client, report.id) == ('offen', '840.00')
+
+
+def test_mieterwechsel_laedt_die_abrechnungen_neu():
+    # Sonst bleibt die Auswahl des vorigen Mieters stehen.
+    assert re.search(r'<select id="payment-tenant"[^>]*onchange="toggleBillingReportField\(\)"', SEITE)
