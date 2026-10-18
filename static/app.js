@@ -4171,14 +4171,6 @@ function closeKaltmieteModal() {
 // Nummer aus § 2 BetrKV entscheidet über die Rechnung. Heizung und Warmwasser
 // (Nr. 4-6) sind gesperrt, Nr. 17 verlangt die Bestätigung (R-KAT-02).
 
-const KATEGORIE_VERTEILUNGEN = [
-    ['qm', 'Umlage nach Wohnfläche'],
-    ['personen', 'Umlage nach Personen'],
-    ['direkt', 'Nach Verbrauch (eigener Zähler)'],
-    ['nur_allgemein', 'Nur Anteil am Allgemeinverbrauch'],
-    ['ignoriert', 'Wird diesem Mieter nicht berechnet'],
-];
-
 let letzteKategorien = [];
 let katalogHilfe = null;
 
@@ -4223,12 +4215,11 @@ async function ladeKostenarten() {
     }
     letzteKategorien = d;
     document.getElementById('kategorien-liste').innerHTML = d.length === 0
-        ? '<tr><td colspan="6" class="text-muted" style="padding: 8px;">Noch keine eigene Kostenart angelegt.</td></tr>'
+        ? '<tr><td colspan="5" class="text-muted" style="padding: 8px;">Noch keine eigene Kostenart angelegt.</td></tr>'
         : d.map(k => kategorieZeile(k)).join('');
 }
 
 function kategorieZeile(k) {
-    const umlage = (KATEGORIE_VERTEILUNGEN.find(([wert]) => wert === k.allocation_method) || [null, k.allocation_method])[1];
     const nummer = k.betrkv_nr
         ? `Nr. ${k.betrkv_nr} · ${escapeHtml(k.betrkv_bezeichnung)}`
         : '<span class="text-muted">ohne</span>';
@@ -4236,7 +4227,6 @@ function kategorieZeile(k) {
     return `<tr>
         <td style="padding: 8px;">${escapeHtml(k.name)}</td>
         <td style="padding: 8px;">${nummer}</td>
-        <td style="padding: 8px;">${escapeHtml(umlage)}</td>
         <td style="padding: 8px;">${escapeHtml(zaehler)}</td>
         <td style="padding: 8px; text-align: right;" class="tabular-nums">${Number(k.rechnungen)}</td>
         <td style="padding: 8px;">
@@ -4254,36 +4244,26 @@ async function openKategorieModal(id = null) {
             const gesperrt = nr === 4 || nr === 5 || nr === 6;
             return `<option value="${nr}"${gesperrt ? ' disabled' : ''}>Nr. ${nr} · ${escapeHtml(bezeichnung)}${gesperrt ? ' (gesperrt)' : ''}</option>`;
         }).join('');
-    document.getElementById('kategorie-verteilung').innerHTML =
-        KATEGORIE_VERTEILUNGEN.map(([wert, text]) => `<option value="${escapeHtml(wert)}">${escapeHtml(text)}</option>`).join('');
     const namenFeld = document.getElementById('kategorie-name');
     document.getElementById('kategorie-id').value = id ? String(id) : '';
     document.getElementById('kategorie-sperre').hidden = true;
-    document.getElementById('kategorie-heizhinweis').hidden = true;
     nrWahl.dataset.gewaehlt = id ? '1' : '';
     nrWahl.onchange = () => { nrWahl.dataset.gewaehlt = '1'; };
     nrWahl.disabled = false;
-    document.getElementById('kategorie-verteilung').disabled = false;
     document.getElementById('kategorie-zaehler').disabled = false;
     if (id) {
         const k = letzteKategorien.find(x => Number(x.id) === Number(id));
         document.getElementById('kategorie-modal-titel').textContent = 'Kostenart bearbeiten';
         namenFeld.value = k.name;
         nrWahl.value = k.betrkv_nr == null ? '' : String(k.betrkv_nr);
-        document.getElementById('kategorie-verteilung').value = k.allocation_method;
         document.getElementById('kategorie-zaehler').checked = k.requires_meter;
         const eingefroren = k.rechnungen > 0 || k.zaehler_anzahl > 0;
-        // Die Heiz-Nummern laufen über die Heizungsanlage, nicht über diese
-        // Umlage -- der Hinweis erklärt das, bevor die Spalte irritiert.
-        document.getElementById('kategorie-heizhinweis').hidden =
-            k.betrkv_nr !== 4 && k.betrkv_nr !== 5 && k.betrkv_nr !== 6;
         if (eingefroren) {
             nrWahl.disabled = true;
-            document.getElementById('kategorie-verteilung').disabled = true;
             document.getElementById('kategorie-zaehler').disabled = true;
             const sperre = document.getElementById('kategorie-sperre');
             sperre.hidden = false;
-            sperre.textContent = 'Nummer, Umlage und Zähler bleiben unveränderlich, weil an dieser Kostenart schon '
+            sperre.textContent = 'Nummer und Zählerkennung bleiben unveränderlich, weil an dieser Kostenart schon '
                 + (k.rechnungen > 0 ? 'Rechnungen' : 'ein Zähler')
                 + ' hängen. Nur der Name ist noch änderbar.';
         }
@@ -4291,7 +4271,6 @@ async function openKategorieModal(id = null) {
         document.getElementById('kategorie-modal-titel').textContent = 'Kostenart anlegen';
         namenFeld.value = '';
         nrWahl.value = '';
-        document.getElementById('kategorie-verteilung').value = 'qm';
         document.getElementById('kategorie-zaehler').checked = false;
         // Der Vorschlag füllt nur ein leeres Nummernmenü; wer einmal gewählt
         // hat, behält seine Nummer.
@@ -4330,7 +4309,6 @@ async function saveKategorie() {
     const body = {
         name,
         betrkv_nr: nr,
-        allocation_method: document.getElementById('kategorie-verteilung').value,
         requires_meter: document.getElementById('kategorie-zaehler').checked,
     };
     try {
@@ -4438,14 +4416,14 @@ function openAddMeterModal() {
     // NK-105 (D-63): ein Zaehler ist fuer JEDE Kostenart moeglich. Das alte
     // Pflichtkennzeichen aus dem Katalog wurde hier als Erlaubnis gelesen —
     // davon gab es nur fuer Wasserversorgung eines, und nur das war waehlbar.
-    // Reihenfolge nach BetrKV-Nummer; Verbrauchsarten (METER_READING) und
-    // Allgemeinstrom (Nr. 11, der uebliche Allgemeinstromzaehler) vorn in
-    // ihrer eigenen Gruppe, alles Weitere darunter.
+    // Reihenfolge nach BetrKV-Nummer; die ueblichen Zaehlerposten
+    // (Wasserversorgung Nr. 2, Allgemeinstrom Nr. 11) vorn in ihrer eigenen
+    // Gruppe, alles Weitere darunter.
     const sortiert = [...categories].sort((a, b) => (a.betrkv_nr ?? 999) - (b.betrkv_nr ?? 999));
     const ueblich = [];
     const weitere = [];
     for (const c of sortiert) {
-        (c.allocation_method === 'METER_READING' || c.betrkv_nr === 11 ? ueblich : weitere).push(c);
+        (c.betrkv_nr === 2 || c.betrkv_nr === 11 ? ueblich : weitere).push(c);
     }
     if (ueblich.length) {
         const gruppe = document.createElement('optgroup');

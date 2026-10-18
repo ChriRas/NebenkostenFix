@@ -402,6 +402,22 @@ def test_kostenart_modal_nutzt_die_designfelder():
     assert 'class="form-group"' in block
 
 
+def test_die_kostenart_fragt_nicht_nach_der_umlage():
+    """Die Umlage-Spalte der Kostenart ist keine Abrechnungsentscheidung --
+    das Blatt liest das Kostenprofil des Mieters. Nach dem Re-Review fragt
+    die Oberfläche sie nicht mehr: kein Feld im Modal, keine Spalte in der
+    Tabelle, keine Liste im Quelltext. Ein Feld, das nichts bewirkt, ist
+    der reinste Verwirrungs-Generator."""
+    html = (BASIS / 'static' / 'index.html').read_text(encoding='utf-8')
+    block = html.split('id="kategorie-modal"', 1)[1].split('<!-- ', 1)[0]
+    assert 'kategorie-verteilung' not in block
+    assert 'kategorie-heizhinweis' not in block
+    karten_block = html.split('data-gruppe="kostenarten"', 1)[1].split('data-gruppe="konto"', 1)[0]
+    assert '<th>Umlage</th>' not in karten_block
+    js = (BASIS / 'static' / 'app.js').read_text(encoding='utf-8')
+    assert 'KATEGORIE_VERTEILUNGEN' not in js
+
+
 def test_kostenarten_karte_nimmt_die_volle_breite():
     """Die Einzelkarte der Kostenarten-Gruppe streckt sich über das ganze
     Einstellungs-Raster, statt als 600-px-Spalte ihre Tabelle querrollen zu

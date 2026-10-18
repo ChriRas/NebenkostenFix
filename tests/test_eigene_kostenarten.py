@@ -249,6 +249,53 @@ def test_umbenennen_unter_nr_3_bleibt_moeglich(auth_client):
     assert 'Schmutzwasser' in names
 
 
+def test_die_echten_positionen_einer_hausverwaltung(auth_client):
+    """Die Positionen aus Issue #30 -- echte Abrechnungsposten einer
+    Hausverwaltung. Jeder Vorschlag ist die richtige Nummer, gesperrte
+    Nummern werden nie geraten, und der Weg in der App klappt: Anlage unter
+    freier Nummer, und wo der Seed die Nummer belegt, das Umbenennen."""
+    # Das Niederschlagswasser liegt im Seed (Nr. 3) und taucht so wieder auf.
+    seed = auth_client.get('/api/categories').get_json()
+    assert 'Niederschlagswasser' in {z['name'] for z in seed}
+    assert betrkv.nummernvorschlag('Niederschlagswasser') == 3
+
+    wahl = {'Müllentsorgung': 8, 'Straßenreinigungsgeb.': 8,
+            'Frischwasser': 2, 'Hausstrom': 11, 'Versicherungen': 13,
+            'Kaminkehrer': 12, 'Hausmeister/-reinigung': 14,
+            'Pflege d. Außenanlage': 10}
+    for name, nr in wahl.items():
+        assert betrkv.nummernvorschlag(name) == nr, name
+        antwort = _anlegen(auth_client, name=name, nr=nr)
+        assert antwort.status_code == 201, f'{name}: {antwort.get_json()}'
+
+    # Schmutzwasser gehört zu Nr. 3, die der Seed belegt: die Warnfalle
+    # weist die Anlage ab, der Weg ist das Umbenennen des Seeds (D-72).
+    assert betrkv.nummernvorschlag('Schmutzwasser') == 3
+    belegt = _anlegen(auth_client, name='Schmutzwasser', nr=3)
+    assert belegt.status_code == 409
+    entwaesserung = next(z for z in seed if z['name'] == 'Entwässerung')
+    umbenannt = auth_client.put(f'/api/categories/{entwaesserung["id"]}',
+                                data={'name': 'Schmutzwasser'})
+    assert umbenannt.status_code == 200
+
+    # Fußmatten bleibt der Grenzfall: kein Vorschlag, Nr. 17 mit dem
+    # vertraglichen Hinweis (R-KAT-02).
+    assert betrkv.nummernvorschlag('Fußmatten') is None
+    assert _anlegen(auth_client, name='Fußmatten', nr=17).status_code == 201
+
+
+def test_anlegen_ohne_umlage_nimmt_die_vorgabe(auth_client):
+    """Die Umlage ist kein Formularfeld mehr: die Oberfläche schickt sie
+    nicht, das Anlegen nimmt die Vorgabe und die Spalte bleibt, was sie ist
+    -- eine Anzeige, die das Blatt nie liest."""
+    antwort = auth_client.post('/api/categories', data={
+        'name': 'Quartierservice', 'betrkv_nr': 14, 'requires_meter': False})
+    assert antwort.status_code == 201
+    zeile = next(z for z in auth_client.get('/api/categories').get_json()
+                 if z['name'] == 'Quartierservice')
+    assert zeile['allocation_method'] == 'qm'
+
+
 # --- Abrechnung ----------------------------------------------------------------
 
 def test_eigene_kostenart_laueft_ueber_nummer_und_name():

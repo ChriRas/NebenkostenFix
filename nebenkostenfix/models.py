@@ -240,6 +240,9 @@ class CostCategory(db.Model):
     # sieht der Vermieter doppelt in der Auswahlliste und kann nicht erkennen,
     # welche die Rechnungen traegt.
     name = db.Column(db.String(100), nullable=False, unique=True)
+    # Keine Abrechnungsentscheidung: das Blatt liest das Kostenprofil des
+    # Mieters (rechenkern.abrechnungsart_von), diese Spalte trägt nur den
+    # Seed-Wert. Die Oberfläche zeigt und fragt sie nicht mehr.
     allocation_method = db.Column(db.String(50), nullable=False)  # aus abrechnungsart.ARTEN: 'qm', 'personen', 'direkt', 'nur_allgemein', 'ignoriert'
     requires_meter = db.Column(db.Boolean, default=False, nullable=False)
     # Die Nummer aus § 2 BetrKV, seit NK-044 (Revision c9a5d3f81e47). Sie ist

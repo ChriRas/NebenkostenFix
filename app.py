@@ -1628,7 +1628,11 @@ def create_category():
     eingabe = Eingabe.aus_request()
     name = eingabe.text('name', pflicht=True, maxlaenge=100)
     nr = eingabe.ganzzahl('betrkv_nr', pflicht=True, min_wert=1)
-    verteilung = eingabe.text('allocation_method', pflicht=True)
+    # Die Umlage ist kein Formularfeld mehr: das Abrechnungsblatt liest das
+    # Kostenprofil des Mieters (rechenkern.abrechnungsart_von), nicht die
+    # Spalte der Kostenart. Die VORGABE bleibt der Seed-Wert; ein API-Client,
+    # der sie noch schickt, wird weiterhin geprüft.
+    verteilung = eingabe.text('allocation_method', standard=abrechnungsart.VORGABE)
     zaehler = eingabe.wahrheit('requires_meter')
     if not betrkv.ist_gueltig(nr):
         raise EingabeFehler(
@@ -1698,7 +1702,7 @@ def update_category(id):
         grund = 'an dieser Kostenart hängt eine Rechnung' if hat_rechnung \
             else 'an dieser Kostenart hängt ein Zähler'
         return _kostenart_ablehnen(
-            'Nummer, Umlageart und Zählerkennung bleiben unveränderlich, weil '
+            'Nummer und Zählerkennung bleiben unveränderlich, weil '
             f'{grund}. Nur der Name ist noch änderbar.')
     if aenderung:
         if not betrkv.ist_gueltig(neuer_nr):

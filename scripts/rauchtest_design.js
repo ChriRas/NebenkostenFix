@@ -778,7 +778,7 @@ async function kategorienPruefen() {
     pruefe('Phase 54: die Tabelle zeigt Nummer, amtliche Bezeichnung und Zähler — und maskiert den Namen',
         liste.felder['kategorien-liste'].innerHTML.includes('&lt;b&gt;x&lt;/b&gt;')
         && /Nr\. 14 · Kosten für den Hauswart/.test(liste.felder['kategorien-liste'].innerHTML)
-        && /Umlage nach Wohnfläche/.test(liste.felder['kategorien-liste'].innerHTML)
+        && !/Umlage nach Wohnfläche/.test(liste.felder['kategorien-liste'].innerHTML)
         && /Zähler \(1\)/.test(liste.felder['kategorien-liste'].innerHTML)
         && liste.felder['kategorien-liste'].innerHTML.includes('openKategorieModal(3)')
         && liste.felder['kategorien-liste'].innerHTML.includes('loescheKategorie(3)'));
@@ -807,15 +807,15 @@ async function kategorienPruefen() {
         leerName.aufrufe.length === 0 && leerName.meldungen.length === 1
         && ohneNummer.aufrufe.length === 0 && ohneNummer.meldungen.length === 1);
 
-    const sonstige = lauf({ 'kategorie-name': { value: 'Eigenbrötlerei' }, 'kategorie-nr': { value: '17' }, 'kategorie-verteilung': { value: 'qm' }, 'kategorie-zaehler': { checked: false } }, [{}, []]);
+    const sonstige = lauf({ 'kategorie-name': { value: 'Eigenbrötlerei' }, 'kategorie-nr': { value: '17' }, 'kategorie-zaehler': { checked: false } }, [{}, []]);
     await sonstige.fns.saveKategorie();
     const koerper = sonstige.aufrufe.length === 2 ? JSON.parse(sonstige.aufrufe[0].koerper) : {};
     pruefe('Phase 54: Nr. 17 geht nur mit Bestätigung (R-KAT-02) hinaus',
         sonstige.aufrufe.length === 2 && sonstige.aufrufe[0].url === '/api/categories'
         && sonstige.aufrufe[0].methode === 'POST' && koerper.betrkv_nr === 17
-        && koerper.name === 'Eigenbrötlerei' && koerper.allocation_method === 'qm');
+        && koerper.name === 'Eigenbrötlerei' && koerper.allocation_method === undefined);
 
-    const aenderung = lauf({ 'kategorie-id': { value: '4' }, 'kategorie-name': { value: 'Quartierservice' }, 'kategorie-nr': { value: '14' }, 'kategorie-verteilung': { value: 'personen' }, 'kategorie-zaehler': { checked: false } }, [{}, []]);
+    const aenderung = lauf({ 'kategorie-id': { value: '4' }, 'kategorie-name': { value: 'Quartierservice' }, 'kategorie-nr': { value: '14' }, 'kategorie-zaehler': { checked: false } }, [{}, []]);
     await aenderung.fns.saveKategorie();
     pruefe('Phase 54: das Bearbeiten geht als PUT mit der Nummer hinaus',
         aenderung.aufrufe.length === 2 && aenderung.aufrufe[0].url === '/api/categories/4'
