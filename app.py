@@ -162,6 +162,10 @@ Stammdaten -- Immobilie, Wohnung, Mieter, Anbieter, Kostenart
   POST        /api/providers                               -> create_provider
   DELETE      /api/providers/<int:id>                      -> delete_provider
   GET         /api/categories                              -> get_categories
+  POST        /api/categories                              -> create_category
+  PUT         /api/categories/<int:id>                     -> update_category
+  DELETE      /api/categories/<int:id>                     -> delete_category
+  GET         /api/categories-vorschlaege                  -> get_nummernvorschlaege
 
   Vier Wege tragen ``DELETE`` und ``PUT`` auf derselben Adresse
   (``update_delete_*``). Das ist gewachsen, nicht entworfen: die Funktion
@@ -276,6 +280,7 @@ from flask.json.provider import DefaultJSONProvider
 from dotenv import load_dotenv
 from nebenkostenfix.geld import NULL, runde
 from nebenkostenfix import betrkv
+from nebenkostenfix import abrechnungsart
 from nebenkostenfix.rechenkern import einheit_fuer
 from nebenkostenfix import mieter_daten
 from nebenkostenfix import beispielimmobilie
@@ -1541,11 +1546,199 @@ def get_categories():
             # Die Nummer und ihre amtliche Bezeichnung (NK-044). Der Vermieter
             # nennt seine Kostenart, wie er will; auf der Abrechnung muss aber
             # nachvollziehbar sein, welche Position aus § 2 BetrKV gemeint ist
-            # (R-DOC-01). Beides geht deshalb mit ueber die Grenze.
+            # (R-DOC-01). Beides geht mit ueber die Grenze.
             'betrkv_nr': c.betrkv_nr,
             'betrkv_bezeichnung': betrkv.bezeichnung(c.betrkv_nr),
+            # Phase 54: die Liste sagt dem Formular, was noch aenderbar ist,
+            # und zeigt, wie viel an der Kostenart haengt.
+            'rechnungen': CostInvoice.query.filter_by(category_id=c.id).count(),
+            'zaehler_anzahl': Meter.query.filter_by(category_id=c.id).count(),
         })
     return jsonify(result), 200
+
+
+# --- Eigene Kostenarten (Phase 54, Issue #30) --------------------------------
+
+#: Die Entwässerung ist die Nummer mit der Namensfalle: der Rechenkern erkennt
+#: das Niederschlagswasser am Namen (betrkv.ist_niederschlag), und der Seed
+#: zählt Kostenarten über Nummer plus Niederschlagsbedeutung zusammen (D-72).
+NR_ENTWAESSERUNG = 3
+
+
+def _kostenart_ablehnen(meldung: str):
+    """Eine 409-Antwort mit Grund; der Nutzer soll verstehen, warum nicht."""
+    return jsonify({'error': meldung}), 409
+
+
+def _nr3_schluessel_pruefen(name: str | None, nr: int | None):
+    """Warnfalle der Entwässerung: Nr. 3 nicht zweimal belegen (D-72)."""
+    if nr != NR_ENTWAESSERUNG:
+        return None
+    if betrkv.ist_niederschlag(name):
+        return _kostenart_ablehnen(
+            'Das Niederschlagswasser erkennt die App am Namen. Unter Nr. 3 '
+            'ist diese Bedeutung durch „Regenwasser“ belegt -- bitte einen '
+            'Namen ohne Regen oder Niederschlag wählen.')
+    belegt = CostCategory.query.filter(
+        CostCategory.betrkv_nr == NR_ENTWAESSERUNG,
+        CostCategory.name != name).all()
+    for kat in belegt:
+        if not betrkv.ist_niederschlag(kat.name):
+            return _kostenart_ablehnen(
+                f'Unter Nr. 3 (Entwässerung) gibt es bereits „{kat.name}“. '
+                'Eine zweite Kostenart dort würde den Seed kippen -- bitte '
+                'eine andere Nummer wählen, zum Beispiel Nr. 17.')
+    return None
+
+
+def _eindeutiger_name(name: str | None, eigene_id: int | None = None):
+    doppelt = CostCategory.query.filter(
+        CostCategory.name == name, CostCategory.id != (eigene_id or 0)).first()
+    if doppelt:
+        return _kostenart_ablehnen(
+            f'Eine Kostenart mit dem Namen „{name}“ gibt es bereits. '
+            'Namen müssen unterscheidbar bleiben.')
+    return None
+
+
+@app.route('/api/categories', methods=['POST'])
+def create_category():
+    """Eigene Kostenart anlegen: eigener Name unter Pflicht-Nummer (R-KAT-01).
+
+    Der Katalog ist kein Namens-, sondern ein Nummernkatalog: mehrere
+    Kostenarten teilen sich eine Nummer, so wie Abwasser und Regenwasser
+    beide unter Nr. 3 stehen (D-72). Nummern, die zur Heizung gehören, sind
+    gesperrt (betrkv.GESPERRT).
+    """
+    eingabe = Eingabe.aus_request()
+    name = eingabe.text('name', pflicht=True, maxlaenge=100)
+    nr = eingabe.ganzzahl('betrkv_nr', pflicht=True, min_wert=1)
+    verteilung = eingabe.text('allocation_method', pflicht=True)
+    zaehler = eingabe.wahrheit('requires_meter')
+    if not betrkv.ist_gueltig(nr):
+        raise EingabeFehler(
+            f'Die Nummer {nr} gibt es in § 2 BetrKV nicht. Wählen Sie eine '
+            'Nummer von 1 bis 17.', 'betrkv_nr')
+    if nr in betrkv.GESPERRT:
+        raise EingabeFehler(
+            'Die Nummern 4, 5 und 6 (Heizung und Warmwasser) sind gesperrt: '
+            'Diese Kosten laufen über die Heizungsanlage und HeizkostenV.',
+            'betrkv_nr')
+    if verteilung not in abrechnungsart.GUELTIG:
+        raise EingabeFehler(
+            f'„{verteilung}“ ist keine Umlageart. Erlaubt sind: '
+            f'{abrechnungsart.aufzaehlung()}.', 'allocation_method')
+    doppelt = _eindeutiger_name(name)
+    if doppelt:
+        return doppelt
+    konflikt = _nr3_schluessel_pruefen(name, nr)
+    if konflikt:
+        return konflikt
+    kat = CostCategory(name=name, betrkv_nr=nr,
+                       allocation_method=verteilung, requires_meter=zaehler)
+    db.session.add(kat)
+    db.session.commit()
+    return jsonify({'message': 'Kostenart angelegt', 'id': kat.id}), 201
+
+
+@app.route('/api/categories/<int:id>', methods=['PUT'])
+def update_category(id):
+    """Umbenennen geht immer; das Weitere nur ohne Rechnung und Zähler.
+
+    Ein offener Entwurf würde sonst still verschieben, wenn die Nummer oder
+    die Umlageart wechselt, anhand derer seine Posten gerechnet wurden.
+    Festgesetzte Versionen bleiben so eingefroren: Sie speichern ihre
+    Eingangsdaten als Schnappschuss (models.py) und die Route ändert nichts
+    an dem, woraus sie gerechnet wurden.
+    """
+    kat = CostCategory.query.get_or_404(id)
+    eingabe = Eingabe.aus_request()
+    hat_rechnung = CostInvoice.query.filter_by(category_id=kat.id).first() is not None
+    hat_zaehler = Meter.query.filter_by(category_id=kat.id).first() is not None
+    eingefroren = hat_rechnung or hat_zaehler
+
+    if eingabe.vorhanden('name'):
+        neuer_name = eingabe.text('name', pflicht=True, maxlaenge=100)
+        if neuer_name != kat.name:
+            doppelt = _eindeutiger_name(neuer_name, kat.id)
+            if doppelt:
+                return doppelt
+            kat.name = neuer_name
+
+    neuer_nr = eingabe.ganzzahl('betrkv_nr', standard=kat.betrkv_nr)
+    neue_verteilung = eingabe.text(
+        'allocation_method', standard=kat.allocation_method)
+    neuer_zaehler = eingabe.wahrheit('requires_meter',
+                                     standard=kat.requires_meter)
+    aenderung = (neuer_nr != kat.betrkv_nr
+                 or neue_verteilung != kat.allocation_method
+                 or neuer_zaehler != kat.requires_meter)
+    if aenderung and eingefroren:
+        grund = 'an dieser Kostenart hängt eine Rechnung' if hat_rechnung \
+            else 'an dieser Kostenart hängt ein Zähler'
+        return _kostenart_ablehnen(
+            'Nummer, Umlageart und Zählerkennung bleiben unveränderlich, weil '
+            f'{grund}. Nur der Name ist noch änderbar.')
+    if aenderung:
+        if not betrkv.ist_gueltig(neuer_nr):
+            raise EingabeFehler(
+                f'Die Nummer {neuer_nr} gibt es in § 2 BetrKV nicht. Wählen '
+                'Sie eine Nummer von 1 bis 17.', 'betrkv_nr')
+        if neuer_nr in betrkv.GESPERRT:
+            raise EingabeFehler(
+                'Die Nummern 4, 5 und 6 (Heizung und Warmwasser) sind '
+                'gesperrt: Diese Kosten laufen über die Heizungsanlage und '
+                'HeizkostenV.', 'betrkv_nr')
+        if neue_verteilung not in abrechnungsart.GUELTIG:
+            raise EingabeFehler(
+                f'„{neue_verteilung}“ ist keine Umlageart. Erlaubt sind: '
+                f'{abrechnungsart.aufzaehlung()}.', 'allocation_method')
+        konflikt = _nr3_schluessel_pruefen(kat.name, neuer_nr)
+        if konflikt:
+            return konflikt
+        kat.betrkv_nr = neuer_nr
+        kat.allocation_method = neue_verteilung
+        kat.requires_meter = neuer_zaehler
+    db.session.commit()
+    return jsonify({'message': 'Kostenart aktualisiert', 'id': kat.id}), 200
+
+
+@app.route('/api/categories/<int:id>', methods=['DELETE'])
+def delete_category(id):
+    """Nur Unbenutztes geht weg; Katalogeintraege kommen wieder (Phase 54)."""
+    kat = CostCategory.query.get_or_404(id)
+    if CostInvoice.query.filter_by(category_id=kat.id).first():
+        return _kostenart_ablehnen(
+            'An dieser Kostenart hängen Rechnungen. Löschen Sie erst die '
+            'Rechnungen oder wenden Sie sich an den Support.')
+    if Meter.query.filter_by(category_id=kat.id).first():
+        return _kostenart_ablehnen(
+            'An dieser Kostenart hängt ein Zähler. Zähler gehören zu einer '
+            'Kostenart und können nicht mitgelöscht werden.')
+    if any(e['name'] == kat.name for e in betrkv.KATALOG):
+        return _kostenart_ablehnen(
+            '„%s“ gehört zum Katalog aus § 2 BetrKV und bleibt erhalten. '
+            'Sie können den Namen ändern.' % kat.name)
+    TenantCostProfile.query.filter_by(category_id=kat.id).delete()
+    db.session.delete(kat)
+    db.session.commit()
+    return jsonify({'message': 'Kostenart gelöscht'}), 200
+
+
+@app.route('/api/categories-vorschlaege', methods=['GET'])
+def get_nummernvorschlaege():
+    """Die Stichwortliste für den Nummernvorschlag (Phase 54).
+
+    Sie liegt an einem Ort (betrkv) und kommt als JSON in die Oberfläche,
+    damit das Formular beim Tippen nichts nachfragen muss. Die Nummernliste
+    füllt das Nummernmenü mit den amtlichen Bezeichnungen.
+    """
+    return jsonify({
+        'vorschlaege': list(betrkv._STICHWOERTER),
+        'heizstichwoerter': list(betrkv._HEIZSTICHWOERTER),
+        'nummern': [[nr, betrkv.bezeichnung(nr)] for nr in sorted(betrkv.BEZEICHNUNGEN)],
+    }), 200
+
 
 # --- Meters ---
 @app.route('/api/meters', methods=['GET'])

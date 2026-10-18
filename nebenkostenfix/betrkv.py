@@ -56,6 +56,8 @@ __all__ = [
     'pruefe',
     'ist_sonstige',
     'zuordnung',
+    'nummernvorschlag',
+    'GESPERRT',
     'ist_niederschlag',
     'katalogeintrag',
     'einheit',
@@ -285,6 +287,67 @@ def _vergleichsform(name: str) -> str:
     """Kleingeschrieben, Umlaute aufgeloest, ohne alles ausser Buchstaben."""
     klein = name.lower().translate(_UMSCHRIFT)
     return ''.join(z for z in klein if z.isalpha())
+
+
+#: Die Nummern, die die Oberfläche für eigene Kostenarten sperrt (Phase 54):
+#: Heizung, Warmwasser und verbundene Anlagen laufen über die Heizungsanlage
+#: und HeizkostenV. Eine zweite Kostenart unter diesen Nummern würde den
+#: Heizkern umgehen.
+GESPERRT = frozenset((NR_HEIZUNG, NR_WARMWASSER, NR_VERBUNDENE_ANLAGE))
+
+#: Stichwörter für den Nummernvorschlag im Formular (Phase 54). Die Liste
+#: liegt an diesem einen Ort neben dem Katalog und schlägt nur vor: sie
+#: überschreibt nie eine Nummer, die der Nutzer schon gewählt hat, und sie
+#: schlägt keine gesperrte Nummer vor.
+_STICHWOERTER = (
+    ('grundsteuer', 1),
+    ('wasser', 2),
+    ('abwasser', 3),
+    ('entwaesserung', 3),
+    ('niederschlag', 3),
+    ('regen', 3),
+    ('aufzug', 7), ('lift', 7),
+    ('muell', 8), ('strassenreinigung', 8),
+    ('reinigung', 9), ('ungeziefer', 9),
+    ('garten', 10),
+    ('beleuchtung', 11),
+    ('schornstein', 12), ('kamin', 12),
+    ('versicherung', 13),
+    ('hauswart', 14), ('hausmeister', 14), ('concierge', 14),
+    ('antenne', 15), ('kabel', 15), ('breitband', 15), ('glasfaser', 15),
+    ('waeschepflege', 16), ('waschmaschine', 16), ('trockner', 16),
+)
+
+#: Namen, die eindeutig zur Heizung oder zum Warmwasser gehören, bekommen
+#: keinen Vorschlag: Für sie ist die Nummer nicht die Frage, sondern die
+#: Heizungsanlage (Nr. 4-6 sind gesperrt).
+_HEIZSTICHWOERTER = ('warmwasser', 'heiz', 'brennstoff', 'waerme')
+
+
+def nummernvorschlag(name: str | None) -> int | None:
+    """Welche Nummer das Formular zu einem Namen raten darf (Phase 54).
+
+    Eine Vermutung wie ``zuordnung``, aber für das Tippen: „Hauswart“ →
+    Nr. 14, „Aufzug“ → Nr. 7. Unbekannte Namen bekommen keinen Vorschlag,
+    gesperrte Nummern (Nr. 4-6) werden nie geraten -- wer Heizkosten meint,
+    legt sie ohnehin an der Heizungsanlage an.
+
+        >>> nummernvorschlag('Hauswart'), nummernvorschlag('Aufzugswartung')
+        (14, 7)
+        >>> nummernvorschlag('Eigenbrötlerei') is None
+        True
+    """
+    form = _vergleichsform(name or '')
+    if not form:
+        return None
+    if any(stichwort in form for stichwort in _HEIZSTICHWOERTER):
+        return None
+    for stichwort, nr in _STICHWOERTER:
+        if nr in GESPERRT:
+            continue
+        if stichwort in form:
+            return nr
+    return None
 
 
 def zuordnung(name) -> int:

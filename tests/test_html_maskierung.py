@@ -123,6 +123,8 @@ AUSNAHMEN = {
     # Phase 53: Kaltmiete-Soll
     'pill': 'statische Pille „geplant", ohne Mieter-Daten',
     'serie': 'Serienknopf aus Number(tenantId), escapeHtml(s.betrag), escapeHtml(s.gueltig_ab)',
+    # Phase 54: eigene Kostenarten
+    'nummer': 'Nummernzelle aus Number(k.betrkv_nr) und escapeHtml(k.betrkv_bezeichnung)',
 }
 
 

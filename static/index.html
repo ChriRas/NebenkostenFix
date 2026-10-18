@@ -406,8 +406,8 @@
                 <div class="section-header">
                     <div>
                         <h2>Einstellungen</h2>
-                        <p class="section-untertitel">Vermieter und Anbieter, Datensicherung, Konto,
-                            Updates und Datenschutz</p>
+                        <p class="section-untertitel">Vermieter und Anbieter, Kostenarten, Datensicherung,
+                            Konto, Updates und Datenschutz</p>
                     </div>
                 </div>
 
@@ -417,6 +417,8 @@
                 <div class="einstellungs-gruppen" role="tablist" aria-label="Bereiche der Einstellungen">
                     <button type="button" class="filter-pill" role="tab" data-gruppe="vermieter"
                         onclick="zeigeEinstellungsgruppe('vermieter')"><i class="ph ph-identification-card" aria-hidden="true"></i> Vermieter &amp; Anbieter</button>
+                    <button type="button" class="filter-pill" role="tab" data-gruppe="kostenarten"
+                        onclick="zeigeEinstellungsgruppe('kostenarten')"><i class="ph ph-list-numbers" aria-hidden="true"></i> Kostenarten</button>
                     <button type="button" class="filter-pill" role="tab" data-gruppe="sicherung"
                         onclick="zeigeEinstellungsgruppe('sicherung')"><i class="ph ph-hard-drives" aria-hidden="true"></i> Datensicherung</button>
                     <button type="button" class="filter-pill" role="tab" data-gruppe="konto"
@@ -472,6 +474,40 @@
                             <small class="feld-hilfe">PNG oder JPEG, höchstens 2 MB. Es steht oben rechts auf dem Deckblatt jeder Abrechnung.</small>
                         </div>
                         <button class="btn-primary" id="btn-vermieter-speichern" onclick="saveVermieterdaten()">Speichern</button>
+                    </div>
+
+                    <!-- Phase 54 (Issue #30): Eigene Kostenarten. Der Katalog ist
+                         ein Nummernkatalog: der Vermieter nennt seine Kostenart,
+                         wie sie auf der Abrechnung der Verwaltung steht, und wählt
+                         die Nummer aus § 2 BetrKV. Heizung und Warmwasser (Nr. 4-6)
+                         laufen über die Heizungsanlage. -->
+                    <div data-gruppe="kostenarten" class="dashboard-card glass-panel">
+                        <div class="karten-kopf">
+                            <h3>Kostenarten</h3>
+                        </div>
+                        <p class="karten-text">
+                            Sie bekommen Abrechnungen, deren Kostenarten anders heißen als
+                            der Katalog. Legen Sie sie hier unter ihrem eigenen Namen an —
+                            die Nummer aus § 2 BetrKV entscheidet, wie gerechnet wird.
+                            Umbenennen geht jederzeit; Nummer, Umlage und Zähler frieren
+                            ein, sobald eine Rechnung oder ein Zähler daran hängt.
+                        </p>
+                        <button class="btn-primary" onclick="openKategorieModal()"><i class="ph ph-plus" aria-hidden="true"></i> Kostenart anlegen</button>
+                        <div class="tabellen-rolle">
+                            <table class="tabelle tabelle-kompakt abstand-oben-klein">
+                                <thead>
+                                    <tr>
+                                        <th>Name</th>
+                                        <th>Nummer</th>
+                                        <th>Umlage</th>
+                                        <th>Zähler</th>
+                                        <th class="text-right">Rechnungen</th>
+                                        <th class="spalte-knopf"></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="kategorien-liste"></tbody>
+                            </table>
+                        </div>
                     </div>
 
                     <!-- NK-127 (E-1): Kontoverwaltung in der Oberfläche. Ein
@@ -1904,6 +1940,41 @@
         </div>
     </div>
 
+    <!-- Phase 54: Kostenart anlegen und bearbeiten. -->
+    <div class="modal-overlay" id="kategorie-modal">
+        <div class="modal glass-panel">
+            <div class="modal-header">
+                <h2><span id="kategorie-modal-titel">Kostenart anlegen</span> <button type="button" class="begriff-hilfe" aria-label="Begriff erklären" data-begriff="eigene-kostenarten"><i class="ph ph-question" aria-hidden="true"></i></button></h2>
+                <button class="btn-icon" aria-label="Schließen" onclick="closeKategorieModal()"><i class="ph ph-x"></i></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="kategorie-id">
+                <div class="feld">
+                    <label for="kategorie-name">Name</label>
+                    <input type="text" id="kategorie-name" maxlength="100"
+                        placeholder="So steht sie auf der Rechnung, z. B. Quartierservice">
+                </div>
+                <div class="feld">
+                    <label for="kategorie-nr">Nummer aus § 2 BetrKV</label>
+                    <select id="kategorie-nr"></select>
+                    <small class="feld-hilfe">Passt keine Nummer? Dann Nr. 17 <em>Sonstige Betriebskosten</em>. Das gilt nur, wenn sie im Mietvertrag einzeln vereinbart ist. Verwaltung, Instandhaltung und Rücklagen dürfen nie umgelegt werden.</small>
+                </div>
+                <div class="feld">
+                    <label for="kategorie-verteilung">Umlage</label>
+                    <select id="kategorie-verteilung"></select>
+                </div>
+                <div class="feld">
+                    <label><input type="checkbox" id="kategorie-zaehler"> Eigener Zähler (Umlage nach Verbrauch)</label>
+                </div>
+                <p id="kategorie-sperre" class="text-muted" hidden></p>
+                <div class="modal-footer">
+                    <button class="btn-secondary" onclick="closeKategorieModal()">Abbrechen</button>
+                    <button class="btn-primary" onclick="saveKategorie()">Speichern</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Phase 49: Kaltmiete-Soll mit Erinnerung an die Mieterhöhung -->
     <div class="modal-overlay" id="kaltmiete-modal">
         <div class="modal glass-panel dialog-vorauszahlung">
@@ -2841,7 +2912,7 @@
     </div>
     <script src="/static/formular.js?v=2"></script>
     <script src="/static/umzug.js?v=1"></script>
-    <script src="/static/app.js?v=32"></script>
+    <script src="/static/app.js?v=33"></script>
 </body>
 
 </html>

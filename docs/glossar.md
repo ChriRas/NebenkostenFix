@@ -187,6 +187,7 @@ oder ein Pflichtbegriff in der Oberfläche kein „?“ hat.
 |---|---|---|
 | abrechnungsfrist | Abrechnungsfrist | Die Abrechnung muss dem Mieter spätestens zwölf Monate nach Ende des Abrechnungszeitraums zugehen; danach können Sie keine Nachzahlung mehr verlangen, ein Guthaben müssen Sie trotzdem auszahlen (§ 556 Abs. 3 BGB). |
 | abrechnungszeitraum | Abrechnungszeitraum | Die Zeit, über die abgerechnet wird: höchstens zwölf Monate, meist ein Kalenderjahr; bei Ein- oder Auszug zählen nur die Monate, in denen der Mieter dort gewohnt hat. |
+| eigene-kostenarten | Eigene Kostenarten | Ihre Abrechnung heißt die Kostenart anders als der Katalog? Legen Sie sie unter ihrem eigenen Namen an und wählen die Nummer aus § 2 BetrKV, zum Beispiel „Hauswart" unter Nr. 14. Die Nummer entscheidet, wie gerechnet wird. |
 | guthaben | Guthaben | Hat der Mieter mehr vorausgezahlt, als an Kosten angefallen ist, bekommt er den Unterschied zurück. |
 | hauptzaehler | Hauptzähler | Der Zähler des Versorgers für das ganze Haus; nach ihm stellt der Versorger seine Rechnung. |
 | kaltmiete | Kaltmiete-Soll | Die vereinbarte Kaltmiete mit ihrem Stichtagsverlauf; das Modal stellt sie den erfassten Mietzahlungen je Monat gegenüber. Gezählt wird nur, was als Zahlung vom Typ „Miete" erfasst ist — kein Kontoabgleich. Künftige Stufen sind als geplant markiert. |

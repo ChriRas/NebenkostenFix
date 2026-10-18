@@ -10,6 +10,11 @@
   "satz": "Die Zeit, über die abgerechnet wird: höchstens zwölf Monate, meist ein Kalenderjahr; bei Ein- oder Auszug zählen nur die Monate, in denen der Mieter dort gewohnt hat."
  },
  {
+  "schluessel": "eigene-kostenarten",
+  "begriff": "Eigene Kostenarten",
+  "satz": "Ihre Abrechnung heißt die Kostenart anders als der Katalog? Legen Sie sie unter ihrem eigenen Namen an und wählen die Nummer aus § 2 BetrKV, zum Beispiel „Hauswart\" unter Nr. 14. Die Nummer entscheidet, wie gerechnet wird."
+ },
+ {
   "schluessel": "guthaben",
   "begriff": "Guthaben",
   "satz": "Hat der Mieter mehr vorausgezahlt, als an Kosten angefallen ist, bekommt er den Unterschied zurück."

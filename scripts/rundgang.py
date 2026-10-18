@@ -45,7 +45,7 @@ TRENNLINIEN_JS = """() => [...document.querySelectorAll('.section-header-getrenn
 BEREICHE = ['dashboard', 'properties', 'tenants', 'meters', 'invoices',
             'billing', 'payments', 'reports', 'settings']
 BREITEN = [(1440, 900), (768, 1024), (390, 844)]
-EINSTELLUNGS_GRUPPEN = ['vermieter', 'sicherung', 'konto', 'updates', 'datenschutz']
+EINSTELLUNGS_GRUPPEN = ['vermieter', 'kostenarten', 'sicherung', 'konto', 'updates', 'datenschutz']
 # Dialoge, die ohne Auswahl aufgehen (Ausdruck in app.js).
 DIALOGE = {
     'immobilie': 'openAddPropertyModal()',

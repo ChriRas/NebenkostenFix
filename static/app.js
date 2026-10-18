@@ -2649,7 +2649,7 @@ async function deleteTenant(id) {
 // NK-156 (K8): Einstellungen in Gruppen. Eine eigene Klasse statt
 // ``hidden``, damit die Gruppe nie eine Karte zeigt, die aus anderem Grund
 // verborgen ist (Gefahrenzone nur im Entwicklungsstapel).
-const EINSTELLUNGS_GRUPPEN = ['vermieter', 'sicherung', 'konto', 'updates', 'datenschutz'];
+const EINSTELLUNGS_GRUPPEN = ['vermieter', 'kostenarten', 'sicherung', 'konto', 'updates', 'datenschutz'];
 
 function zeigeEinstellungsgruppe(gruppe) {
     if (!EINSTELLUNGS_GRUPPEN.includes(gruppe)) gruppe = 'vermieter';
@@ -2666,6 +2666,8 @@ function zeigeEinstellungsgruppe(gruppe) {
     } catch (e) {
         // ohne Sitzungsspeicher (privater Modus) beginnt die Seite bei „Vermieter“
     }
+    // Phase 54: die Kostenarten-Liste lädt, wenn ihre Gruppe gezeigt wird.
+    if (gruppe === 'kostenarten') ladeKostenarten();
 }
 window.zeigeEinstellungsgruppe = zeigeEinstellungsgruppe;
 
@@ -4110,6 +4112,197 @@ async function openKaltmieteModal(tenant) {
 
 function closeKaltmieteModal() {
     document.getElementById('kaltmiete-modal').classList.remove('active');
+}
+
+// --- Eigene Kostenarten (Phase 54, Issue #30) --------------------------------
+// Der Katalog ist ein Nummernkatalog: der Name gehört dem Vermieter, die
+// Nummer aus § 2 BetrKV entscheidet über die Rechnung. Heizung und Warmwasser
+// (Nr. 4-6) sind gesperrt, Nr. 17 verlangt die Bestätigung (R-KAT-02).
+
+const KATEGORIE_VERTEILUNGEN = [
+    ['qm', 'Umlage nach Wohnfläche'],
+    ['personen', 'Umlage nach Personen'],
+    ['direkt', 'Nach Verbrauch (eigener Zähler)'],
+    ['nur_allgemein', 'Nur Anteil am Allgemeinverbrauch'],
+    ['ignoriert', 'Wird diesem Mieter nicht berechnet'],
+];
+
+let letzteKategorien = [];
+let katalogHilfe = null;
+
+// Die Stichwortliste kommt einmalig vom Server (betrkv) und bleibt hier;
+// beim Tippen fragt das Formular deshalb nichts nach.
+async function ladeKatalogHilfe() {
+    if (katalogHilfe) return katalogHilfe;
+    const res = await fetch('/api/categories-vorschlaege');
+    if (!res.ok) throw await serverFehler(res);
+    katalogHilfe = await res.json();
+    return katalogHilfe;
+}
+
+// Der Vorschlag aus betrkv, hier nachgerechnet: schlägt nur vor und
+// überschreibt nie eine Nummer, die der Nutzer schon gewählt hat (das
+// regelt der Aufrufer über data-gewaehlt). Gesperrte Nummern (4-6) und
+// Heiz-Namen bekommen keinen Vorschlag.
+function nummernVorschlag(name, hilfe = katalogHilfe) {
+    if (!hilfe) return null;
+    const form = String(name || '').toLowerCase()
+        .replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue')
+        .replace(/ß/g, 'ss')
+        .replace(/[^a-z]/g, '');
+    if (!form) return null;
+    if (hilfe.heizstichwoerter.some(wort => form.includes(wort))) return null;
+    for (const [stichwort, nr] of hilfe.vorschlaege) {
+        if (nr === 4 || nr === 5 || nr === 6) continue;
+        if (form.includes(stichwort)) return nr;
+    }
+    return null;
+}
+
+async function ladeKostenarten() {
+    let d;
+    try {
+        const res = await fetch('/api/categories');
+        if (!res.ok) throw await serverFehler(res);
+        d = await res.json();
+    } catch (e) {
+        showError(meldungZu(e, 'Fehler beim Laden der Kostenarten.'));
+        return;
+    }
+    letzteKategorien = d;
+    document.getElementById('kategorien-liste').innerHTML = d.length === 0
+        ? '<tr><td colspan="6" class="text-muted" style="padding: 8px;">Noch keine eigene Kostenart angelegt.</td></tr>'
+        : d.map(k => kategorieZeile(k)).join('');
+}
+
+function kategorieZeile(k) {
+    const umlage = (KATEGORIE_VERTEILUNGEN.find(([wert]) => wert === k.allocation_method) || [null, k.allocation_method])[1];
+    const nummer = k.betrkv_nr
+        ? `Nr. ${k.betrkv_nr} · ${escapeHtml(k.betrkv_bezeichnung)}`
+        : '<span class="text-muted">ohne</span>';
+    const zaehler = k.zaehler_anzahl > 0 ? `Zähler (${k.zaehler_anzahl})` : (k.requires_meter ? 'ja' : '—');
+    return `<tr>
+        <td style="padding: 8px;">${escapeHtml(k.name)}</td>
+        <td style="padding: 8px;">${nummer}</td>
+        <td style="padding: 8px;">${escapeHtml(umlage)}</td>
+        <td style="padding: 8px;">${escapeHtml(zaehler)}</td>
+        <td style="padding: 8px; text-align: right;" class="tabular-nums">${Number(k.rechnungen)}</td>
+        <td style="padding: 8px;">
+            <button type="button" class="btn-icon" aria-label="Kostenart bearbeiten" title="Bearbeiten" onclick="openKategorieModal(${Number(k.id)})"><i class="ph ph-pencil" aria-hidden="true"></i></button>
+            <button type="button" class="btn-icon" aria-label="Kostenart löschen" title="Löschen" onclick="loescheKategorie(${Number(k.id)})"><i class="ph ph-trash" aria-hidden="true"></i></button>
+        </td>
+    </tr>`;
+}
+
+async function openKategorieModal(id = null) {
+    const hilfe = await ladeKatalogHilfe();
+    const nrWahl = document.getElementById('kategorie-nr');
+    nrWahl.innerHTML = '<option value="">— Nummer wählen —</option>' +
+        hilfe.nummern.map(([nr, bezeichnung]) => {
+            const gesperrt = nr === 4 || nr === 5 || nr === 6;
+            return `<option value="${nr}"${gesperrt ? ' disabled' : ''}>Nr. ${nr} · ${escapeHtml(bezeichnung)}${gesperrt ? ' (gesperrt)' : ''}</option>`;
+        }).join('');
+    document.getElementById('kategorie-verteilung').innerHTML =
+        KATEGORIE_VERTEILUNGEN.map(([wert, text]) => `<option value="${escapeHtml(wert)}">${escapeHtml(text)}</option>`).join('');
+    const namenFeld = document.getElementById('kategorie-name');
+    document.getElementById('kategorie-id').value = id ? String(id) : '';
+    document.getElementById('kategorie-sperre').hidden = true;
+    nrWahl.dataset.gewaehlt = id ? '1' : '';
+    nrWahl.onchange = () => { nrWahl.dataset.gewaehlt = '1'; };
+    nrWahl.disabled = false;
+    document.getElementById('kategorie-verteilung').disabled = false;
+    document.getElementById('kategorie-zaehler').disabled = false;
+    if (id) {
+        const k = letzteKategorien.find(x => Number(x.id) === Number(id));
+        document.getElementById('kategorie-modal-titel').textContent = 'Kostenart bearbeiten';
+        namenFeld.value = k.name;
+        nrWahl.value = k.betrkv_nr == null ? '' : String(k.betrkv_nr);
+        document.getElementById('kategorie-verteilung').value = k.allocation_method;
+        document.getElementById('kategorie-zaehler').checked = k.requires_meter;
+        const eingefroren = k.rechnungen > 0 || k.zaehler_anzahl > 0;
+        if (eingefroren) {
+            nrWahl.disabled = true;
+            document.getElementById('kategorie-verteilung').disabled = true;
+            document.getElementById('kategorie-zaehler').disabled = true;
+            const sperre = document.getElementById('kategorie-sperre');
+            sperre.hidden = false;
+            sperre.textContent = 'Nummer, Umlage und Zähler bleiben unveränderlich, weil an dieser Kostenart schon '
+                + (k.rechnungen > 0 ? 'Rechnungen' : 'ein Zähler')
+                + ' hängen. Nur der Name ist noch änderbar.';
+        }
+    } else {
+        document.getElementById('kategorie-modal-titel').textContent = 'Kostenart anlegen';
+        namenFeld.value = '';
+        nrWahl.value = '';
+        document.getElementById('kategorie-verteilung').value = 'qm';
+        document.getElementById('kategorie-zaehler').checked = false;
+        // Der Vorschlag füllt nur ein leeres Nummernmenü; wer einmal gewählt
+        // hat, behält seine Nummer.
+        namenFeld.oninput = (e) => {
+            if (nrWahl.dataset.gewaehlt === '1' || nrWahl.disabled) return;
+            const vorschlag = nummernVorschlag(e.target.value, hilfe);
+            nrWahl.value = vorschlag == null ? '' : String(vorschlag);
+        };
+    }
+    document.getElementById('kategorie-modal').classList.add('active');
+}
+
+function closeKategorieModal() {
+    document.getElementById('kategorie-modal').classList.remove('active');
+}
+
+async function saveKategorie() {
+    const id = document.getElementById('kategorie-id').value;
+    const name = document.getElementById('kategorie-name').value.trim();
+    if (!name) { showError('Bitte einen Namen eintragen.'); return; }
+    const nrWert = document.getElementById('kategorie-nr').value;
+    if (!nrWert) { showError('Bitte die Nummer aus § 2 BetrKV wählen.'); return; }
+    const nr = Number(nrWert);
+    // Nr. 17 verlangt die Bestätigung (R-KAT-02): nur umlagefähig, wenn der
+    // Mietvertrag sie einzeln benennt. Wer schon 17 eingetragen hat, wird
+    // beim reinen Umbenennen nicht noch einmal gefragt.
+    if (nr === 17) {
+        const alt = id && letzteKategorien.find(x => Number(x.id) === Number(id));
+        if (!alt || alt.betrkv_nr !== 17) {
+            const ok = await frage(
+                'Nr. 17 (Sonstige Betriebskosten) ist nur umlagefähig, wenn sie im Mietvertrag einzeln vereinbart ist. Wirklich Nr. 17 wählen?',
+                'Nr. 17 wählen');
+            if (!ok) return;
+        }
+    }
+    const body = {
+        name,
+        betrkv_nr: nr,
+        allocation_method: document.getElementById('kategorie-verteilung').value,
+        requires_meter: document.getElementById('kategorie-zaehler').checked,
+    };
+    try {
+        const res = await fetch(id ? `/api/categories/${Number(id)}` : '/api/categories', {
+            method: id ? 'PUT' : 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+        if (!res.ok) throw await serverFehler(res);
+    } catch (e) {
+        showError(meldungZu(e, 'Die Kostenart konnte nicht gespeichert werden.'));
+        return;
+    }
+    closeKategorieModal();
+    await ladeKostenarten();
+}
+
+async function loescheKategorie(id) {
+    const ok = await frageLoeschen(
+        'Die Kostenart und ihre Kostenprofile werden gelöscht. Rechnungen und Zähler sperren das Löschen. Wirklich löschen?');
+    if (!ok) return;
+    try {
+        const res = await fetch(`/api/categories/${Number(id)}`, { method: 'DELETE' });
+        if (!res.ok) throw await serverFehler(res);
+    } catch (e) {
+        showError(meldungZu(e, 'Die Kostenart konnte nicht gelöscht werden.'));
+        return;
+    }
+    await ladeKostenarten();
 }
 
 async function ladeKaltmiete(tenantId) {

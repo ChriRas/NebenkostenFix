@@ -340,11 +340,11 @@ pruefe('Gefahrenzone traegt die Klasse statt Inline-Farben',
     html.includes('dashboard-card glass-panel gefahrenzone'));
 pruefe('Datenbank-Knopf ist .btn-gefahr', html.includes('class="btn-gefahr"'));
 pruefe('Detailliertes PDF ist .btn-tint', html.includes('btn-secondary btn-tint'));
-// Sechzehn Pillen: Rechnungen (Eingang/Alle/Nach Kostenart, Liste/Zeitleiste), Einstellungen
-// (fünf Gruppen), Statistik (fünf Filter), Historie (Nur offene Zahlungen, Phase 47);
-// dieselbe Zahl sichert test_ui_konsistenz.py.
-pruefe('Sechzehn Auswahlpillen, keine mit Inline-Stil',
-    (html.match(/class="filter-pill/g) || []).length === 16
+// Siebzehn Pillen: Rechnungen (Eingang/Alle/Nach Kostenart, Liste/Zeitleiste), Einstellungen
+// (sechs Gruppen, Phase 54 ergänzt Kostenarten), Statistik (fünf Filter), Historie
+// (Nur offene Zahlungen, Phase 47); dieselbe Zahl sichert test_ui_konsistenz.py.
+pruefe('Siebzehn Auswahlpillen, keine mit Inline-Stil',
+    (html.match(/class="filter-pill/g) || []).length === 17
     && !/class="filter-pill[^"]*"[^>]*style=/.test(html));
 pruefe('Cache-Buster erhoeht (style.css)', /style\.css\?v=\d+/.test(html));
 pruefe('Cache-Buster erhoeht (app.js)', /app\.js\?v=\d+/.test(html));
@@ -713,7 +713,116 @@ async function kaltmietePruefen() {
         && html.includes('id="kaltmiete-modal"'));
 }
 
-// --- NK-262: Fristenkalender in der Datenqualität ----------------------------
+// Phase 54 (Issue #30): eigene Kostenarten — Tabelle, Nummernvorschlag,
+// Nummernmenü und die Nr.-17-Bestätigung, vom Quelltext her geprüft.
+async function kategorienPruefen() {
+    const funktion = name => {
+        const m = appQuelle.match(new RegExp(`(async )?function ${name}\\([^)]*\\) \\{[\\s\\S]*?\\n\\}`));
+        if (!m) throw new Error(`${name} nicht gefunden`);
+        return m[0];
+    };
+    const quelltext =
+        'const KATEGORIE_VERTEILUNGEN = [["qm","Umlage nach Wohnfläche"],["personen","Umlage nach Personen"],["direkt","Nach Verbrauch (eigener Zähler)"],["nur_allgemein","Nur Anteil am Allgemeinverbrauch"],["ignoriert","Wird diesem Mieter nicht berechnet"]];'
+        + 'let katalogHilfe = null; let letzteKategorien = [];'
+        + funktion('ladeKatalogHilfe') + funktion('nummernVorschlag')
+        + funktion('ladeKostenarten') + funktion('kategorieZeile')
+        + funktion('openKategorieModal') + funktion('closeKategorieModal') + funktion('saveKategorie');
+    const lauf = (felder, antworten) => {
+        const aufrufe = [];
+        const meldungen = [];
+        const dokument = {
+            getElementById(id) {
+                if (!(id in felder)) felder[id] = { value: '', innerHTML: '', textContent: '', hidden: false, checked: false, dataset: {}, classList: { add() {}, remove() {} } };
+                if (!felder[id].dataset) felder[id].dataset = {};
+                if (!felder[id].classList) felder[id].classList = { add() {}, remove() {} };
+                return felder[id];
+            },
+        };
+        const holen = (url, opt = {}) => {
+            aufrufe.push({ url, methode: opt.method || 'GET', koerper: opt.body });
+            const daten = antworten.shift() ?? {};
+            return Promise.resolve({ ok: true, json: () => Promise.resolve(daten) });
+        };
+        const fns = new Function('document', 'fetch', 'showError', 'serverFehler', 'meldungZu',
+            'escapeHtml', 'frage',
+            quelltext + '; return { ladeKostenarten, nummernVorschlag, openKategorieModal, saveKategorie };')(
+            dokument, holen, m => meldungen.push(m), async () => new Error('Server'),
+            (e, ersatz) => ersatz, t => String(t).replace(/</g, '&lt;').replace(/>/g, '&gt;'),
+            async () => true);
+        return { fns, aufrufe, meldungen, felder };
+    };
+
+    const hilfe = {
+        vorschlaege: [['hauswart', 14], ['aufzug', 7], ['muell', 8], ['warmwasser', 5]],
+        heizstichwoerter: ['warmwasser', 'heiz'],
+        nummern: [[1, 'Grundsteuer'], [4, 'Heizung'], [14, 'Kosten für den Hauswart'], [17, 'sonstige Betriebskosten']],
+    };
+
+    const vorschlag = lauf({}, []);
+    pruefe('Phase 54: der Nummernvorschlag schlägt vor, ohne zu überschreiben — und versagt bei Heiz-Namen',
+        vorschlag.fns.nummernVorschlag('Hauswart', hilfe) === 14
+        && vorschlag.fns.nummernVorschlag('Aufzugswartung', hilfe) === 7
+        && vorschlag.fns.nummernVorschlag('Müllabfuhr', hilfe) === 8
+        && vorschlag.fns.nummernVorschlag('Heizkosten', hilfe) === null
+        && vorschlag.fns.nummernVorschlag('Eigenbrötlerei', hilfe) === null
+        && vorschlag.fns.nummernVorschlag('', hilfe) === null);
+
+    const leer = lauf({}, [[]]);
+    await leer.fns.ladeKostenarten();
+    pruefe('Phase 54: ohne eigene Kostenart ein Hinweis statt einer leeren Tabelle',
+        leer.aufrufe[0].url === '/api/categories'
+        && /Noch keine eigene Kostenart/.test(leer.felder['kategorien-liste'].innerHTML));
+
+    const liste = lauf({}, [[{ id: 3, name: 'Hauswart <b>x</b>', betrkv_nr: 14, betrkv_bezeichnung: 'Kosten für den Hauswart', allocation_method: 'qm', requires_meter: true, rechnungen: 2, zaehler_anzahl: 1 }]]);
+    await liste.fns.ladeKostenarten();
+    pruefe('Phase 54: die Tabelle zeigt Nummer, amtliche Bezeichnung und Zähler — und maskiert den Namen',
+        liste.felder['kategorien-liste'].innerHTML.includes('&lt;b&gt;x&lt;/b&gt;')
+        && /Nr\. 14 · Kosten für den Hauswart/.test(liste.felder['kategorien-liste'].innerHTML)
+        && /Umlage nach Wohnfläche/.test(liste.felder['kategorien-liste'].innerHTML)
+        && /Zähler \(1\)/.test(liste.felder['kategorien-liste'].innerHTML)
+        && liste.felder['kategorien-liste'].innerHTML.includes('openKategorieModal(3)')
+        && liste.felder['kategorien-liste'].innerHTML.includes('loescheKategorie(3)'));
+
+    const modal = lauf({}, [hilfe]);
+    await modal.fns.openKategorieModal(null);
+    modal.felder['kategorie-name'].oninput({ target: { value: 'Müllabfuhr' } });
+    const vorschlagen = modal.felder['kategorie-nr'].value;
+    modal.felder['kategorie-name'].oninput({ target: { value: 'Heizkosten' } });
+    const keinHeizVorschlag = modal.felder['kategorie-nr'].value;
+    modal.felder['kategorie-nr'].value = '8';
+    modal.felder['kategorie-nr'].dataset.gewaehlt = '1';
+    modal.felder['kategorie-name'].oninput({ target: { value: 'Gartenpflege' } });
+    pruefe('Phase 54: das Nummernmenü kommt aus betrkv, gesperrte Nummern sind disabled, der Vorschlag überschreibt keine gewählte Nummer',
+        vorschlagen === '8'
+        && keinHeizVorschlag === ''
+        && modal.felder['kategorie-nr'].value === '8'
+        && modal.felder['kategorie-nr'].innerHTML.includes('Nr. 14 · Kosten für den Hauswart')
+        && /value="4" disabled>Nr\. 4 · Heizung \(gesperrt\)/.test(modal.felder['kategorie-nr'].innerHTML));
+
+    const leerName = lauf({ 'kategorie-name': { value: '  ' } }, []);
+    await leerName.fns.saveKategorie();
+    const ohneNummer = lauf({ 'kategorie-name': { value: 'Gartenpflege' }, 'kategorie-nr': { value: '' } }, []);
+    await ohneNummer.fns.saveKategorie();
+    pruefe('Phase 54: ohne Name und ohne Nummer geht nichts hinaus',
+        leerName.aufrufe.length === 0 && leerName.meldungen.length === 1
+        && ohneNummer.aufrufe.length === 0 && ohneNummer.meldungen.length === 1);
+
+    const sonstige = lauf({ 'kategorie-name': { value: 'Eigenbrötlerei' }, 'kategorie-nr': { value: '17' }, 'kategorie-verteilung': { value: 'qm' }, 'kategorie-zaehler': { checked: false } }, [{}, []]);
+    await sonstige.fns.saveKategorie();
+    const koerper = sonstige.aufrufe.length === 2 ? JSON.parse(sonstige.aufrufe[0].koerper) : {};
+    pruefe('Phase 54: Nr. 17 geht nur mit Bestätigung (R-KAT-02) hinaus',
+        sonstige.aufrufe.length === 2 && sonstige.aufrufe[0].url === '/api/categories'
+        && sonstige.aufrufe[0].methode === 'POST' && koerper.betrkv_nr === 17
+        && koerper.name === 'Eigenbrötlerei' && koerper.allocation_method === 'qm');
+
+    const aenderung = lauf({ 'kategorie-id': { value: '4' }, 'kategorie-name': { value: 'Quartierservice' }, 'kategorie-nr': { value: '14' }, 'kategorie-verteilung': { value: 'personen' }, 'kategorie-zaehler': { checked: false } }, [{}, []]);
+    await aenderung.fns.saveKategorie();
+    pruefe('Phase 54: das Bearbeiten geht als PUT mit der Nummer hinaus',
+        aenderung.aufrufe.length === 2 && aenderung.aufrufe[0].url === '/api/categories/4'
+        && aenderung.aufrufe[0].methode === 'PUT'
+        && JSON.parse(aenderung.aufrufe[0].koerper).name === 'Quartierservice');
+}
+
 async function fristenPruefen() {
     const m = appQuelle.match(/async function ladeFristen\(\) \{[\s\S]*?\n\}/);
     if (!m) throw new Error('ladeFristen nicht gefunden');
@@ -1834,34 +1943,34 @@ async function zaehlerPflegePruefen() {
     pruefe('NK-258: keine Fehlermeldung im glatten Lauf', meldungen.length === 0);
 }
 
-warnLeistePruefen()
-    .catch(e => pruefe('NK-201: Warnleisten-Prüfung lief durch — ' + e.message, false))
-    .then(() => ausschalterPruefen()
-        .catch(e => pruefe('NK-204: Ausschalter-Prüfung lief durch — ' + e.message, false))
-        .then(() => haushaltPruefen()
-            .catch(e => pruefe('NK-118: Haushaltsprüfung lief durch — ' + e.message, false))
-            .then(() => nachfragePruefen()
-                .catch(e => pruefe('NK-216: Nachfrage-Prüfung lief durch — ' + e.message, false))
-                .then(() => korrekturPruefen()
-                    .catch(e => pruefe('NK-217: Korrektur-Prüfung lief durch — ' + e.message, false))
-                    .then(() => serienPruefen()
-                        .catch(e => pruefe('NK-226: Serienbuchung-Prüfung lief durch — ' + e.message, false))
-                        .then(() => ablesenPruefen()
-                            .catch(e => pruefe('NK-227: Ablesen-Prüfung lief durch — ' + e.message, false))
-                            .then(() => vorjahrPruefen()
-                                .catch(e => pruefe('NK-230: Vorjahr-Prüfung lief durch — ' + e.message, false))
-                                .then(() => zaehlerPflegePruefen()
-                                    .catch(e => pruefe('NK-258: Zählerpflege-Prüfung lief durch — ' + e.message, false))
-                                    .then(() => vorauszahlungPruefen()
-                                        .catch(e => pruefe('NK-261: Vorauszahlung-Prüfung lief durch — ' + e.message, false))
-                                        .then(() => kaltmietePruefen()
-                                            .catch(e => pruefe('Phase 49: Kaltmiete-Prüfung lief durch — ' + e.message, false))
-                                            .then(() => fristenPruefen()
-                                                .catch(e => pruefe('NK-262: Fristen-Prüfung lief durch — ' + e.message, false))
-                                            .then(() => mehrjahresblickPruefen()
-                                                .catch(e => pruefe('NK-263: Mehrjahresblick-Prüfung lief durch — ' + e.message, false))
-                                                .then(() => jahreswechselPruefen()
-                                                    .catch(e => pruefe('NK-267: Jahreswechsel-Prüfung lief durch — ' + e.message, false))
-                                                    .then(() => pruefstandPruefen()
-                                                        .catch(e => pruefe('NK-265: Prüfstand-Prüfung lief durch — ' + e.message, false))
-                                                        .then(() => process.exit(fehler ? 1 : 0))))))))))))))));
+(async () => {
+    // NK-201/NK-204/NK-118/NK-216/NK-217/NK-226/NK-227/NK-230/NK-258/NK-261/
+    // NK-262/NK-263/NK-267/NK-265 und Phase 54 (eigene Kostenarten): jede
+    // Prüfung läuft, eine fehlgeschlagene bricht den Lauf nicht ab.
+    const schritte = [
+        ['warnLeistePruefen', 'NK-201: Warnleisten-Prüfung'],
+        ['ausschalterPruefen', 'NK-204: Ausschalter-Prüfung'],
+        ['haushaltPruefen', 'NK-118: Haushaltsprüfung'],
+        ['nachfragePruefen', 'NK-216: Nachfrage-Prüfung'],
+        ['korrekturPruefen', 'NK-217: Korrektur-Prüfung'],
+        ['serienPruefen', 'NK-226: Serienbuchung-Prüfung'],
+        ['ablesenPruefen', 'NK-227: Ablesen-Prüfung'],
+        ['vorjahrPruefen', 'NK-230: Vorjahr-Prüfung'],
+        ['zaehlerPflegePruefen', 'NK-258: Zählerpflege-Prüfung'],
+        ['vorauszahlungPruefen', 'NK-261: Vorauszahlung-Prüfung'],
+        ['kaltmietePruefen', 'Phase 49: Kaltmiete-Prüfung'],
+        ['fristenPruefen', 'NK-262: Fristen-Prüfung'],
+        ['mehrjahresblickPruefen', 'NK-263: Mehrjahresblick-Prüfung'],
+        ['jahreswechselPruefen', 'NK-267: Jahreswechsel-Prüfung'],
+        ['pruefstandPruefen', 'NK-265: Prüfstand-Prüfung'],
+        ['kategorienPruefen', 'Phase 54: Kostenarten-Prüfung'],
+    ];
+    for (const [name, label] of schritte) {
+        try {
+            await eval(name)();
+        } catch (e) {
+            pruefe(label + ' lief durch — ' + e.message, false);
+        }
+    }
+    process.exit(fehler ? 1 : 0);
+})();
