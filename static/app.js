@@ -4259,6 +4259,7 @@ async function openKategorieModal(id = null) {
     const namenFeld = document.getElementById('kategorie-name');
     document.getElementById('kategorie-id').value = id ? String(id) : '';
     document.getElementById('kategorie-sperre').hidden = true;
+    document.getElementById('kategorie-heizhinweis').hidden = true;
     nrWahl.dataset.gewaehlt = id ? '1' : '';
     nrWahl.onchange = () => { nrWahl.dataset.gewaehlt = '1'; };
     nrWahl.disabled = false;
@@ -4272,6 +4273,10 @@ async function openKategorieModal(id = null) {
         document.getElementById('kategorie-verteilung').value = k.allocation_method;
         document.getElementById('kategorie-zaehler').checked = k.requires_meter;
         const eingefroren = k.rechnungen > 0 || k.zaehler_anzahl > 0;
+        // Die Heiz-Nummern laufen über die Heizungsanlage, nicht über diese
+        // Umlage -- der Hinweis erklärt das, bevor die Spalte irritiert.
+        document.getElementById('kategorie-heizhinweis').hidden =
+            k.betrkv_nr !== 4 && k.betrkv_nr !== 5 && k.betrkv_nr !== 6;
         if (eingefroren) {
             nrWahl.disabled = true;
             document.getElementById('kategorie-verteilung').disabled = true;
