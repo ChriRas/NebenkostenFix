@@ -240,7 +240,7 @@ class CostCategory(db.Model):
     # sieht der Vermieter doppelt in der Auswahlliste und kann nicht erkennen,
     # welche die Rechnungen traegt.
     name = db.Column(db.String(100), nullable=False, unique=True)
-    allocation_method = db.Column(db.String(50), nullable=False) # e.g. 'PER_SQM', 'PER_ACTIVE_HEAD', 'METER_READING'
+    allocation_method = db.Column(db.String(50), nullable=False)  # aus abrechnungsart.ARTEN: 'qm', 'personen', 'direkt', 'nur_allgemein', 'ignoriert'
     requires_meter = db.Column(db.Boolean, default=False, nullable=False)
     # Die Nummer aus § 2 BetrKV, seit NK-044 (Revision c9a5d3f81e47). Sie ist
     # Pflicht, weil die Abrechnung die Kostenart benennen muss (R-DOC-01) und
