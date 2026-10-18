@@ -1479,6 +1479,19 @@ def _fristen(heute):
     zaehler = [(m.id, f'{m.category.name} {m.meter_number} ({m.property.name})', m.geeicht_bis)
                for m in Meter.query.filter(Meter.geeicht_bis.isnot(None))
                if m.id not in abgeloest]
+    # Phase 49: je Mieter nur der jüngste Stichtag -- er ist die letzte
+    # Erhöhung, von der die Frist zählt. Der jüngste ist der mit dem späteren
+    # gültig_ab, nicht der später angelegte: eine nachgetragene, rückdatierte
+    # Erhöhung trägt die jüngere ID und würde die Frist sonst um Jahre
+    # verschieben. Nach dem Sortieren überschreibt der jüngere Stichtag den
+    # früheren; Einträge nach dem Auszug fallen als Anker weg.
+    kaltmiete_je_mieter = {}
+    for s in KaltmieteSoll.query.order_by(KaltmieteSoll.gueltig_ab).all():
+        if s.tenant.gesperrt_bis is not None:
+            continue
+        if s.tenant.move_out_date and s.gueltig_ab > s.tenant.move_out_date:
+            continue
+        kaltmiete_je_mieter[s.tenant_id] = s
     return fristenkalender.termine(
         [(r.id, r.tenant.name, r.frist_ende, r.zugestellt_am) for r in berichte],
         list(letzte.values()),
@@ -1486,13 +1499,8 @@ def _fristen(heute):
          if s.tenant.gesperrt_bis is None
          and not (s.tenant.move_out_date and s.gueltig_ab > s.tenant.move_out_date)],
         zaehler, heute,
-        # Phase 49: je Mieter nur der jüngste Stichtag -- er ist die letzte
-        # Erhöhung, von der die Frist zählt. Ältere Stichtage sind überholt.
         [(s.id, s.tenant.name, s.gueltig_ab, s.indexmiete)
-         for s in KaltmieteSoll.query.order_by(KaltmieteSoll.gueltig_ab).all()
-         if s.tenant.gesperrt_bis is None
-         and not (s.tenant.move_out_date and s.gueltig_ab > s.tenant.move_out_date)
-         and s.id == max(k.id for k in s.tenant.kaltmiete_soll)])
+         for s in kaltmiete_je_mieter.values()])
 
 
 @app.route('/api/fristen', methods=['GET'])
@@ -1570,18 +1578,25 @@ def _kostenart_ablehnen(meldung: str):
     return jsonify({'error': meldung}), 409
 
 
-def _nr3_schluessel_pruefen(name: str | None, nr: int | None):
-    """Warnfalle der Entwässerung: Nr. 3 nicht zweimal belegen (D-72)."""
+def _nr3_schluessel_pruefen(name: str | None, nr: int | None,
+                            eigene_id: int | None = None):
+    """Warnfalle der Entwässerung: Nr. 3 nicht zweimal belegen (D-72).
+
+    ``eigene_id`` nimmt eine bestehende Kostenart aus der Belegungsprüfung
+    heraus -- das Umbenennen läuft über dieselbe Warnfalle wie das Anlegen
+    und zählt sich nicht selbst als Belegung.
+    """
     if nr != NR_ENTWAESSERUNG:
         return None
     if betrkv.ist_niederschlag(name):
         return _kostenart_ablehnen(
             'Das Niederschlagswasser erkennt die App am Namen. Unter Nr. 3 '
-            'ist diese Bedeutung durch „Regenwasser“ belegt -- bitte einen '
-            'Namen ohne Regen oder Niederschlag wählen.')
+            'ist diese Bedeutung durch „Niederschlagswasser“ belegt -- bitte '
+            'einen Namen ohne Regen oder Niederschlag wählen.')
     belegt = CostCategory.query.filter(
         CostCategory.betrkv_nr == NR_ENTWAESSERUNG,
-        CostCategory.name != name).all()
+        CostCategory.name != name,
+        CostCategory.id != (eigene_id or 0)).all()
     for kat in belegt:
         if not betrkv.ist_niederschlag(kat.name):
             return _kostenart_ablehnen(
@@ -1663,6 +1678,12 @@ def update_category(id):
             doppelt = _eindeutiger_name(neuer_name, kat.id)
             if doppelt:
                 return doppelt
+            # Umbenennen darf die Warnfalle nicht umgehen: der Name entscheidet
+            # unter Nr. 3, was als Niederschlagswasser gilt (D-72).
+            konflikt = _nr3_schluessel_pruefen(neuer_name, kat.betrkv_nr,
+                                               eigene_id=kat.id)
+            if konflikt:
+                return konflikt
             kat.name = neuer_name
 
     neuer_nr = eingabe.ganzzahl('betrkv_nr', standard=kat.betrkv_nr)
@@ -1693,7 +1714,7 @@ def update_category(id):
             raise EingabeFehler(
                 f'„{neue_verteilung}“ ist keine Umlageart. Erlaubt sind: '
                 f'{abrechnungsart.aufzaehlung()}.', 'allocation_method')
-        konflikt = _nr3_schluessel_pruefen(kat.name, neuer_nr)
+        konflikt = _nr3_schluessel_pruefen(kat.name, neuer_nr, eigene_id=kat.id)
         if konflikt:
             return konflikt
         kat.betrkv_nr = neuer_nr

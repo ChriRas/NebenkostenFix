@@ -2614,6 +2614,14 @@ a.btn-primary:hover {
     grid-template-columns: repeat(auto-fill, minmax(min(600px, 100%), 1fr));
 }
 
+/* Re-Review Phase 54: die Kostenarten-Gruppe hat genau eine Karte. Im
+   Raster mit auto-fill bliebe sie als 600-px-Spalte links stehen und die
+   Tabelle rollte darin quer, obwohl rechts Platz frei ist. Eine sichtbare
+   Einzelkarte nimmt die volle Breite. */
+.einstellungs-raster > .dashboard-card[data-gruppe="kostenarten"] {
+    grid-column: 1 / -1;
+}
+
 .math-icon-primaer {
     font-size: 1.1em;
     color: var(--primary-text);

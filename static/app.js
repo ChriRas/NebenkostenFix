@@ -4016,23 +4016,75 @@ function closeVorauszahlungModal() {
     document.getElementById('vorauszahlung-modal').classList.remove('active');
 }
 
-// Je Monat eine Zeile der Soll/Ist-Tabelle; genutzt von Vorauszahlungen und Kaltmiete.
-function monatsZeilen(monate) {
-    // Der jüngste Monat oben: dort schaut man zuerst hin.
-    return [...monate].reverse().map(m => {
-        const [klasse, stand] = m.laufend ? ['text-muted', 'laufend']
-            : m.rueckstand ? ['dq-status-badge red', 'Rückstand']
-            : m.soll === null ? ['text-muted', 'kein Soll']
+// Je Jahr eine Kopfzeile mit den Summen, darunter die Monatszeilen; genutzt
+// von Vorauszahlungen und Kaltmiete. Aufgeklappt ist das laufende Jahr und
+// jedes Jahr mit Rückstand -- der Rest bleibt zu, damit aus acht Jahren
+// Vorauszahlungen keine 90 Zeilen zum Scrollen werden.
+function monatsZeilen(monate, praefix) {
+    const jahre = [...new Set(monate.map(m => m.monat.slice(0, 4)))].reverse();
+    return jahre.map(jahr => {
+        const gruppe = monate.filter(m => m.monat.startsWith(jahr));
+        const summe = feld => gruppe.reduce(
+            (g, m) => g + (m[feld] === null ? 0 : Number(m[feld])), 0);
+        const rueckstand = gruppe.some(m => m.rueckstand);
+        const [klasse, stand] = rueckstand ? ['dq-status-badge red', 'Rückstand']
+            : gruppe.some(m => m.laufend) ? ['text-muted', 'laufend']
+            : gruppe.every(m => m.soll === null) ? ['text-muted', 'kein Soll']
             : ['dq-status-badge green', 'bezahlt'];
-        return `<tr>
-            <td style="padding: 8px;">${escapeHtml(m.monat.slice(5) + '/' + m.monat.slice(0, 4))}</td>
+        const offen = rueckstand || jahr === String(new Date().getFullYear());
+        // Das Präfix ('vz' oder 'km') macht die Ziele eindeutig, wenn beide
+        // Tabellen im selben Dokument liegen.
+        const id = 'jahr-' + (praefix || 'm') + '-' + jahr;
+        const kopf = `<tr class="jahr-kopf" data-ziel="${escapeHtml(id)}">
+            <td style="padding: 8px; cursor: pointer;" role="button" tabindex="0"
+                aria-expanded="${escapeHtml(String(offen))}">
+                <i class="ph ph-caret-right jahr-pfeil${offen ? ' jahr-pfeil-offen' : ''}" aria-hidden="true"></i>
+                <strong>${escapeHtml(jahr)}</strong>
+                <span class="text-muted">· ${gruppe.length} Monate</span>
+            </td>
+            <td style="padding: 8px; text-align: right;">${escapeHtml(gruppe.every(m => m.soll === null) ? '–' : euroText(summe('soll')))}</td>
+            <td style="padding: 8px; text-align: right;">${escapeHtml(euroText(summe('ist')))}</td>
+            <td style="padding: 8px; text-align: right;">${escapeHtml(gruppe.every(m => m.differenz === null) ? '–' : euroText(summe('differenz')))}</td>
+            <td style="padding: 8px;"><span class="${escapeHtml(klasse)}">${escapeHtml(stand)}</span></td>
+        </tr>`;
+        const zeilen = [...gruppe].reverse().map(m => {
+            const [mklasse, mstand] = m.laufend ? ['text-muted', 'laufend']
+                : m.rueckstand ? ['dq-status-badge red', 'Rückstand']
+                : m.soll === null ? ['text-muted', 'kein Soll']
+                : ['dq-status-badge green', 'bezahlt'];
+            return `<tr class="jahr-zeile" data-jahr="${escapeHtml(id)}"${offen ? '' : ' hidden'}>
+            <td style="padding: 8px 8px 8px 32px;">${escapeHtml(m.monat.slice(5) + '/' + m.monat.slice(0, 4))}</td>
             <td style="padding: 8px; text-align: right;">${escapeHtml(m.soll === null ? '–' : euroText(m.soll))}</td>
             <td style="padding: 8px; text-align: right;">${escapeHtml(euroText(m.ist))}</td>
             <td style="padding: 8px; text-align: right;">${escapeHtml(m.differenz === null ? '–' : euroText(m.differenz))}</td>
-            <td style="padding: 8px;"><span class="${escapeHtml(klasse)}">${escapeHtml(stand)}</span></td>
+            <td style="padding: 8px;"><span class="${escapeHtml(mklasse)}">${escapeHtml(mstand)}</span></td>
         </tr>`;
+        }).join('');
+        return kopf + zeilen;
     }).join('');
 }
+
+// Klappt eine Jahresgruppe der Soll/Ist-Tabelle auf oder zu; der Kopf schaltet
+// die Monatszeilen des eigenen Jahres um.
+function jahrUmschalten(kopf) {
+    const zeilen = document.querySelectorAll(`.jahr-zeile[data-jahr="${CSS.escape(kopf.dataset.ziel)}"]`);
+    const auf = zeilen.length > 0 && zeilen[0].hidden;
+    zeilen.forEach(zeile => { zeile.hidden = !auf; });
+    const pfeil = kopf.querySelector('.jahr-pfeil');
+    if (pfeil) pfeil.classList.toggle('jahr-pfeil-offen', auf);
+    kopf.setAttribute('aria-expanded', auf ? 'true' : 'false');
+}
+// Tastaturbedienung für die Jahresköpfe (Enter/Leertaste), wie für die Klickzeilen der Zählerliste.
+document.addEventListener('keydown', function (ereignis) {
+    if (ereignis.key !== 'Enter' && ereignis.key !== ' ') return;
+    const kopf = ereignis.target.closest && ereignis.target.closest('.jahr-kopf');
+    if (kopf) { ereignis.preventDefault(); jahrUmschalten(kopf); }
+});
+// Klick-Delegation: eine einzige Listener-Registrierung statt einer je Kopfzeile.
+document.addEventListener('click', function (ereignis) {
+    const kopf = ereignis.target.closest && ereignis.target.closest('.jahr-kopf');
+    if (kopf) jahrUmschalten(kopf);
+});
 
 async function ladeVorauszahlungen(tenantId) {
     let d;
@@ -4052,7 +4104,7 @@ async function ladeVorauszahlungen(tenantId) {
             <td><button type="button" class="btn-icon" aria-label="Soll löschen" title="Soll löschen" onclick="loescheVorauszahlungSoll(${Number(s.id)}, ${Number(tenantId)})"><i class="ph ph-trash" aria-hidden="true"></i></button></td>
         </tr>`).join('');
     // Der jüngste Monat oben: dort schaut man zuerst hin.
-    document.getElementById('vz-monate').innerHTML = monatsZeilen(d.monate);
+    document.getElementById('vz-monate').innerHTML = monatsZeilen(d.monate, 'vz');
     const saldo = Number(d.saldo);
     document.getElementById('vz-saldo').textContent = saldo > 0
         ? `Offen sind insgesamt ${euroText(saldo)} (fällige Monate, Überzahlungen gegengerechnet).`
@@ -4328,7 +4380,7 @@ async function ladeKaltmiete(tenantId) {
             <td>${serie}<button type="button" class="btn-icon" aria-label="Kaltmiete löschen" title="Kaltmiete löschen" onclick="loescheKaltmieteSoll(${Number(s.id)}, ${Number(tenantId)})"><i class="ph ph-trash" aria-hidden="true"></i></button></td>
         </tr>`;
         }).join('');
-    document.getElementById('km-monate').innerHTML = monatsZeilen(d.monate);
+    document.getElementById('km-monate').innerHTML = monatsZeilen(d.monate, 'km');
     const saldo = Number(d.saldo);
     document.getElementById('km-saldo').textContent = saldo > 0
         ? `Offen sind insgesamt ${euroText(saldo)} (fällige Monate, Überzahlungen gegengerechnet).`

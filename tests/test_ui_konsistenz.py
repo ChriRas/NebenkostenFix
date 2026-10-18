@@ -389,3 +389,33 @@ def test_kopfaktionen_am_handy_im_menue():
     titel = re.search(r"\.section-header > div:first-child \{([^}]*)\}", schmal)
     assert titel and "min-width: 0" in titel.group(1) and "flex: 1 1 0" in titel.group(1)
     assert re.search(r"\.kopf-menue-knopf \{\s*display: inline-flex;\s*align-self: flex-start;", schmal)
+
+
+# --- Re-Review der Phasen 47/49/53/54 (2026-10-18) -----------------------------
+
+def test_kostenart_modal_nutzt_die_designfelder():
+    """Das Modal nutzt .form-group wie die übrige App: .feld ohne Styling
+    ließ das Namensfeld wie einen Browser-Standard (XP-Look) aussehen."""
+    html = (BASIS / 'static' / 'index.html').read_text(encoding='utf-8')
+    block = html.split('id="kategorie-modal"', 1)[1].split('<!-- ', 1)[0]
+    assert 'class="feld"' not in block
+    assert 'class="form-group"' in block
+
+
+def test_kostenarten_karte_nimmt_die_volle_breite():
+    """Die Einzelkarte der Kostenarten-Gruppe streckt sich über das ganze
+    Einstellungs-Raster, statt als 600-px-Spalte ihre Tabelle querrollen zu
+    lassen -- die übrigen Gruppen behalten ihr bestehendes Raster."""
+    css = (BASIS / 'static' / 'style.css').read_text(encoding='utf-8')
+    assert '.einstellungs-raster > .dashboard-card[data-gruppe="kostenarten"]' in css
+    assert 'grid-column: 1 / -1' in css
+
+
+def test_soll_ist_liste_gruppiert_jahresweise():
+    """Die Soll/Ist-Tabelle von Vorauszahlungen und Kaltmiete gruppiert je
+    Jahr: Kopfzeile mit Summen, Monate dahinter, aufklappbar statt 90
+    Zeilen zum Scrollen seit dem Einzug."""
+    js = (BASIS / 'static' / 'app.js').read_text(encoding='utf-8')
+    for merkmal in ('jahr-kopf', 'jahr-zeile', 'jahrUmschalten',
+                    'data-jahr=', 'data-ziel='):
+        assert merkmal in js, merkmal

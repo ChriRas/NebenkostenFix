@@ -301,21 +301,27 @@ GESPERRT = frozenset((NR_HEIZUNG, NR_WARMWASSER, NR_VERBUNDENE_ANLAGE))
 #: schlägt keine gesperrte Nummer vor.
 _STICHWOERTER = (
     ('grundsteuer', 1),
+    # Das Genauere zuerst (wie in _SCHLUESSELWOERTER): "Niederschlagswasser"
+    # enthaelt das Teilwort "wasser" -- steht das vorn, schlaegt der Vorschlag
+    # Nr. 2 vor, wo der Katalog den Eintrag selbst unter Nr. 3 fuehrt.
+    ('niederschlag', 3), ('regen', 3), ('schmutzwasser', 3),
+    ('abwasser', 3), ('entwaesserung', 3), ('kanal', 3),
     ('wasser', 2),
-    ('abwasser', 3),
-    ('entwaesserung', 3),
-    ('niederschlag', 3),
-    ('regen', 3),
     ('aufzug', 7), ('lift', 7),
-    ('muell', 8), ('strassenreinigung', 8),
+    ('strassenreinigung', 8), ('muell', 8), ('abfall', 8), ('winterdienst', 8),
+    # Hausmeister vor "reinigung": "Hausmeister/-reinigung" ist Hauswart (Nr. 14),
+    # nicht Gebaeudereinigung (Nr. 9).
+    ('hausmeister', 14), ('concierge', 14),
     ('reinigung', 9), ('ungeziefer', 9),
+    ('gartenpflege', 10), ('aussenanlage', 10), ('aussenflaeche', 10),
     ('garten', 10),
-    ('beleuchtung', 11),
+    # "Hausstrom" und "Treppenhausstrom" raten zu Nr. 11, nicht zu gar nichts.
+    ('allgemeinstrom', 11), ('strom', 11), ('beleuchtung', 11),
     ('schornstein', 12), ('kamin', 12),
     ('versicherung', 13),
-    ('hauswart', 14), ('hausmeister', 14), ('concierge', 14),
+    ('hauswart', 14),
     ('antenne', 15), ('kabel', 15), ('breitband', 15), ('glasfaser', 15),
-    ('waeschepflege', 16), ('waschmaschine', 16), ('trockner', 16),
+    ('waeschepflege', 16), ('waschmaschine', 16), ('trockner', 16), ('waesche', 16),
 )
 
 #: Namen, die eindeutig zur Heizung oder zum Warmwasser gehören, bekommen

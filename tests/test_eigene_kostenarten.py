@@ -204,6 +204,51 @@ def test_nummernvorschlag_aus_den_stichwoertern():
         assert vorschlag is None or vorschlag not in (4, 5, 6)
 
 
+def test_nummernvorschlag_schlaegt_die_echten_positionen_vor():
+    """Positionen einer echten Hausverwaltungsabrechnung (Issue #30): das
+    Genauere zuerst -- 'Niederschlagswasser' enthält 'wasser' und bekommt
+    trotzdem Nr. 3, wo der Katalog es selbst führt; 'Hausstrom' braucht das
+    Stichwort 'strom', 'Hausmeister/-reinigung' schlägt den Hauswart vor."""
+    assert betrkv.nummernvorschlag('Niederschlagswasser') == 3
+    assert betrkv.nummernvorschlag('Schmutzwasser') == 3
+    assert betrkv.nummernvorschlag('Abwasser') == 3
+    assert betrkv.nummernvorschlag('Hausmeister/-reinigung') == 14
+    assert betrkv.nummernvorschlag('Hausstrom') == 11
+    assert betrkv.nummernvorschlag('Pflege d. Außenanlage') == 10
+    assert betrkv.nummernvorschlag('Müllentsorgung') == 8
+    assert betrkv.nummernvorschlag('Straßenreinigungsgeb.') == 8
+    assert betrkv.nummernvorschlag('Frischwasser') == 2
+    assert betrkv.nummernvorschlag('Versicherungen') == 13
+    assert betrkv.nummernvorschlag('Kaminkehrer') == 12
+    # Grenzfall bleibt der Grenzfall: kein Vorschlag statt ein falscher.
+    assert betrkv.nummernvorschlag('Fußmatten') is None
+
+
+def test_umbenennen_auf_niederschlagsnamen_unter_nr_3_wird_abgelehnt(auth_client):
+    """Das Umbenennen läuft über dieselbe Warnfalle wie das Anlegen (D-72):
+    der Name entscheidet unter Nr. 3, was als Niederschlagswasser gilt."""
+    seed = auth_client.get('/api/categories').get_json()
+    entwaesserung = next(z for z in seed if z['name'] == 'Entwässerung')
+    antwort = auth_client.put(f'/api/categories/{entwaesserung["id"]}',
+                              data={'name': 'Regenwasser'})
+    assert antwort.status_code == 409
+    names = [z['name'] for z in auth_client.get('/api/categories').get_json()]
+    assert 'Entwässerung' in names and 'Regenwasser' not in names
+
+
+def test_umbenennen_unter_nr_3_bleibt_moeglich(auth_client):
+    """Ohne Belegungskonflikt (nur der Seed „Niederschlagswasser" steht
+    daneben) geht das Umbenennen weiter -- die eigene Kostenart zählt sich
+    nicht selbst als Belegung."""
+    seed = auth_client.get('/api/categories').get_json()
+    entwaesserung = next(z for z in seed if z['name'] == 'Entwässerung')
+    antwort = auth_client.put(f'/api/categories/{entwaesserung["id"]}',
+                              data={'name': 'Schmutzwasser'})
+    assert antwort.status_code == 200
+    names = [z['name'] for z in auth_client.get('/api/categories').get_json()]
+    assert 'Schmutzwasser' in names
+
+
 # --- Abrechnung ----------------------------------------------------------------
 
 def test_eigene_kostenart_laueft_ueber_nummer_und_name():

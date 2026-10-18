@@ -122,6 +122,23 @@ def test_indexmiete_ist_ein_flag_am_stichtag(auth_client, mieter):
     assert d['soll'][0]['indexmiete'] is True
 
 
+def test_die_frist_zaehlt_vom_juengsten_stichtag_nicht_von_der_juengsten_id(auth_client):
+    """Rückdatiert nachgetragen: die letzte Erhöhung ist der spätere Stichtag,
+    nicht der später angelegte Eintrag. Sonst verschiebt die Frist sich um
+    Jahre -- ein rückdatiertes Soll trägt die jüngere ID."""
+    haus = f.house()
+    mieter = f.tenant(f.apt(haus, 'EG', 50), 'Mieter Rück', D(2020, 1, 1), None)
+    url = f'/api/tenants/{mieter.id}/kaltmiete_soll'
+    assert auth_client.post(url, data={'gueltig_ab': '2026-01-01', 'betrag': '800'}).status_code == 201
+    assert auth_client.post(url, data={'gueltig_ab': '2024-06-01', 'betrag': '700'}).status_code == 201
+    termine = auth_client.get('/api/fristen').get_json()['termine']
+    erhoehungen = [t for t in termine if t['art'] == 'mietanpassung'
+                   and t['titel'] == 'Früheste Mieterhöhung: Mieter Rück']
+    assert len(erhoehungen) == 1
+    # 15 Monate nach dem jüngeren Stichtag 2026-01-01 -- nicht nach 2024-06-01
+    assert erhoehungen[0]['datum'] == '2027-04-01'
+
+
 def test_das_modell_ist_doppelt_gesichert(app_ctx, mieter):
     """Derselbe Stichtag nur einmal, kein negativer Betrag -- wie beim VZ-Soll."""
     db.session.add(KaltmieteSoll(tenant_id=mieter.id, gueltig_ab=D(2024, 1, 1), betrag=700))
