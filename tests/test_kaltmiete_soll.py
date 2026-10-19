@@ -197,3 +197,28 @@ def test_die_migration_laeuft_hin_und_zurueck(tmp_path):
     assert ergebnis.returncode == 0, f'{ergebnis.stdout}\n{ergebnis.stderr}'
     assert json.loads(ergebnis.stdout.strip().splitlines()[-1]) == \
         {'vor': True, 'ohne': False, 'wieder': True}
+
+
+def test_ein_soll_vor_dem_einzug_wird_abgelehnt(auth_client, mieter):
+    """Der Gegenfall zum Auszug: die Route prüft beide Grenzen.
+
+    Die Prüfung stand im Code, aber nur die Auszugsseite war getestet.
+    Ein Stichtag vor dem Einzug wäre ein Soll für eine Zeit, in der das
+    Mietverhältnis nicht bestand -- der Soll/Ist-Vergleich (Phase 53)
+    beginnt beim Einzug und würde den Betrag nie zeigen.
+    """
+    antwort = auth_client.post(f'/api/tenants/{mieter.id}/kaltmiete_soll',
+                               data={'gueltig_ab': '2023-12-31', 'betrag': '700'})
+    assert antwort.status_code == 400, antwort.get_json()
+    fehler = antwort.get_json()
+    assert 'vor dem Einzug' in fehler['error']
+    assert fehler.get('feld') == 'gueltig_ab'
+    assert KaltmieteSoll.query.filter_by(tenant_id=mieter.id).count() == 0
+
+
+def test_am_einzugstag_geht_das_soll_durch(auth_client, mieter):
+    """Die Grenze selbst ist erlaubt -- der Einzugstag ist der erste Tag."""
+    antwort = auth_client.post(f'/api/tenants/{mieter.id}/kaltmiete_soll',
+                               data={'gueltig_ab': mieter.move_in_date.isoformat(),
+                                     'betrag': '700'})
+    assert antwort.status_code == 201, antwort.get_json()
