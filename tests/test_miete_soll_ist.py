@@ -141,3 +141,59 @@ def test_die_oberflaeche_hat_die_verdrahtung():
     assert 'function monatsZeilen(' in app
     assert app.count('monatsZeilen(') >= 3
     assert "serienbuchungAnlegen(tenantId, betrag, ab, kuenftige, art = 'Nebenkostenvorauszahlung')" in app
+
+
+# --- Die Zahlungsart steuert die Rechnung, also wird sie geprüft ----------------
+# Seit dieser Runde filtert /api/tenants/<id>/miete auf type='Miete' und der
+# Zahlungsstand (Phase 47) auf 'Nebenkostenzahlung'. Vorher war die Art nur
+# ein Anzeigetext. Eine Art daneben wird damit zum stillen Rechenfehler: die
+# Zahlung steht in der Liste, zählt aber in keinem Soll/Ist. Deshalb lehnt
+# POST /api/payments sie ab -- wie die Ablesungsart und die Umlageart.
+
+def test_eine_zahlungsart_daneben_wird_abgelehnt(auth_client, mieter):
+    """"Kaltmiete" ist der naheliegende Tippfehler für "Miete"."""
+    antwort = auth_client.post('/api/payments', data={
+        'tenant_id': mieter.id, 'amount': '700',
+        'payment_date': '2024-01-03', 'type': 'Kaltmiete'})
+    assert antwort.status_code == 400, antwort.get_json()
+    fehler = antwort.get_json()
+    assert 'Miete' in fehler['error'] and 'Kaution' in fehler['error']
+    assert fehler.get('feld') == 'type'
+    assert Payment.query.filter_by(tenant_id=mieter.id).count() == 0
+
+
+@pytest.mark.parametrize('art', [
+    'Miete', 'Nebenkostenvorauszahlung', 'Kaution', 'Nebenkostenzahlung'])
+def test_die_vier_erlaubten_arten_gehen_durch(auth_client, mieter, art):
+    """Was im Auswahlfeld der Oberfläche steht, muss die Route annehmen."""
+    antwort = auth_client.post('/api/payments', data={
+        'tenant_id': mieter.id, 'amount': '700',
+        'payment_date': '2024-01-03', 'type': art})
+    assert antwort.status_code == 201, antwort.get_json()
+
+
+def test_eine_art_laenger_als_die_spalte_wird_abgelehnt(auth_client, mieter):
+    """Die Spalte ist String(50); die Prüfung ließ bis 100 Zeichen durch.
+
+    Unter SQLite fiel das nicht auf -- VARCHAR-Längen werden dort nicht
+    erzwungen --, bei einem Umzug auf Postgres wäre es ein Fehler 500.
+    """
+    antwort = auth_client.post('/api/payments', data={
+        'tenant_id': mieter.id, 'amount': '700',
+        'payment_date': '2024-01-03', 'type': 'M' * 60})
+    assert antwort.status_code == 400, antwort.get_json()
+
+
+def test_eine_art_daneben_fiele_aus_dem_soll_ist(auth_client, mieter):
+    """Der Grund für die Prüfung: ohne sie zählt die Zahlung nirgends.
+
+    Die Zahlung entsteht hier am Modell vorbei, wie ein Altbestand aus der
+    Zeit vor der Prüfung. Sie steht in der Zahlungsliste, aber das Miete-Ist
+    bleibt leer -- der Vermieter sieht einen Rückstand, der keiner ist.
+    Genau das lehnt die Route jetzt vorab ab.
+    """
+    auth_client.post(f'/api/tenants/{mieter.id}/kaltmiete_soll',
+                     data={'gueltig_ab': '2024-01-01', 'betrag': '700'})
+    _zahlung(mieter, D(2024, 1, 3), 700, art='Kaltmiete')
+    januar = _monate(auth_client.get(f'/api/tenants/{mieter.id}/miete').get_json())['2024-01']
+    assert januar['ist'] == '0.00' and januar['rueckstand'] is True

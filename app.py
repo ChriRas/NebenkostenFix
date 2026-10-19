@@ -306,7 +306,7 @@ from nebenkostenfix.ablage import Ablage
 from nebenkostenfix.auth import init_auth
 from nebenkostenfix.backup import init_backup
 from nebenkostenfix.umzug import init_umzug
-from nebenkostenfix.tabellenimport import init_tabellenimport
+from nebenkostenfix.tabellenimport import ZAHLUNGSARTEN, init_tabellenimport
 from nebenkostenfix.hilfe import init_hilfe
 from nebenkostenfix.jahresabrechnung import init_jahresabrechnung
 from nebenkostenfix.kategorien import init_kategorien
@@ -4241,7 +4241,19 @@ def add_payment():
     eingabe = Eingabe.aus_request()
     tenant_id = eingabe.ganzzahl('tenant_id', pflicht=True)
     amount = eingabe.geldbetrag('amount', pflicht=True)
-    type_ = eingabe.text('type', pflicht=True, maxlaenge=100)
+    # Die Art steuert die Rechnung: /api/tenants/<id>/miete zaehlt nur
+    # 'Miete', der Zahlungsstand (Phase 47) nur 'Nebenkostenzahlung', die
+    # Vorauszahlung nur 'Nebenkostenvorauszahlung'. Eine Art daneben waere
+    # deshalb kein Schoenheitsfehler, sondern eine Zahlung, die in der Liste
+    # steht und in keinem Soll/Ist zaehlt -- ein Rueckstand, den es nicht
+    # gibt. Die Liste ist dieselbe, die der Tabellenimport annimmt, damit
+    # beide Wege nicht auseinanderlaufen. Die Laenge folgt der Spalte
+    # (models.py: String(50)); 100 liessen SQLite still ueberlaufen.
+    type_ = eingabe.text('type', pflicht=True, maxlaenge=50)
+    if type_ not in ZAHLUNGSARTEN:
+        raise EingabeFehler(
+            f'Die Zahlungsart "{type_}" gibt es nicht. Erlaubt sind: '
+            f'{", ".join(ZAHLUNGSARTEN)}.', 'type')
     start_date = eingabe.datum('payment_date', pflicht=True)
     is_recurring = eingabe.wahrheit('is_recurring')
     billing_report_id = eingabe.ganzzahl('billing_report_id')
