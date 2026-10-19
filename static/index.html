@@ -2460,7 +2460,7 @@
                     <div class="felder-nebeneinander">
                         <div class="form-group feld-breit">
                             <label>Heizungsanlage</label>
-                            <select id="invoice-heizungsanlage">
+                            <select id="invoice-heizungsanlage" onchange="toggleInvoiceHeizkosten()">
                                 <option value="">— keine Heizkostenrechnung —</option>
                                 <!-- Anlagen der gewählten Immobilie -->
                             </select>
@@ -2748,7 +2748,7 @@
                 <div id="heizung-verbunden-block" style="display: none; border-top: 1px solid var(--border-color); padding-top: 16px;">
                     <div class="form-group">
                         <label for="heizung-ww-weg">Weg zur Wärmemenge des Warmwassers (§ 9 Abs. 2)</label>
-                        <select id="heizung-ww-weg">
+                        <select id="heizung-ww-weg" onchange="toggleWwWeg()">
                             <option value="zaehler">Gemessen mit Wärmemengenzähler</option>
                             <option value="formel">Berechnet nach der Formel des § 9 Abs. 2 Satz 4</option>
                             <option value="ersatz">Ersatzmaßstab (§ 9 Abs. 2 Satz 5)</option>

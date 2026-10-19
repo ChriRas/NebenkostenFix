@@ -435,3 +435,127 @@ def test_soll_ist_liste_gruppiert_jahresweise():
     for merkmal in ('jahr-kopf', 'jahr-zeile', 'jahrUmschalten',
                     'data-jahr=', 'data-ziel='):
         assert merkmal in js, merkmal
+
+
+# ---------------------------------------------------------------------------
+# Live-Issue #32: Umschalter brauchen ihr Ereignis am Steuerfeld
+# ---------------------------------------------------------------------------
+# Ein Umschalter, der den Grundzustand eines abhaengigen Feldes sperrt oder
+# verbirgt, laeuft beim Oeffnen des Dialogs -- aber nur dann. Haengt er nicht
+# zusaetzlich am change-Ereignis seines Steuerfeldes, bleibt das abhaengige
+# Feld nach der Wahl gesperrt. Verlangt das Backend dessen Wert, ist der
+# Datensatz nicht speicherbar: genau die Sackgasse aus Issue #32.
+
+
+def _umschalter_bloecke(js: str) -> dict:
+    """Jede toggle*-Funktion aus app.js mit ihrem Rumpf."""
+    bloecke = {}
+    zeilen = js.split("\n")
+    for i, zeile in enumerate(zeilen):
+        treffer = re.match(r"^function (toggle\w*)\s*\(", zeile)
+        if not treffer:
+            continue
+        rumpf = []
+        for folge in zeilen[i + 1:]:
+            if folge.startswith("}"):
+                break
+            rumpf.append(folge)
+        bloecke[treffer.group(1)] = "\n".join(rumpf)
+    return bloecke
+
+
+def _gelesene_felder(rumpf: str) -> set:
+    """Die Felder, deren Wert der Umschalter liest -- nicht die, die er setzt."""
+    gelesen = set()
+    muster = r"getElementById\(['\"]([\w-]+)['\"]\)\s*\.(?:value|checked)\s*(={1,3})?"
+    for treffer in re.finditer(muster, rumpf):
+        if treffer.group(2) == "=":
+            continue  # eine Zuweisung: dieses Feld wird gesteuert, nicht gelesen
+        gelesen.add(treffer.group(1))
+    return gelesen
+
+
+def _hat_ereignis(html: str, js: str, feld: str) -> bool:
+    """Traegt das Feld einen Ereignis-Handler -- im HTML oder aus dem JS?"""
+    name = re.escape(feld)
+    for tag in re.finditer(r"<[^>]*\bid=\"" + name + r"\"[^>]*>", html):
+        if re.search(r"\bon(?:change|input|click)\s*=", tag.group(0)):
+            return True
+    direkt = (r"getElementById\(['\"]" + name
+              + r"['\"]\)\s*\.(?:onchange|oninput|onclick|addEventListener)")
+    if re.search(direkt, js):
+        return True
+    # der Umweg ueber eine Variable: const feld = getElementById(...); feld.onchange = ...
+    ueber_var = r"(?:const|let|var)\s+(\w+)\s*=\s*document\.getElementById\(['\"]" + name + r"['\"]\)"
+    for zuweisung in re.finditer(ueber_var, js):
+        hebel = re.escape(zuweisung.group(1))
+        if re.search(r"\b" + hebel + r"\s*\.(?:onchange|oninput|onclick|addEventListener)", js):
+            return True
+    return False
+
+
+def test_umschalter_haengen_am_steuerfeld():
+    """Jeder Umschalter haengt am change-Ereignis des Feldes, das ihn steuert.
+
+    Ohne das Ereignis laeuft er nur beim Oeffnen des Dialogs: das abhaengige
+    Feld bleibt gesperrt oder verborgen, und wenn das Backend dessen Wert
+    verlangt, laesst sich der Datensatz nicht speichern (Live-Issue #32).
+    """
+    js = _liest(APP)
+    html = _liest(INDEX)
+    offen = []
+    for name, rumpf in sorted(_umschalter_bloecke(js).items()):
+        for feld in sorted(_gelesene_felder(rumpf)):
+            if not _hat_ereignis(html, js, feld):
+                offen.append(f"{name}() liest #{feld}, aber #{feld} loest kein Ereignis aus")
+    assert offen == [], (
+        "Umschalter ohne Ereignis am Steuerfeld:\n  " + "\n  ".join(offen))
+
+
+def test_rechnung_posten_entsperrt_nach_der_anlagenwahl():
+    """Live-Issue #32: die Wahl der Heizungsanlage entsperrt den Posten.
+
+    populateInvoiceHeizung() sperrt das Posten-Feld als Grundzustand;
+    toggleInvoiceHeizkosten() entsperrt es wieder. Ohne das Ereignis am
+    Anlagen-Feld bleibt der Posten ausgegraut, und saveInvoice() lehnt die
+    Rechnung mit "braucht beides" ab.
+    """
+    tag = re.search(r'<select id="invoice-heizungsanlage"[^>]*>', _liest(INDEX))
+    assert tag, "Feld invoice-heizungsanlage fehlt"
+    assert "toggleInvoiceHeizkosten()" in tag.group(0), tag.group(0)
+
+
+def test_warmwasserweg_zeigt_seine_pflichtfelder():
+    """Der Wechsel des Warmwasser-Weges blendet die Pflichtfelder ein.
+
+    app.py verlangt beim Weg "zaehler" die kWh, bei "formel" Volumen und
+    Temperatur. Ohne das Ereignis bleibt die jeweilige Feldgruppe verborgen
+    und die Anlage ist nicht speicherbar -- dasselbe Muster wie Issue #32.
+    """
+    tag = re.search(r'<select id="heizung-ww-weg"[^>]*>', _liest(INDEX))
+    assert tag, "Feld heizung-ww-weg fehlt"
+    assert "toggleWwWeg()" in tag.group(0), tag.group(0)
+
+
+def test_waechter_findet_das_fehlende_ereignis():
+    """Negativprobe: der Waechter meldet ein Steuerfeld ohne Ereignis."""
+    js = ("function toggleProbe() {\n"
+          "    const wahl = document.getElementById('probe-feld').value;\n"
+          "    document.getElementById('probe-ziel').disabled = !wahl;\n"
+          "}\n")
+    bloecke = _umschalter_bloecke(js)
+    assert "toggleProbe" in bloecke
+    # nur das gelesene Feld zaehlt, nicht das gesteuerte
+    assert _gelesene_felder(bloecke["toggleProbe"]) == {"probe-feld"}
+    assert not _hat_ereignis('<select id="probe-feld"></select>', js, "probe-feld")
+    assert _hat_ereignis(
+        '<select id="probe-feld" onchange="toggleProbe()"></select>', js, "probe-feld")
+
+
+def test_waechter_haelt_zuweisungen_auseinander():
+    """Negativprobe: ein Feld, dem der Umschalter nur einen Wert setzt, ist
+    kein Steuerfeld -- sonst meldete der Waechter togglePaymentRecurring()
+    wegen des geleerten Enddatums."""
+    rumpf = ("    document.getElementById('a-feld').value = '';\n"
+             "    if (document.getElementById('b-feld').value === 'x') { }\n")
+    assert _gelesene_felder(rumpf) == {"b-feld"}
