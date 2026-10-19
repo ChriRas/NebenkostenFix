@@ -559,3 +559,105 @@ def test_waechter_haelt_zuweisungen_auseinander():
     rumpf = ("    document.getElementById('a-feld').value = '';\n"
              "    if (document.getElementById('b-feld').value === 'x') { }\n")
     assert _gelesene_felder(rumpf) == {"b-feld"}
+
+
+# ---------------------------------------------------------------------------
+# Die zweite Bug-Klasse: ein Auswahlfeld ohne Pruefung im Backend
+# ---------------------------------------------------------------------------
+# Ein <select> hat eine geschlossene Wertemenge. Nimmt die Route seinen Wert
+# als freien Text an, laesst sich an der Oberflaeche vorbei jeder Wert setzen.
+# Steuert das Feld die Rechnung -- wie die Zahlungsart seit Phase 53 --, ist
+# das kein Schoenheitsfehler, sondern ein stiller Rechenfehler: der Datensatz
+# steht in der Liste und zaehlt in keiner Auswertung. Genau das war der Fall
+# bei POST /api/payments ('Kaltmiete' statt 'Miete').
+
+RUMPF = BASIS / 'app.py'
+
+
+def _festmenge_selects(html: str) -> dict:
+    """Jedes <select>, dessen Optionen im HTML stehen (nicht von JS gefuellt)."""
+    gefunden = {}
+    for treffer in re.finditer(r'<select[^>]*\bid="([\w-]+)"[^>]*>(.*?)</select>', html, re.S):
+        werte = [w for w in re.findall(r'<option[^>]*value="([^"]*)"', treffer.group(2)) if w]
+        if werte:
+            gefunden[treffer.group(1)] = werte
+    return gefunden
+
+
+def _text_lesungen(rumpf: str) -> dict:
+    """Feldname -> die Variablen, in die eingabe.text() ihn legt."""
+    lesungen = {}
+    for treffer in re.finditer(r"(\w+)\s*=\s*eingabe\.text\(\s*['\"]([\w_]+)['\"]", rumpf):
+        lesungen.setdefault(treffer.group(2), []).append(treffer.group(1))
+    return lesungen
+
+
+def _wird_geprueft(rumpf: str, feld: str, variablen: list) -> bool:
+    """Prueft die Route den Wert -- gegen eine Liste oder per pruefe_*-Funktion?"""
+    for name in variablen:
+        if re.search(rf'\b{re.escape(name)}\s+not\s+in\b', rumpf):
+            return True
+        if re.search(rf'pruefe_\w+\(\s*{re.escape(name)}\b', rumpf):
+            return True
+    # die Kurzform: pruefe_xyz(eingabe.text('feld', ...)) ohne Zwischenvariable
+    if re.search(rf"pruefe_\w+\(\s*\n?\s*eingabe\.text\(\s*['\"]{re.escape(feld)}['\"]", rumpf):
+        return True
+    return False
+
+
+def _paare(html: str, rumpf: str) -> list:
+    """(Feld-Id, Backend-Feldname, Variablen) fuer jedes Select, das die Route liest."""
+    gefunden = []
+    lesungen = _text_lesungen(rumpf)
+    for feld_id, _werte in sorted(_festmenge_selects(html).items()):
+        kurz = feld_id.split('-')[-1]
+        for feld, variablen in lesungen.items():
+            if feld == kurz or feld.endswith('_' + kurz) or kurz in feld:
+                gefunden.append((feld_id, feld, variablen))
+                break
+    return gefunden
+
+
+def test_auswahlfelder_werden_im_backend_geprueft():
+    """Jedes Auswahlfeld mit fester Wertemenge prüft das Backend nachweislich.
+
+    Ohne die Prüfung nimmt die Route an der Oberfläche vorbei jeden Text an.
+    Bei der Zahlungsart hieß das: eine Zahlung mit „Kaltmiete" statt „Miete"
+    stand in der Liste und zählte in keinem Soll/Ist — ein Rückstand, den es
+    nicht gibt. Die App prüft solche Felder sonst durchgehend, über
+    ``not in LISTE`` oder eine ``pruefe_*``-Funktion.
+    """
+    html, rumpf = _liest(INDEX), _liest(RUMPF)
+    paare = _paare(html, rumpf)
+    assert len(paare) >= 5, f'zu wenige Paare gefunden, Heuristik prüfen: {paare}'
+    offen = [f"#{fid} -> eingabe.text('{feld}') ohne Prüfung"
+             for fid, feld, variablen in paare
+             if not _wird_geprueft(rumpf, feld, variablen)]
+    assert offen == [], 'Auswahlfelder ohne Prüfung im Backend:\n  ' + '\n  '.join(offen)
+
+
+def test_die_zahlungsart_steht_in_der_liste_der_geprueften():
+    """Der Fall, der die Regel ausgelöst hat, ist von ihr erfasst."""
+    paare = _paare(_liest(INDEX), _liest(RUMPF))
+    assert ('payment-type', 'type', ['type_']) in paare
+
+
+def test_waechter_findet_ein_ungepruefte_auswahlfeld():
+    """Negativprobe: ohne Prüfung meldet der Wächter das Feld."""
+    html = '<select id="probe-art"><option value="a">A</option></select>'
+    ohne = "    art = eingabe.text('art', pflicht=True)\n"
+    mit_liste = ohne + "    if art not in ARTEN:\n        raise EingabeFehler('x', 'art')\n"
+    mit_funktion = "    art = eingabe.text('art')\n    pruefe_art(art)\n"
+    assert _paare(html, ohne) == [('probe-art', 'art', ['art'])]
+    assert not _wird_geprueft(ohne, 'art', ['art'])
+    assert _wird_geprueft(mit_liste, 'art', ['art'])
+    assert _wird_geprueft(mit_funktion, 'art', ['art'])
+
+
+def test_waechter_uebergeht_von_js_gefuellte_felder():
+    """Negativprobe: ein Select, das JS füllt, hat keine Wertemenge im HTML.
+
+    Solche Felder tragen Datenbank-Ids (Mieter, Immobilie, Anlage) und werden
+    über Fremdschlüssel geprüft, nicht über eine Liste."""
+    assert _festmenge_selects('<select id="invoice-tenant"></select>') == {}
+    assert _festmenge_selects('<select id="x"><option value="">Bitte wählen</option></select>') == {}
