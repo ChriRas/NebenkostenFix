@@ -167,7 +167,7 @@ h1, h2, h3, h4 {
     text-wrap: balance;
 }
 
-/* Kontoblatt: Kartentitel stehen auf der Abschnittsstufe (18 px), mit
+/* Kartentitel stehen auf der Abschnittsstufe (18 px), mit
    und ohne .karten-kopf. Kleinere Stufen nur über eigene Klassen. */
 h3 {
     font-size: 18px;
@@ -917,7 +917,7 @@ kbd {
     color: var(--text-main);
 }
 
-/* Felder (Konzept A): 44 px, Rand 1 px, im Fokus 2 px Indigo; das
+/* Felder: 44 px, Rand 1 px, im Fokus 2 px Indigo; das
    Polster schrumpft um den einen Pixel, damit der Text nicht springt. */
 .form-group input[type="text"],
 .form-group input[type="number"],
@@ -1326,7 +1326,7 @@ td.text-right {
     margin-top: 2px;
 }
 
-/* Chips (Konzept A): 13 px, halbfett, rund, Tönung plus dunkle Schrift. */
+/* Chips: 13 px, halbfett, rund, Tönung plus dunkle Schrift. */
 .dq-status-badge {
     display: inline-flex;
     align-items: center;
@@ -1887,7 +1887,7 @@ i.feld-hilfe:hover {
     box-shadow: inset 3px 0 0 var(--primary);
 }
 
-/* Belegmarke (Konzept A): Quadrat mit 4 px Rundung, Ziffer in Mono. */
+/* Belegmarke: Quadrat mit 4 px Rundung, Ziffer in Mono. */
 .schritt-marke {
     flex: 0 0 auto;
     width: 32px;
@@ -2074,7 +2074,7 @@ i.feld-hilfe:hover {
     display: none;
 }
 
-/* Tabellen (F-44, Konzept A „Kontoblatt“): Kopf in Versalien 13 px,
+/* Tabellen (F-44): Kopf in Versalien 13 px,
    Zeilen durch feine Linien getrennt, erste und letzte Spalte 24 px
    vom Kartenrand. Die Rollbalken bleiben im Behälter. */
 .data-table-container {
@@ -2480,7 +2480,7 @@ i.feld-hilfe:hover {
     border-bottom: 1px solid var(--border-color);
 }
 
-/* Kontoblatt: jeder Spaltenkopf in derselben Stufe wie .data-table, auch in
+/* Jeder Spaltenkopf in derselben Stufe wie .data-table, auch in
    Tabellen, die app.js ohne Klasse baut. Zeilenköpfe (scope=row) bleiben. */
 thead th,
 .zaehler-kopf th {
@@ -3232,7 +3232,7 @@ td .btn-icon,
 
 /* NK-214 (B7): die dauerhafte Warnung im offenen Modus schwebte über Kopf,
    Knöpfen und Dialogtiteln. Sie steht jetzt als Band im Fluss unter dem
-   Kopf — im Ocker des Hinweisbands aus Konzept A. */
+   Kopf — im Ocker des Hinweisbands. */
 .hinweis-leiste.hinweis-band {
     position: relative;
     left: auto;

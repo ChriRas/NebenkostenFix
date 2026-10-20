@@ -5513,7 +5513,7 @@ function vorschauHtml({ titel, info, adresse, datei, knoepfeHtml = '' }) {
 // des Browsers brachte im iframe einen zweiten Rahmen samt Werkzeugleiste mit.
 // Neue Uploads kommen als Datei (fetch auf blob: sperrt die CSP), sonst lädt
 // fetch die Datei. Scheitert pdf.js, zeigt der iframe wie bisher das PDF.
-// Die Leiste darüber bringt Seitenzahl und Zoom wie im Browser-Viewer zurück
+// Die Leiste darüber bringt Seitenzahl und Zoom wie im Browser-Viewer zurück;
 //; Prozent beziehen sich auf die echte Größe, 1 pt = 96/72 px.
 const PDF_STUFEN = [50, 75, 100, 125, 150, 200, 300];
 const PDF_LEISTE = '<div class="pdf-leiste" role="toolbar" aria-label="PDF-Ansicht">' +
@@ -8186,7 +8186,7 @@ function abrechnungsDetailZeilen(item) {
             const allgGeschaetzt = mm.is_interpolated || (tm && tm.is_interpolated);
             angaben.push([`Hauptzähler${hzZeitraum}`, verbrauchHtml(md.main_consumption, mm.is_interpolated && mm)]);
             angaben.push(['Allgemeinverbrauch', verbrauchHtml(md.allgemein_consumption, allgGeschaetzt && mm)]);
-            // NK-209 (B2): der Anteil, mit dem gerechnet wurde (Personentage)
+            // NK-209: der Anteil, mit dem gerechnet wurde (Personentage)
             if (md.allgemein_quote != null && md.allgemein_anteil != null) {
                 const prozent = (Number(md.allgemein_quote) * 100).toLocaleString('de-DE',
                     { minimumFractionDigits: 2, maximumFractionDigits: 2 });

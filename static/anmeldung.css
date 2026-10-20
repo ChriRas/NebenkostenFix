@@ -1,5 +1,5 @@
 /* Anmelde-, Einrichtungs- und Passwortseite (NK-155, Layout K9).
-   Dieselben Farben, Schrift und Maße wie die Anwendung (style.css,
+   Dieselben Farben, Schrift und Maße wie die Anwendung (style.css),
    aber eigenständig: die Seiten stehen vor der Anmeldung und
    laden nicht die ganze Oberfläche. Werte hier ändern sich nur zusammen
    mit :root in style.css. Die Schriften liegen unter vendor/fonts/ und
