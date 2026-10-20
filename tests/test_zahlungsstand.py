@@ -25,7 +25,7 @@ from nebenkostenfix.zahlungsstand import zahlungsstand
 WURZEL = Path(__file__).resolve().parents[1]
 QUELLE = (WURZEL / 'static' / 'app.js').read_text(encoding='utf-8')
 SEITE = (WURZEL / 'static' / 'index.html').read_text(encoding='utf-8')
-GLOSSAR = (WURZEL / 'docs' / 'SPEC' / 'glossar.md').read_text(encoding='utf-8')
+GLOSSAR = (WURZEL / 'docs' / 'glossar.md').read_text(encoding='utf-8')
 
 braucht_node = pytest.mark.skipif(shutil.which('node') is None, reason='node fehlt')
 

@@ -14,9 +14,9 @@ Mieter. Dieses Modul nimmt ihm die zwei Pruefungen ab, die dabei zaehlen:
 
 **Was dieses Modul nicht tut.** Es prueft keine WEG-Abrechnung nach § 28 WEG
 -- kein Wirtschaftsplan, keine Rücklagen, keine Untergemeinschaften, keine
-Abgrenzung gegen das Abflussprinzip der Gesamtabrechnung. Das schliesst
-ZIEL.md § 2 und § 8 aus. Hier geht es nur um den Ausschnitt, den der
-Vermieter fuer seinen Mieter braucht.
+Abgrenzung gegen das Abflussprinzip der Gesamtabrechnung. Das liegt
+ausserhalb dessen, was diese Anwendung leisten will. Hier geht es nur um
+den Ausschnitt, den der Vermieter fuer seinen Mieter braucht.
 
 Und es entscheidet nichts allein: ``einschaetzung`` ist ein Vorschlag, den
 der Vermieter bestaetigt. Eine Position, die weder im Katalog noch auf der
