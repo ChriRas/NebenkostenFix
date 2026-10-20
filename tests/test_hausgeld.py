@@ -159,6 +159,9 @@ def test_die_echten_positionen_sind_umlagefaehig(name, nummer):
     ('Kontoführungsgebühren', '§ 1 Abs. 2'),
     ('Kosten der Eigentümerversammlung', '§ 1 Abs. 2'),
     ('Rechtsberatung', '§ 1 Abs. 2'),
+    ('Bankgebühren', '§ 1 Abs. 2'),
+    ('Mahngebühren', '§ 1 Abs. 2'),
+    ('Jahresabschlussprüfung', '§ 1 Abs. 2'),
 ])
 def test_die_eigentuemerpositionen_sind_nicht_umlagefaehig(name, wort):
     """§ 1 Abs. 2 BetrKV: das traegt der Eigentuemer, nicht der Mieter.
@@ -172,6 +175,31 @@ def test_die_eigentuemerpositionen_sind_nicht_umlagefaehig(name, wort):
     assert rat.umlagefaehig is False
     assert rat.betrkv_nr is None
     assert wort in rat.begruendung
+
+
+@pytest.mark.parametrize('name', [
+    'Bankgebühren',
+    'Bankspesen',
+    'Mahnkosten',
+    'Mahngebühren Hausgeld',
+    'Jahresabschlussprüfung',
+    'Abschlussprüfung WEG',
+])
+def test_verwaltungsnahe_posten_raten_nicht_zur_nummer_17(name):
+    """Bank-, Mahn- und Abschlusskosten sind gesperrt, nicht offen.
+
+    Der Unterschied ist der Rat, den der Vermieter bekommt. Eine **offene**
+    Position heisst "umlagefaehig nur, wenn der Mietvertrag sie nennt --
+    dann unter Nr. 17". Fuer diese drei waere das falsch: sie sind nach
+    § 1 Abs. 2 BetrKV Verwaltungs- bzw. Rechtsverfolgungskosten und bleiben
+    auch mit Mietvertrag beim Eigentuemer. Der Vermieter wuerde sonst auf
+    einen Weg geschickt, der nicht traegt.
+    """
+    rat = hausgeld.einschaetzung(name)
+
+    assert rat.umlagefaehig is False
+    assert rat.betrkv_nr is None
+    assert 'Nr. 17' not in rat.begruendung
 
 
 def test_ein_unbekannter_name_bleibt_offen():

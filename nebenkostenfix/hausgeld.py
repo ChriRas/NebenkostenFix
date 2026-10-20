@@ -103,6 +103,14 @@ ZEITRAUM_HINWEIS = (
 #:
 #: Jeder Eintrag nennt seinen Grund, denn der Vermieter soll nicht lesen
 #: "unbekannt", sondern warum er das nicht weitergeben darf.
+#:
+#: Eine Luecke hier ist nicht harmlos: was die Liste nicht kennt, bleibt
+#: **offen**, und der Rat zu einer offenen Position lautet "nur, wenn der
+#: Mietvertrag sie nennt -- dann unter Nr. 17". Fuer Bank-, Mahn- und
+#: Abschlusskosten waere das falsch. Die sind nach § 1 Abs. 2 BetrKV
+#: Verwaltungs- bzw. Rechtsverfolgungskosten und bleiben auch **mit**
+#: Mietvertrag beim Eigentuemer -- anders als bei Nr. 17, wo der Vertrag
+#: genau das leisten kann.
 EIGENTUEMERPOSITIONEN = (
     (r'verwalt(er|ung)', 'Verwaltungskosten'),
     (r'(erhaltungs|instandhaltungs)r(ü|ue)cklage', 'Zuführung zur Rücklage'),
@@ -111,8 +119,11 @@ EIGENTUEMERPOSITIONEN = (
     (r'reparatur', 'Instandhaltung und Instandsetzung'),
     (r'sanierung', 'Instandhaltung und Instandsetzung'),
     (r'kontof(ü|ue)hrung', 'Kosten der Kontoführung'),
+    (r'bankgeb(ü|ue)hr|bankkosten|bankspesen|kontogeb(ü|ue)hr', 'Bankgebühren'),
     (r'(eigent(ü|ue)mer)?versammlung', 'Kosten der Eigentümerversammlung'),
     (r'rechts(beratung|anwalt|verfolgung)|gerichts', 'Rechtsverfolgungskosten'),
+    (r'mahn', 'Mahnkosten'),
+    (r'abschluss', 'Kosten des Jahresabschlusses und seiner Prüfung'),
     (r'beirat', 'Vergütung des Verwaltungsbeirats'),
 )
 
