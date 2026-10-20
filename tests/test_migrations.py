@@ -46,7 +46,7 @@ BASISREVISION = "63738d5329b4"
 # Phase 49: ``f7c2e9a4b6d1`` legt die Tabelle ``kaltmiete_soll`` an (Kaltmiete + Mieterhöhung).
 # Re-Review: ``d5c9f3b7e2a8`` setzt die Katalog-Werte der Verteilung auf die
 # echten Kodes (PER_SQM -> qm, METER_READING -> direkt/qm, nur Daten).
-KOPFREVISION = "d5c9f3b7e2a8"
+KOPFREVISION = "e8b4a7c25f91"
 
 
 def _umgebung(dbdatei: Path, tmp_path: Path) -> dict:

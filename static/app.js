@@ -4453,7 +4453,8 @@ function openAddMeterModal() {
     // NK-258: derselbe Dialog bearbeitet auch; beim Anlegen ist alles frei.
     document.getElementById('meter-id').value = '';
     document.getElementById('meter-modal-title').textContent = 'Neuer Zähler';
-    for (const id of ['meter-ort', 'meter-eichjahr', 'meter-eichart', 'meter-geeicht-bis']) {
+    for (const id of ['meter-ort', 'meter-eichjahr', 'meter-eichart', 'meter-geeicht-bis',
+                      'meter-einheit']) {
         document.getElementById(id).value = '';
     }
     document.getElementById('meter-property').disabled = false;
@@ -4504,6 +4505,7 @@ async function openEditMeterModal(id) {
     await updateMeterApartments();
     document.getElementById('meter-apartment').value = m.apartment_id ?? '';
     document.getElementById('meter-heizungsanlage').value = m.heizungsanlage_id ?? '';
+    document.getElementById('meter-einheit').value = m.einheit ?? '';
     document.getElementById('meter-property').disabled = true;
     document.getElementById('meter-apartment').disabled = true;
     document.getElementById('meter-number').value = m.meter_number;
@@ -4551,6 +4553,10 @@ async function saveMeter() {
             // NK-258: Einbauort und Ende der Eichfrist, beides optional.
             ort: document.getElementById('meter-ort').value.trim() || null,
             geeicht_bis: document.getElementById('meter-geeicht-bis').value || null,
+            // Phase 55: was der Zaehler misst. Leer heisst "wie die Kostenart";
+            // ein Waermemengenzaehler fuer Warmwasser waehlt kWh (§ 9 Abs. 2
+            // Satz 1 HeizkostenV), obwohl die Kostenart m3 vorgibt.
+            einheit: document.getElementById('meter-einheit').value || null,
         };
         if (!editId) {
             daten.property_id = parseInt(propId);

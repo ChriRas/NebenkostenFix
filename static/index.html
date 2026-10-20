@@ -2102,6 +2102,14 @@
                         <!-- Anlagen der gewählten Immobilie -->
                     </select>
                 </div>
+                <div class="form-group">
+                    <label>Maßeinheit <i class="ph ph-question feld-hilfe" title="Was dieser Zähler misst. Leer lassen nimmt, was die Kostenart vorgibt. Ein Wärmemengenzähler für Warmwasser misst Kilowattstunden, auch wenn die Kostenart Kubikmeter vorgibt (§ 9 Abs. 2 Satz 1 HeizkostenV)."></i></label>
+                    <select id="meter-einheit">
+                        <option value="">— aus der Kostenart —</option>
+                        <option value="m³">m³ (Wasserzähler)</option>
+                        <option value="kWh">kWh (Wärmemengenzähler)</option>
+                    </select>
+                </div>
                 <div class="form-group checkbox-group" style="margin-top: 8px;">
                     <input type="checkbox" id="meter-dual-tariff">
                     <label for="meter-dual-tariff">Ist ein Doppeltarifzähler (HT/NT)
@@ -2907,7 +2915,7 @@
     </div>
     <script src="/static/formular.js?v=2"></script>
     <script src="/static/umzug.js?v=1"></script>
-    <script src="/static/app.js?v=36"></script>
+    <script src="/static/app.js?v=37"></script>
 </body>
 
 </html>

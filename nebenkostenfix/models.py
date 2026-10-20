@@ -550,6 +550,13 @@ class Meter(db.Model):
     # Auskunft; die Berechnung haengt nicht daran.
     geeicht_bis = db.Column(db.Date, nullable=True)
     ort = db.Column(db.String(100), nullable=True)
+    # Phase 55: was dieser Zaehler misst -- 'm³' oder 'kWh'. Bisher leitete
+    # der Kern das aus der BetrKV-Nummer der Kostenart ab; ein Warmwasser-
+    # Waermemengenzaehler (§ 9 Abs. 2 Satz 1 HeizkostenV, bei Waermepumpen
+    # der uebliche Aufbau) hatte damit keinen Platz. Die Wanderung
+    # e8b4a7c25f91 hat fuer jeden Bestandszaehler genau die abgeleitete
+    # Einheit festgeschrieben: fuer den Bestand ist das Feld ein Nullwechsel.
+    einheit = db.Column(db.String(10), nullable=True)
 
     readings = db.relationship('MeterReading', backref='meter', lazy=True, cascade="all, delete-orphan")
 

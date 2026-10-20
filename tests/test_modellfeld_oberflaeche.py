@@ -143,6 +143,8 @@ OBERFLAECHE = {
         'ersetzt_id': 'id="wechsel-modal"',
         'geeicht_bis': 'id="meter-geeicht-bis"',
         'ort': 'id="meter-ort"',
+        # Phase 55: was der Zaehler misst. Leer heisst "wie die Kostenart".
+        'einheit': 'id="meter-einheit"',
     },
     'MeterReading': {
         'meter_id': 'id="reading-meter"',

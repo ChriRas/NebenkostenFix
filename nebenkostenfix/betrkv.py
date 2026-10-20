@@ -46,6 +46,7 @@ __all__ = [
     'NR_ALLGEMEINSTROM',
     'FRUEHERE_NAMEN',
     'EINHEITEN',
+    'EINHEITEN_ZAEHLER',
     'RUBRIKEN',
     'BEREICHE',
     'BetrKVFehler',
@@ -441,6 +442,13 @@ def katalogeintrag(name) -> dict:
 #: Posten. Alles andere umlagt ohne Zähler und trägt die neutrale Einheit.
 #: Das ist der eine Ort hinter ``einheit_fuer`` und der Analytics-Einheit
 #: (F-32/F-51, NK-121).
+#: Die Einheiten, die ein Zaehler erfassen kann (Phase 55). Bisher kam die
+#: Einheit allein aus der Nummer der Kostenart; ein Warmwasser-Waerme-
+#: mengenzaehler (§ 9 Abs. 2 Satz 1 HeizkostenV, bei Waermepumpen der
+#: uebliche Aufbau) hatte damit keinen Platz. Jetzt steht sie am Zaehler,
+#: und diese Liste ist die Autoritaet dafuer.
+EINHEITEN_ZAEHLER = ('m³', 'kWh')
+
 EINHEITEN = {
     1: 'Einheiten',
     2: 'm³', 3: 'm³',

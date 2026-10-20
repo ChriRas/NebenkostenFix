@@ -282,6 +282,7 @@ from nebenkostenfix.geld import NULL, runde
 from nebenkostenfix import betrkv
 from nebenkostenfix import abrechnungsart
 from nebenkostenfix.rechenkern import einheit_fuer
+from nebenkostenfix.betrkv import EINHEITEN_ZAEHLER
 from nebenkostenfix import mieter_daten
 from nebenkostenfix import beispielimmobilie
 from nebenkostenfix import zeitleiste
@@ -1778,8 +1779,11 @@ def get_meters():
             'id': m.id,
             'category_id': m.category_id,
             'category_name': m.category.name,
-            # NK-220: dieselbe Einheit, mit der die Abrechnung rechnet
-            'einheit': einheit_fuer(m.category.name, m.category.betrkv_nr),
+            # NK-220 (V3): dieselbe Einheit, mit der die Abrechnung rechnet.
+            # Phase 55: sie steht jetzt am Zaehler. Der Rueckfall auf die
+            # Ableitung bleibt fuer Objekte ohne das Feld -- nach der
+            # Wanderung e8b4a7c25f91 ist das derselbe Wert.
+            'einheit': m.einheit or einheit_fuer(m.category.name, m.category.betrkv_nr),
             'property_id': m.property_id,
             'property_name': m.property.name,
             'apartment_id': m.apartment_id,
@@ -1809,6 +1813,27 @@ def _anlage_pruefen(heizungsanlage_id, property_id):
             'Der Zähler kann nur eine Anlage derselben Immobilie messen.',
             'heizungsanlage_id')
 
+def _zaehlereinheit(eingabe, kategorie_id):
+    """Die Einheit des Zaehlers -- gewaehlt oder aus der Kostenart.
+
+    Leer heisst "wie bisher": dann gilt die Einheit der BetrKV-Nummer, und
+    fuer jeden Bestandszaehler steht genau die schon in der Spalte (Wanderung
+    e8b4a7c25f91). Wer eine waehlt, uebergeht die Ableitung -- der Fall des
+    Warmwasser-Waermemengenzaehlers (§ 9 Abs. 2 Satz 1 HeizkostenV).
+    """
+    gewaehlt = eingabe.text('einheit', maxlaenge=10)
+    if gewaehlt:
+        if gewaehlt not in EINHEITEN_ZAEHLER:
+            raise EingabeFehler(
+                f'Die Einheit "{gewaehlt}" gibt es nicht. Erlaubt sind: '
+                f'{", ".join(EINHEITEN_ZAEHLER)}.', 'einheit')
+        return gewaehlt
+    kategorie = db.session.get(CostCategory, kategorie_id)
+    if kategorie is None:
+        return None
+    return einheit_fuer(kategorie.name, kategorie.betrkv_nr)
+
+
 @app.route('/api/meters', methods=['POST'])
 def create_meter():
     eingabe = Eingabe.aus_request()
@@ -1825,6 +1850,8 @@ def create_meter():
         heizungsanlage_id=eingabe.ganzzahl('heizungsanlage_id'),
         ort=eingabe.text('ort', maxlaenge=100),
         geeicht_bis=eingabe.datum('geeicht_bis'),
+        einheit=_zaehlereinheit(
+            eingabe, eingabe.ganzzahl('category_id', pflicht=True)),
     )
     _anlage_pruefen(new_meter.heizungsanlage_id, new_meter.property_id)
     db.session.add(new_meter)
@@ -1861,6 +1888,8 @@ def update_meter(id):
         m.category_id = kategorie
     if eingabe.vorhanden('heizungsanlage_id'):
         m.heizungsanlage_id = eingabe.ganzzahl('heizungsanlage_id')
+    if eingabe.vorhanden('einheit'):
+        m.einheit = _zaehlereinheit(eingabe, m.category_id)
         _anlage_pruefen(m.heizungsanlage_id, m.property_id)
     db.session.commit()
     return jsonify({'id': m.id}), 200
@@ -1993,7 +2022,7 @@ def _stand_text(wert: float) -> str:
 
 
 def _ablesung_pruefen(meter_id: int, datum: date, wert: float, wert_nt, eigene_id=None):
-    """NK-216: was nie stimmen kann, ist ein Fehler; was selten stimmt, eine Frage.
+    """NK-216 (F1): was nie stimmen kann, ist ein Fehler; was selten stimmt, eine Frage.
 
     Negative Staende und Ablesungen in der Zukunft gibt es nicht (400). Ein
     Stand unter dem vorigen oder ueber dem folgenden und ein zweiter Stand
@@ -3973,7 +4002,7 @@ def _zahlungsstand(report) -> dict:
 
 
 def _regelstand_veraltet(report) -> bool:
-    """NK-217: die gueltige Version stammt von einem aelteren Regelstand.
+    """NK-217 (F2): die gueltige Version stammt von einem aelteren Regelstand.
 
     Die Abrechnung bleibt, wie sie zugegangen ist (R-DOC-02); der Vermieter
     soll nur sehen, dass eine Korrektur heute anders rechnen kann. Altbestand
@@ -4036,7 +4065,7 @@ def _je_kostenart(ergebnis) -> dict:
 
 @app.route('/api/billing/reports/<int:id>/korrektur/vorschau', methods=['GET'])
 def korrektur_vorschau(id):
-    """NK-217: was eine Korrektur aendern wuerde, ohne sie anzulegen.
+    """NK-217 (F2): was eine Korrektur aendern wuerde, ohne sie anzulegen.
 
     Rechnet wie die Korrektur, speichert nichts und stellt je Kostenart und
     fuer Summe, Vorauszahlungen und Saldo den alten Wert (Schnappschuss der
@@ -4550,7 +4579,7 @@ def analytics_building(property_id):
         db.or_(Tenant.move_out_date == None, Tenant.move_out_date >= today)
     ).all()
     
-    # NK-211: wer ausgezogen ist, braucht eine Endabrechnung bis zum
+    # NK-211 (B4): wer ausgezogen ist, braucht eine Endabrechnung bis zum
     # Auszug. Zwei Jahre nach dem Auszug ist auch die Frist des Zeitraums
     # vorbei, in dem er liegt (§ 556 Abs. 3 BGB: zwölf Monate nach dessen
     # Ende) -- aelterer Bestand zaehlt nicht mehr als Aufgabe.
