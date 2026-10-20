@@ -84,7 +84,7 @@ function schriftgroesseWaehlen(wert) {
 }
 window.schriftgroesseWaehlen = schriftgroesseWaehlen;
 
-// Der Knopf im Kontomenü schaltet reihum durch die drei Stufen.
+// Runde 4: der Knopf im Kontomenü schaltet reihum durch die drei Stufen.
 function schriftgroesseWechseln() {
     const jetzt = Number(document.documentElement.dataset.schrift || '1');
     schriftgroesseWaehlen(SCHRIFTGROESSEN[(SCHRIFTGROESSEN.indexOf(jetzt) + 1) % SCHRIFTGROESSEN.length]);
@@ -122,7 +122,7 @@ const DIAGRAMM_FARBE_HELL = { ...DIAGRAMM_FARBE };
 const DIAGRAMM_FARBE_DUNKEL = { ...DIAGRAMM_FARBE, blau: '#8E88F8', rot: '#F08A82' };
 
 // ---------------------------------------------------------------------------
-// Dunkelmodus. Das Skript im <head> setzt data-theme vor dem ersten
+// Runde 4: Dunkelmodus. Das Skript im <head> setzt data-theme vor dem ersten
 // Bild; Sonne/Mond in der Leiste (auf dem Handy im Kopfmenü) wechselt es und
 // merkt die Wahl in nk-thema. Ohne Wahl folgt die App dem System.
 // ---------------------------------------------------------------------------
@@ -605,7 +605,7 @@ function initTabs() {
         }
     });
 
-    // Leiste: ein Bereich öffnet seine zuletzt gezeigte Seite.
+    // Leiste (Konzept D): ein Bereich öffnet seine zuletzt gezeigte Seite.
     document.querySelectorAll('.leiste-eintrag, .logo').forEach(eintrag => {
         eintrag.addEventListener('click', (e) => {
             e.preventDefault();
@@ -617,7 +617,7 @@ function initTabs() {
     zeigeBereich(document.querySelector('.nav-item.active'));
 }
 
-// Richtung des Seitenwechsels: ein Bereich weiter unten in der
+// Richtung des Seitenwechsels (Konzept D): ein Bereich weiter unten in der
 // Leiste steigt von unten auf, Reiter desselben Bereichs gleiten quer.
 function seitenRichtung(von, nach) {
     if (!von || von === nach) return '';
@@ -628,7 +628,7 @@ function seitenRichtung(von, nach) {
     return gruppen.indexOf(nach.dataset.gruppe) > gruppen.indexOf(von.dataset.gruppe) ? 'vor' : 'zurueck';
 }
 
-// Die Leiste zeigt den Bereich, die Reiter im Seitenkopf seine
+// Konzept D: die Leiste zeigt den Bereich, die Reiter im Seitenkopf seine
 // Seiten. Die Reiter wandern in den Kopf der offenen Seite.
 const letzteSeite = {};
 function zeigeBereich(item) {
@@ -687,7 +687,7 @@ function wechsleZuTab(tabName) {
     if (item) item.click();
 }
 
-// --- Heute --------------------------------------------------------
+// --- Heute (Konzept D) --------------------------------------------------------
 // Was jetzt zu tun ist, abgelesen aus den geladenen Daten: Zähler ohne Stand
 // im laufenden Jahr, Belege ohne Rechnung und fällige Abrechnungen. Zahlungen
 // haben keinen Status, an dem sich „offen“ ablesen ließe; sie fehlen darum hier.
@@ -842,7 +842,7 @@ function zeigeHeute() {
     });
 }
 
-// --- Kopfleiste ---------------------------------------------------
+// --- Kopfleiste (Konzept D) ---------------------------------------------------
 
 function fuelleHausWahl() {
     const feld = document.getElementById('haus-wahl-feld');
@@ -859,7 +859,7 @@ function hausWaehlen(wahl) {
 }
 window.hausWaehlen = hausWaehlen;
 
-// --- Befehlspalette -----------------------------------------------
+// --- Befehlspalette (Konzept D) -----------------------------------------------
 // Strg+K oder das Suchfeld im Kopf: Seiten, häufige Aktionen und der Bestand
 // (Mieter, Zähler, Immobilien, Rechnungen) in einer Liste. Jedes Suchwort
 // muss vorkommen, darum findet „Stand Strom“ jeden Stromzähler.
@@ -1157,7 +1157,7 @@ document.addEventListener('keydown', ereignis => {
 });
 window.addEventListener('scroll', schliesseBegriffBlase, true);
 
-// --- Einführung -----------------------------------------------------
+// --- Einführung (Runde 4) -----------------------------------------------------
 // Eine Sprechblasen-Tour: jeder Schritt öffnet seine Seite und zeigt auf die
 // Stelle, an der man dort anfängt. Vor und zurück blättern, X oder Escape
 // beendet sie jederzeit; danach startet sie nicht mehr von selbst.
@@ -1363,7 +1363,7 @@ function mieterErklaerungHtml(daten) {
 }
 
 function zeigeErsteSchritte() {
-    // Heute hängt an denselben Zahlen.
+    // Heute (Konzept D) hängt an denselben Zahlen.
     zeigeHeute();
     fuelleHausWahl();
     const panel = document.getElementById('erste-schritte');
@@ -1513,7 +1513,7 @@ function initKopfMenues() {
         aktionen.parentElement.querySelector('.kopf-menue-knopf')
             .setAttribute('aria-expanded', String(offen));
     };
-    // Auch der App-Kopf (Hilfe, Drucken, Abmelden) klappt am Handy ein.
+    // Konzept D: auch der App-Kopf (Hilfe, Drucken, Abmelden) klappt am Handy ein.
     document.querySelectorAll('.section-header > .kopf-aktionen, .top-header > .kopf-aktionen').forEach(aktionen => {
         if (aktionen.querySelectorAll('button').length < 2) return;
         const knopf = document.createElement('button');
@@ -1525,7 +1525,7 @@ function initKopfMenues() {
         knopf.setAttribute('aria-label', 'Aktionen');
         knopf.title = 'Aktionen';
         knopf.innerHTML = '<i class="ph ph-dots-three-vertical" aria-hidden="true"></i>';
-        // Im App-Kopf ist es das Kontomenü, mit dem Namen als Aufschrift.
+        // Konzept D: im App-Kopf ist es das Kontomenü, mit dem Namen als Aufschrift.
         if (aktionen.parentElement.classList.contains('top-header')) {
             knopf.classList.add('konto-knopf');
             knopf.setAttribute('aria-label', 'Konto und Hilfe');
@@ -3007,7 +3007,7 @@ function zeigeMeldung(message, art) {
     setTimeout(() => meldung.remove(), 6000);
 }
 
-// Ein laufender Balken im Knopf, solange eine lange Aktion arbeitet.
+// Runde 4: ein laufender Balken im Knopf, solange eine lange Aktion arbeitet.
 function zeigeArbeit(el, an) {
     if (!el) return;
     el.classList.toggle('arbeitet', an);
@@ -3227,7 +3227,7 @@ function getReadingHtml(r, einheit) {
 }
 
 // --- Render Meters ---
-// Links die Liste mit Filterpillen nach Art, rechts das Detail des
+// Konzept D: links die Liste mit Filterpillen nach Art, rechts das Detail des
 // gewählten Zählers (zeigeZaehlerDetail). Ohne Wahl gilt der erste sichtbare.
 let zaehlerGewaehlt = null;
 let zaehlerArtFilter = null;
@@ -3533,7 +3533,7 @@ function zeigeZaehlerDetail() {
         ${balkenHtml}
         <table class="tabelle ablese-tabelle"></table>`;
     fuelleAblesungen(detail.querySelector('.ablese-tabelle'), m);
-    // Das Detail blendet bei jedem Wechsel neu ein.
+    // Das Detail blendet bei jedem Wechsel neu ein (Konzept D).
     detail.classList.remove('blendet-ein');
     void detail.offsetWidth;
     detail.classList.add('blendet-ein');
@@ -3567,7 +3567,7 @@ function rechnungsfilterZuruecksetzen() {
 }
 window.rechnungsfilterZuruecksetzen = rechnungsfilterZuruecksetzen;
 
-// Spalten per Klick sortieren wie in Excel. Die Kopfzelle sagt,
+// Runde 4: Spalten per Klick sortieren wie in Excel. Die Kopfzelle sagt,
 // ob Text oder Zahl; eine Zelle kann ihren Rohwert in data-wert tragen
 // (ISO-Datum, Betrag), sonst zählt der sichtbare Text.
 function sortierKopf(titel, art, rechts = false) {
@@ -4276,7 +4276,7 @@ async function deleteMeter(id) {
 function openHistoryModal(meterId) {
     const meter = meters.find(m => m.id === meterId);
     if(!meter) return;
-    // Auf der Zählerseite steht der Verlauf im Detail. Aus einem
+    // Konzept D: auf der Zählerseite steht der Verlauf im Detail. Aus einem
     // Dialog heraus (Jahresassistent, NK-265) bleibt es beim Verlaufsdialog.
     if (document.getElementById('tab-meters').classList.contains('active')
         && !document.querySelector('.modal-overlay.active:not(.als-spalte)')) {
@@ -4688,7 +4688,7 @@ function toggleInvoiceHeizkosten() {
 }
 
 async function openAddInvoiceModal(editInvoiceId = null, spalte = null) {
-    // Im Eingang steht der Dialog als Spalte neben der Vorschau,
+    // Konzept D: im Eingang steht der Dialog als Spalte neben der Vorschau,
     // sonst wie bisher als Overlay. Speichern und Prüfen bleiben dieselben.
     const dialog = document.getElementById('invoice-modal');
     const ziel = spalte || document.body;
@@ -4820,7 +4820,7 @@ function toggleInvoiceFileUpload() {
     }
 }
 
-// --- Eingang -----------------------------------------------------
+// --- Eingang (Konzept D) -----------------------------------------------------
 // Drei Ansichten: Eingang (Belege ohne Rechnung), alle Rechnungen und die
 // Tabelle nach Kostenart. Eingang und „Alle“ teilen sich den Dreispalter:
 // links die Liste, in der Mitte das Blatt, rechts das Rechnungsformular.
@@ -5029,8 +5029,8 @@ function vorschauHtml({ titel, info, adresse, datei, knoepfeHtml = '' }) {
 // des Browsers brachte im iframe einen zweiten Rahmen samt Werkzeugleiste mit.
 // Neue Uploads kommen als Datei (fetch auf blob: sperrt die CSP), sonst lädt
 // fetch die Datei. Scheitert pdf.js, zeigt der iframe wie bisher das PDF.
-// Die Leiste darüber bringt Seitenzahl und Zoom wie im Browser-Viewer zurück;
-// Prozent beziehen sich auf die echte Größe, 1 pt = 96/72 px.
+// Die Leiste darüber bringt Seitenzahl und Zoom wie im Browser-Viewer zurück
+// (Runde 5); Prozent beziehen sich auf die echte Größe, 1 pt = 96/72 px.
 const PDF_STUFEN = [50, 75, 100, 125, 150, 200, 300];
 const PDF_LEISTE = '<div class="pdf-leiste" role="toolbar" aria-label="PDF-Ansicht">' +
     '<button type="button" class="btn-icon" data-pdf-aktion="zurueck" title="Vorherige Seite zeigen" aria-label="Vorherige Seite zeigen"><i class="ph ph-caret-up" aria-hidden="true"></i></button>' +
@@ -5585,7 +5585,7 @@ async function addProvider() {
     } catch(e) { showError(meldungZu(e, 'Fehler beim Speichern des Anbieters.')); }
 }
 
-// Ohne Anbieter ließ sich keine Rechnung speichern, und angelegt
+// Runde 4: ohne Anbieter ließ sich keine Rechnung speichern, und angelegt
 // wurden Anbieter nur in den Einstellungen. Jetzt geht es im Formular.
 function anbieterFeldZeigen() {
     const feld = document.getElementById('anbieter-neu');
@@ -6429,7 +6429,7 @@ document.addEventListener('keydown', ereignis => {
     if (ziel) ziel.querySelector(`[data-spalte="${feld.dataset.spalte}"]`).focus();
 });
 
-// In der Ablese-Runde springt Enter ins nächste Zählerfeld wie in
+// Runde 4: in der Ablese-Runde springt Enter ins nächste Zählerfeld wie in
 // Excel; erst im letzten Feld speichert Enter die Runde.
 document.addEventListener('keydown', ereignis => {
     const feld = ereignis.target;
@@ -7515,7 +7515,7 @@ async function korrekturErstellen(id) {
     }
 }
 
-// Eine Tabelle für „Abrechnungs-Details & Belege“ und die Vorschau.
+// Runde 7: eine Tabelle für „Abrechnungs-Details & Belege“ und die Vorschau.
 // Je Kostenart eine Zeile (Name, Zeitraum, Betrag, Beleg); die Aufschlüsselung
 // klappt per Klick auf. Stile stehen als abr-* in style.css.
 
@@ -7628,7 +7628,7 @@ function abrechnungsDetailZeilen(item) {
             const allgGeschaetzt = mm.is_interpolated || (tm && tm.is_interpolated);
             angaben.push([`Hauptzähler${hzZeitraum}`, verbrauchHtml(md.main_consumption, mm.is_interpolated && mm)]);
             angaben.push(['Allgemeinverbrauch', verbrauchHtml(md.allgemein_consumption, allgGeschaetzt && mm)]);
-            // NK-209: der Anteil, mit dem gerechnet wurde (Personentage)
+            // NK-209 (B2): der Anteil, mit dem gerechnet wurde (Personentage)
             if (md.allgemein_quote != null && md.allgemein_anteil != null) {
                 const prozent = (Number(md.allgemein_quote) * 100).toLocaleString('de-DE',
                     { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -8224,7 +8224,7 @@ async function fetchAnalytics() {
     const navContainer = document.getElementById('analytics-nav');
     navContainer.replaceChildren();
     
-    // Die Ansichtswahl sind Filterpillen; die gewählte trägt Tinte.
+    // Konzept D: die Ansichtswahl sind Filterpillen; die gewählte trägt Tinte.
     const pille = (ansicht, inhalt) => {
         const knopf = document.createElement('button');
         knopf.type = 'button';

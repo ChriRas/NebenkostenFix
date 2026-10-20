@@ -75,7 +75,7 @@ def test_anmeldestil_und_zeichen_sind_ohne_anmeldung_erreichbar(anon_client):
 
 
 def test_anmeldeseite_laedt_die_schriften_der_anwendung_ohne_anmeldung(anon_client):
-    """anmeldung.css holt Geist und Geist Mono per
+    """Kontoblatt: anmeldung.css holt Geist und Geist Mono per
     @import; jede Schriftdatei dahinter muss ohne Anmeldung kommen, sonst
     fällt die Anmeldeseite still auf die Systemschrift zurück."""
     stil = _text('static/anmeldung.css')

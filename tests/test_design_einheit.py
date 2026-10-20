@@ -111,7 +111,7 @@ def test_globaler_kopf_traegt_nur_was_ueberall_gilt():
 
 
 def test_begruessung_ohne_zurueck_beim_ersten_besuch():
-    # Der Gruß steht als Untertitel im Kopf von „Heute“.
+    # Konzept D: der Gruß steht als Untertitel im Kopf von „Heute“.
     assert '<span id="begruessung">Willkommen bei NebenkostenFix!</span>' in SEITE
     assert "'Willkommen zurück!' : 'Willkommen bei NebenkostenFix!'" in SKRIPT
 
@@ -140,11 +140,11 @@ def test_hidden_gilt_auch_fuer_knoepfe():
         assert re.search(r'\[hidden\]\s*\{\s*display:\s*none\s*!important;', stil)
 
 
-# --- Design: flach, Farben nur über Tokens -----------------
+# --- Kontoblatt (Konzept A): flach, Farben nur über Tokens -----------------
 # Ohne Schatten, Verläufe und Anheben beim Überfahren; jede Farbe kommt aus
 # :root, damit ein dunkles Thema später nur die Tokens neu setzt.
 
-def test_design_halbtransparente_farben_nur_als_token():
+def test_kontoblatt_halbtransparente_farben_nur_als_token():
     for zeile in STIL.splitlines():
         if 'rgba(' in zeile:
             assert zeile.strip().startswith('--'), zeile.strip()
@@ -152,8 +152,8 @@ def test_design_halbtransparente_farben_nur_als_token():
         assert 'rgba(' not in text, name
 
 
-def test_design_ohne_schatten_und_anheben():
-    # Inhalte dürfen beim Erscheinen aufsteigen (nur in @keyframes),
+def test_kontoblatt_ohne_schatten_und_anheben():
+    # Konzept D: Inhalte dürfen beim Erscheinen aufsteigen (nur in @keyframes),
     # aber nichts hebt sich beim Überfahren.
     ohne_keyframes = re.sub(r'@keyframes[^{]*\{(?:[^{}]*\{[^}]*\})*\s*\}', '', STIL)
     for name, text in (('style.css', ohne_keyframes), ('index.html', SEITE), ('app.js', SKRIPT)):
@@ -165,14 +165,14 @@ def test_design_ohne_schatten_und_anheben():
     assert 'background-blobs' not in SEITE and '.blob' not in STIL
 
 
-def test_design_verlauf_nur_als_ocker_schraffur_der_ueberlappung():
+def test_kontoblatt_verlauf_nur_als_ocker_schraffur_der_ueberlappung():
     for name, text in (('style.css', STIL), ('app.js', SKRIPT), ('index.html', SEITE)):
         for treffer in re.finditer(r'([a-z-]*gradient)\(([^;]*?)\);', text, flags=re.S):
             assert treffer.group(1) == 'repeating-linear-gradient', name
             assert 'var(--warning-' in treffer.group(2), name
 
 
-def test_design_schriften_nur_ueber_tokens():
+def test_kontoblatt_schriften_nur_ueber_tokens():
     for name, text in (('style.css', STIL), ('app.js', SKRIPT), ('index.html', SEITE)):
         for wert in re.findall(r'font-family:\s*([^;"\'}]+)', text):
             assert wert.strip() in ('var(--font-sans)', 'var(--font-mono)', 'inherit'), \
@@ -183,7 +183,7 @@ def test_design_schriften_nur_ueber_tokens():
         assert f'/static/vendor/fonts/{css}' in SEITE
 
 
-# Design-Skala für Inline-Stile: Text 13/15/18/24/32 px, Stärken bis 600.
+# Kontoblatt-Skala für Inline-Stile: Text 13/15/18/24/32 px, Stärken bis 600.
 # Symbole (Phosphor-<i class="ph …">, icon.style) dürfen eigene Größen haben.
 SKALA_PX = {'13px', '15px', '18px', '24px', '32px'}
 STAERKEN = {'400', '500', '600', 'normal', 'inherit'}
@@ -198,7 +198,7 @@ def _inline_quellen():
     return (('index.html', _ohne_kommentare_html(SEITE)), ('app.js', _ohne_kommentare_js(SKRIPT)))
 
 
-def test_design_inline_schrift_nur_auf_der_skala():
+def test_kontoblatt_inline_schrift_nur_auf_der_skala():
     funde = []
     for name, text in _inline_quellen():
         for nr, zeile in enumerate(text.splitlines(), 1):
@@ -212,7 +212,7 @@ def test_design_inline_schrift_nur_auf_der_skala():
     assert funde == [], funde
 
 
-def test_design_inline_abstaende_auf_dem_raster():
+def test_kontoblatt_inline_abstaende_auf_dem_raster():
     funde = []
     for name, text in _inline_quellen():
         for m in ABSTAND.finditer(text):
@@ -226,9 +226,9 @@ def test_design_inline_abstaende_auf_dem_raster():
     assert funde == [], funde
 
 
-def test_design_seitentitel_und_tabellenkopf_einheitlich():
+def test_kontoblatt_seitentitel_und_tabellenkopf_einheitlich():
     # Jede Seite beginnt mit einem Kopf samt h2; die gemeinsame Regel macht
-    # daraus das Seitenband mit dem 28-px-Titel.
+    # daraus das Seitenband mit dem 28-px-Titel (Konzept D).
     seiten = list(re.finditer(r'<section[^>]*\btab-content\b[^>]*>', SEITE))
     assert len(seiten) >= 10
     for seite in seiten:
@@ -253,7 +253,7 @@ def test_betraege_in_geist_mono():
     assert not nackt, nackt
 
 
-# --- Leiste, Kopf und Befehlspalette -------------------------------------
+# --- Konzept D „Aufgaben“ ----------------------------------------------------
 
 def _regel(selektor: str, text: str = STIL) -> str:
     treffer = re.search(r'(?:^|\n)\s*' + re.escape(selektor) + r' \{([^}]*)\}', text)
@@ -268,7 +268,7 @@ def _media(bedingung: str) -> str:
     return '\n'.join(t.split('\n}\n')[0] for t in teile)
 
 
-def test_leiste_mit_fuenf_bereichen():
+def test_konzept_d_leiste_mit_fuenf_bereichen():
     """Die dunkle Leiste trägt die Bereiche; jeder Reiter gehört genau einem."""
     leiste = re.findall(r'class="leiste-eintrag[^"]*" data-gruppe="(\w+)"', SEITE)
     assert leiste == ['heute', 'haus', 'kosten', 'abrechnung', 'einstellungen']
@@ -280,7 +280,7 @@ def test_leiste_mit_fuenf_bereichen():
     assert 'width: 88px;' in _regel('.leiste-eintrag')
 
 
-def test_befehlspalette():
+def test_konzept_d_befehlspalette():
     knopf = SEITE[SEITE.index('id="befehl-oeffnen"'):SEITE.index('</button>', SEITE.index('id="befehl-oeffnen"'))]
     assert 'aria-keyshortcuts="Control+K"' in knopf and '<kbd>Strg</kbd><kbd>K</kbd>' in knopf
     dialog = SEITE[SEITE.index('id="befehl-dialog"'):]
@@ -291,7 +291,7 @@ def test_befehlspalette():
     assert 'initBefehl();' in SKRIPT
 
 
-def test_kopf_bricht_erst_unter_1100_pixel_um():
+def test_konzept_d_kopf_bricht_erst_unter_1100_pixel_um():
     """Bei 1280 px stand der Kopf zweizeilig: die Suche gibt jetzt Platz ab."""
     knopf = _regel('.befehl-knopf')
     assert 'flex: 0 1 640px;' in knopf and 'min-width: 0;' in knopf
@@ -303,7 +303,7 @@ def test_kopf_bricht_erst_unter_1100_pixel_um():
     assert re.search(r'\.top-header > \.kopf-aktionen \{\s*flex-shrink: 0;', _media('(min-width: 1101px)'))
 
 
-def test_handykopf_einzeilig():
+def test_konzept_d_handykopf_einzeilig():
     """Am Handy stapelten sich Suche, Hauswahl und vier Knöpfe (233 px hoch)."""
     schmal = _media('(max-width: 560px)')
     assert 'flex: 0 0 var(--knopf-hoehe);' in _regel('.befehl-knopf', schmal)
@@ -314,11 +314,11 @@ def test_handykopf_einzeilig():
     assert 'flex: 1 1 auto;' in _regel('.leiste-eintrag', _media('(max-width: 720px)') + schmal)
 
 
-def test_hauswahl_im_feldstil():
+def test_konzept_d_hauswahl_im_feldstil():
     assert 'class="haus-wahl form-group" id="haus-wahl-feld" hidden' in SEITE
 
 
-def test_hausfilter_gilt_fuer_die_ganze_app():
+def test_konzept_d_hausfilter_gilt_fuer_die_ganze_app():
     """Vorher: die Auswahl oben rechts sprang nur zur Immobilie, Mieter und
     Kosten zeigten weiter alle Immobilien. Jede geladene Liste läuft jetzt
     durch imHaus, die Auswahl wird gemerkt."""
@@ -346,7 +346,7 @@ def test_hausfilter_gilt_fuer_die_ganze_app():
     assert ".top-header .haus-wahl.gefiltert select {" in STIL
 
 
-def test_statistik_ansichten_als_filterpillen():
+def test_konzept_d_statistik_ansichten_als_filterpillen():
     menue = SKRIPT[SKRIPT.index('const pille = (ansicht, inhalt) =>'):]
     assert "'filter-pill active' : 'filter-pill'" in menue[:600]
     assert "setAttribute('aria-pressed'" in menue[:600]
@@ -360,13 +360,14 @@ def test_lange_woerter_brechen_im_dialog_um():
 
 def test_pruefskripte_wechseln_reiter_ueber_die_funktion():
     """Reiter anderer Bereiche sind verborgen; ein Klick auf .nav-item ginge ins Leere."""
-    text = (WURZEL / 'scripts' / 'probe_ersteinrichtung.py').read_text(encoding='utf-8')
-    assert 'wechsleZuTab(' in text
+    for skript in ('live_abgleich_ui.py', 'probe_ersteinrichtung.py'):
+        text = (WURZEL / 'scripts' / skript).read_text(encoding='utf-8')
+        assert 'wechsleZuTab(' in text, skript
 
 
-# --- Bewegung und Kontomenü --------------------------------------
+# --- Konzept D: Bewegung und Kontomenü --------------------------------------
 
-def test_bewegung_ueber_tokens_und_abschaltbar():
+def test_konzept_d_bewegung_ueber_tokens_und_abschaltbar():
     for token in ('--dauer-kurz:', '--dauer-mittel:', '--kurve:'):
         assert token in STIL, token
     for regel in ('.tab-content.active > *', '.modal-overlay.active > *', '.leiste-eintrag.active::before'):
@@ -380,7 +381,7 @@ def test_bewegung_ueber_tokens_und_abschaltbar():
     assert 'transition-duration: 1ms !important;' in reduziert
 
 
-def test_kontomenue_im_kopf_auf_jeder_breite():
+def test_konzept_d_kontomenue_im_kopf_auf_jeder_breite():
     js = SKRIPT[SKRIPT.index('function initKopfMenues'):]
     js = js[:js.index('\n}\n')]
     assert "knopf.classList.add('konto-knopf')" in js
@@ -393,9 +394,9 @@ def test_kontomenue_im_kopf_auf_jeder_breite():
     assert re.search(r'\.top-header > \.kopf-aktionen\.mit-menue\.offen \{\s*display: flex;', STIL)
 
 
-# --- Beleg-Eingang ------------------------------------------------
+# --- Konzept D: Beleg-Eingang ------------------------------------------------
 
-def test_eingang_liste_vorschau_formular():
+def test_konzept_d_eingang_liste_vorschau_formular():
     eingang = SEITE[SEITE.index('id="kosten-eingang"'):SEITE.index('id="kosten-rechnungen"')]
     # Rechnung in der Mitte: Belegliste, Vorschau, Formular in dieser Reihenfolge.
     reihe = [eingang.index(f'id="{i}"') for i in ('documents-container', 'eingang-vorschau', 'eingang-formular')]
@@ -403,7 +404,7 @@ def test_eingang_liste_vorschau_formular():
     assert 'grid-template-columns: 280px minmax(0, 1fr) 400px;' in STIL
 
 
-def test_formular_wird_spalte_und_kehrt_zurueck():
+def test_konzept_d_formular_wird_spalte_und_kehrt_zurueck():
     js = SKRIPT[SKRIPT.index('async function openAddInvoiceModal'):]
     js = js[:js.index('\n}\n')]
     # Dasselbe #invoice-modal dient als Spalte; ohne Spalte zieht es zurück in den body.
@@ -416,8 +417,8 @@ def test_formular_wird_spalte_und_kehrt_zurueck():
     assert re.search(r'\.als-spalte \.modal-footer \.btn-secondary \{\s*display: none;', STIL)
 
 
-def test_drei_ansichten_mit_kopfzahl():
-    # Pillen Eingang · Alle Rechnungen · Nach Kostenart, darüber die Summe.
+def test_konzept_d_drei_ansichten_mit_kopfzahl():
+    # Runde 2: Pillen Eingang · Alle Rechnungen · Nach Kostenart, darüber die Summe.
     for ansicht in ('eingang', 'alle', 'kostenart'):
         assert re.search(rf'id="pill-{ansicht}"\s+onclick="zeigeKostenAnsicht\(\'{ansicht}\'\)"', SEITE)
     assert 'id="kosten-kopfzahl"' in SEITE
@@ -428,7 +429,7 @@ def test_drei_ansichten_mit_kopfzahl():
     assert "kostenAnsicht === 'alle'" in SKRIPT and 'function renderAlleRechnungen' in SKRIPT
 
 
-def test_beleg_hochladen_links_und_blaettern():
+def test_konzept_d_beleg_hochladen_links_und_blaettern():
     # Links „Beleg hochladen“ und der Hinweis „J K blättern“ unter der Liste.
     links = SEITE[SEITE.index('class="eingang-links"'):SEITE.index('id="eingang-vorschau"')]
     assert 'onchange="belegGewaehlt(this)"' in links
@@ -450,15 +451,15 @@ def test_beleg_hochladen_links_und_blaettern():
     assert re.search(r'\.als-spalte #btn-save-invoice::after \{\s*content: "Enter" / "";', STIL)
 
 
-def test_leerer_eingang_blendet_formular_aus():
+def test_konzept_d_leerer_eingang_blendet_formular_aus():
     # #invoice-modal bleibt in der Spalte, :empty greift dann nicht (Sichtprüfung 2026-10-14).
     assert re.search(r'\.eingang-leer \.eingang-formular \{\s*display: none;', STIL)
     assert "eingang.classList.toggle('eingang-leer', !eingangBeleg);" in SKRIPT
 
 
-# --- Zähler als Liste plus Detail --------------------------------
+# --- Konzept D: Zähler als Liste plus Detail --------------------------------
 
-def test_zaehler_liste_und_detail():
+def test_konzept_d_zaehler_liste_und_detail():
     # Das Detail liegt neben, nicht in #meters-container: ERSTER_STAND_JS
     # (scripts/rundgang.py) erwartet dort nur Zählerzeilen.
     ansicht = SEITE[SEITE.index('class="zaehler-ansicht"'):]
@@ -474,7 +475,7 @@ def test_zaehler_liste_und_detail():
     assert ".modal-overlay.active:not(.als-spalte)" in verlauf
 
 
-def test_zaehler_auswahl_und_bewegung():
+def test_konzept_d_zaehler_auswahl_und_bewegung():
     assert re.search(r'\.zaehler-tabelle tr\[aria-current="true"\] > td:first-child \{\s*box-shadow: inset 3px 0 0 var\(--primary\);', STIL)
     assert "tr.setAttribute('aria-current', 'true')" in SKRIPT
     assert 'animation: auftauchen' in _regel('.zaehler-detail.blendet-ein')
@@ -482,13 +483,13 @@ def test_zaehler_auswahl_und_bewegung():
     assert 'td.zaehler-aktionen' in _media('(min-width: 1101px)')
 
 
-def test_zaehler_aktionen_brechen_bis_1100_um():
+def test_konzept_d_zaehler_aktionen_brechen_bis_1100_um():
     # Sichtprüfung 1024 px: „Ersten Stand erfassen“ machte die Aktionsspalte 499 px
     # breit, die Tabelle lief aus dem Behälter. NK-219 hält das inline nowrap.
     assert 'td.zaehler-aktionen {\n        white-space: normal !important;' in _media('(max-width: 1100px)')
 
 
-def test_zaehler_filter_bricht_um():
+def test_konzept_d_zaehler_filter_bricht_um():
     # Sichtprüfung 390 px: die Pille „Wasserversorgung“ schob die Seite auf 487 px.
     assert "pillen.className = 'knopf-zeile';" in SKRIPT
     assert 'flex-wrap: wrap' in _regel('.knopf-zeile')
@@ -504,7 +505,7 @@ def test_tabellen_zeilen_hover_einheitlich():
 
 
 def test_seitenband_titel_und_unterzeile_auf_jeder_seite():
-    # Jedes Seitenband trägt Titel und eine Zeile, wozu die Seite da ist.
+    # Konzept D: jedes Seitenband trägt Titel und eine Zeile, wozu die Seite da ist.
     seite = _ohne_kommentare_html(SEITE)
     seiten = re.findall(r'<section[^>]*\bid="(tab-\w+)"', seite)
     assert len(seiten) == 10
@@ -528,8 +529,8 @@ def test_kategorie_chip_zaehlt_einzahl():
     assert "catInvoices.length === 1 ? 'Eintrag' : 'Einträge'" in SKRIPT
 
 
-def test_login_swoosh_und_einflug():
-    """Nach „Anmelden“ wischt Indigo über die Seite, die App schiebt
+def test_konzept_d_login_swoosh_und_einflug():
+    """Runde 2: Nach „Anmelden“ wischt Indigo über die Seite, die App schiebt
     sich danach herein. Beides entfällt ohne Bewegungswunsch."""
     formular = (WURZEL / 'static' / 'formular.js').read_text(encoding='utf-8')
     for teil in ("'nk-einflug'", 'requestSubmit', 'prefers-reduced-motion', "'pageshow'"):
@@ -544,7 +545,7 @@ def test_login_swoosh_und_einflug():
     assert STIL.index('@keyframes deckblatt-weg') < STIL.rindex('prefers-reduced-motion')
 
 
-def test_gerichtete_seitenwechsel_und_kopfzahl():
+def test_konzept_d_gerichtete_seitenwechsel_und_kopfzahl():
     for richtung in ('zurueck', 'rechts', 'links'):
         assert f'.tab-content.active[data-richtung="{richtung}"] > *' in STIL, richtung
     assert 'targetTab.dataset.richtung = seitenRichtung(vorher, item)' in SKRIPT
@@ -557,8 +558,8 @@ def test_gerichtete_seitenwechsel_und_kopfzahl():
     assert 'el.dataset.wert = wert' in hoch and 'el.dataset.wert = ziel' not in hoch
 
 
-def test_kleinfehler_datum_einzahl_zeitraum():
-    """Datumsanzeigen laufen über datumText (keine UTC-Verschiebung,
+def test_runde2_kleinfehler_datum_einzahl_zeitraum():
+    """Runde 2: Datumsanzeigen laufen über datumText (keine UTC-Verschiebung,
     Zeitstempel erlaubt), „1 Rechnung“ in Einzahl, Von–bis-Felder bündig."""
     import re
     # Nur echte Date-Objekte (Überschneidungsprüfung) dürfen noch direkt formatieren.
@@ -574,8 +575,8 @@ def _regel(selektor: str, text: str = STIL) -> str:
     return text[start:text.index('}', start)]
 
 
-def test_feldpaare_unten_buendig():
-    """Bricht in einem Feldpaar eine Beschriftung um, bleiben die
+def test_runde3_feldpaare_unten_buendig():
+    """Runde 3: Bricht in einem Feldpaar eine Beschriftung um, bleiben die
     Eingabefelder auf einer Linie. Hilfetexte stehen deshalb unter der Zeile,
     nie in nur einer Hälfte. Unter 640 px stapeln die Felder in voller Breite."""
     assert 'align-items: flex-end' in _regel('.felder-nebeneinander')
@@ -595,8 +596,8 @@ def test_feldpaare_unten_buendig():
         assert '<small' not in paar[:pos], paar[:200]
 
 
-def test_fotovorschau_nicht_vom_tabellenrahmen_beschnitten():
-    """Die Fotovorschau einer Ablesung liegt fest im Fenster. Absolut
+def test_runde3_fotovorschau_nicht_vom_tabellenrahmen_beschnitten():
+    """Runde 3: Die Fotovorschau einer Ablesung liegt fest im Fenster. Absolut
     beschnitt sie das overflow-x der Tabellenrolle (oberste Zeile halb)."""
     regel = _regel('.image-hover-preview')
     assert 'position: fixed' in regel
@@ -604,7 +605,7 @@ def test_fotovorschau_nicht_vom_tabellenrahmen_beschnitten():
     assert "ereignis.target.closest('.image-hover-container')" in SKRIPT
 
 
-def test_pdf_ohne_browser_viewer():
+def test_runde3_pdf_ohne_browser_viewer():
     """PDF-Belege zeichnet pdf.js auf das eigene Blatt, ein Rahmen statt zwei.
 
     Der iframe mit dem PDF-Viewer des Browsers bleibt nur als Rückfall in
@@ -627,7 +628,7 @@ def test_pdf_ohne_browser_viewer():
     assert 'border:' not in _regel('.pdf-seite')   # kein zweiter Rahmen
 
 
-def test_anbieter_direkt_im_rechnungsformular():
+def test_runde4_anbieter_direkt_im_rechnungsformular():
     """Ohne Anbieter ließ sich keine Rechnung speichern, und
     das Anlegen lag versteckt in den Einstellungen."""
     formular = SEITE[SEITE.index('id="invoice-form"'):]
@@ -642,18 +643,18 @@ def test_anbieter_direkt_im_rechnungsformular():
     assert re.search(r'function anbieterHinweisAktualisieren\(\)[\s\S]{0,400}providers\.length === 0', SKRIPT)
 
 
-def test_vorauszahlung_erklaert_den_begriff():
+def test_runde4_vorauszahlung_erklaert_den_begriff():
     kopf = re.search(r'<h2[^>]*>Vorauszahlungen[\s\S]*?</h2>', SEITE)
     assert kopf and 'data-begriff="vorauszahlung"' in kopf.group(0)
 
 
-def test_leere_wohnungsliste_bietet_den_knopf():
+def test_runde4_leere_wohnungsliste_bietet_den_knopf():
     stelle = SKRIPT[SKRIPT.index('In diesem Haus ist noch keine Wohnung angelegt.'):][:600]
     assert "openAddApartmentModal()" in stelle
     assert '.leer-zeile' in STIL
 
 
-def test_einfuehrung_als_sprechblasen_tour():
+def test_runde4_einfuehrung_als_sprechblasen_tour():
     """Sprechblasen mit Schrittzahl, vor und zurück, ein X
     schließt jederzeit, und die Blase zeigt auf die Stelle zum Klicken."""
     blase = SEITE[SEITE.index('id="tour"'):]
@@ -676,7 +677,7 @@ def test_einfuehrung_als_sprechblasen_tour():
     assert 'animation: tour-puls' in puls[:400]
 
 
-def test_einfuehrung_weicht_dialogen_und_dem_handymenue():
+def test_runde4_einfuehrung_weicht_dialogen_und_dem_handymenue():
     """Browserbefunde: der Update-Dialog ging über der Tour auf und nahm den
     Fokus; am Handy stecken die Seitenknöpfe im ⋮-Menü."""
     beobachter = SKRIPT[SKRIPT.index('}).observe(overlay') - 300:SKRIPT.index('}).observe(overlay')]
@@ -693,7 +694,7 @@ def test_einfuehrung_weicht_dialogen_und_dem_handymenue():
     assert "localStorage.setItem('nk-tour-gesehen', '1')" in SKRIPT
 
 
-def test_tabellen_sortieren_und_summieren_wie_excel():
+def test_runde4_tabellen_sortieren_und_summieren_wie_excel():
     sortieren = SKRIPT[SKRIPT.index('function tabelleSortieren('):][:1400]
     assert "kopf.setAttribute('aria-sort'" in sortieren
     assert "localeCompare(wert(b), 'de', { numeric: true })" in sortieren
@@ -714,8 +715,8 @@ def test_tabellen_sortieren_und_summieren_wie_excel():
     assert '.summenzeile td' in STIL and '.sortier-knopf' in STIL
 
 
-def test_enter_springt_in_der_ablese_runde_und_schrift_im_kontomenue():
-    enter = SKRIPT[SKRIPT.index('// In der Ablese-Runde springt Enter'):][:700]
+def test_runde4_enter_springt_in_der_ablese_runde_und_schrift_im_kontomenue():
+    enter = SKRIPT[SKRIPT.index('// Runde 4: in der Ablese-Runde springt Enter'):][:700]
     assert "feld.closest('#ablesen-liste')" in enter
     assert 'if (!naechstes) return;' in enter
     assert 'naechstes.focus();' in enter
@@ -727,7 +728,7 @@ def test_enter_springt_in_der_ablese_runde_und_schrift_im_kontomenue():
     assert 'localStorage' not in zeigen
 
 
-def test_skelette_balken_und_haken():
+def test_runde4_skelette_balken_und_haken():
     # Jede Liste zeigt beim Laden graue Platzhalter statt leerer Fläche.
     for container in ('meters-container', 'documents-container', 'invoices-container', 'properties-grid',
                       'tenants-container', 'billing-suggestions-container', 'billing-history-container'):
@@ -767,7 +768,7 @@ def _kontrast_hex(a: str, b: str) -> float:
     return (hell + 0.05) / (dunkel + 0.05)
 
 
-def test_dunkelmodus():
+def test_runde4_dunkelmodus():
     # Nur ein dunkler Block, nur auf dem Bildschirm; gedruckt wird immer hell.
     dunkel_block = _media('screen')
     assert ':root[data-theme="dark"] {' in dunkel_block and 'color-scheme: dark;' in dunkel_block
@@ -829,7 +830,7 @@ def test_dunkelmodus():
     assert 'diagramm.data.datasets.forEach' in anzeigen and 'map(tausch)' in anzeigen
 
 
-def test_pdf_viewer_mit_zoom_und_seitenzahl():
+def test_runde5_pdf_viewer_mit_zoom_und_seitenzahl():
     """Vorher fehlten Zoom und Seitenzahl, und das PDF
     füllte die Spaltenbreite, wirkte also stark herangezoomt. Die Leiste
     bringt beides zurück, Standard ist „Ganze Seite“."""
@@ -851,7 +852,7 @@ def test_pdf_viewer_mit_zoom_und_seitenzahl():
     assert 'height: 32px' in _regel('.pdf-leiste .btn-icon')
 
 
-def test_pdfs_tragen_die_farben_der_app():
+def test_runde5_pdfs_tragen_die_farben_der_app():
     # PDFs gleichen der App: jede Farbe im PDF ist ein Token aus
     # style.css, Tabellen ohne Vollgitter, Abschnittskopf Indigo.
     # Auch der GiroCode-Kasten und der Fuß des Hilfe-PDFs.
@@ -869,7 +870,7 @@ def test_pdfs_tragen_die_farben_der_app():
     assert "'BACKGROUND', (0, row_idx), (-1, row_idx), COLOR_ACCENT)" in kopf
 
 
-def test_geoeffnete_auswahllisten_im_design():
+def test_runde6_geoeffnete_auswahllisten_im_design():
     # Die Haus-Wahl zeigte geöffnet noch die Liste des Systems
     # (blaue Markierung). Jede Auswahl der App und der Anmeldeseiten nimmt
     # in Chromium die Tokens; ohne base-select bleibt die Systemliste.

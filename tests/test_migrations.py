@@ -42,7 +42,7 @@ BASISREVISION = "63738d5329b4"
 # NK-258: ``c7e1f94a2b05`` fuegt ``meters.ersetzt_id``, ``geeicht_bis`` und ``ort`` hinzu.
 # NK-261: ``d9a3f2c6e1b4`` legt die Tabelle ``vorauszahlung_soll`` an (R-VZ-02).
 # NK-268: ``a8c4e2f61d93`` fuegt ``cost_invoices.art_35a`` und ``lohnanteil`` hinzu (R-35A-01).
-# ``b4e7c1d92a58`` benennt Kostenart Nr. 11 in „Allgemeinstrom“ um (nur Daten).
+# Runde 6: ``b4e7c1d92a58`` benennt Kostenart Nr. 11 in „Allgemeinstrom“ um (nur Daten).
 KOPFREVISION = "b4e7c1d92a58"
 
 
@@ -2671,7 +2671,7 @@ def test_die_sollwanderung_legt_die_tabelle_mit_pruefungen_an(tmp_path):
     assert stand["zurueck"] is False
 
 
-# Kostenart Nr. 11 heisst "Allgemeinstrom". Drei Haeuser in einer
+# Runde 6: Kostenart Nr. 11 heisst "Allgemeinstrom". Drei Haeuser in einer
 # Datei: der Standardname wird umbenannt, ein eigener Name bleibt, und gibt es
 # "Allgemeinstrom" schon, bleibt der alte Name stehen statt an UNIQUE zu
 # scheitern.
@@ -2722,7 +2722,7 @@ print(json.dumps(ergebnis))
 
 
 def test_die_allgemeinstromwanderung_benennt_nur_den_standardnamen_um(tmp_path):
-    """Im Bestand steht noch "Beleuchtung (Allgemeinstrom)", weil das
+    """Runde 6: im Bestand steht noch "Beleuchtung (Allgemeinstrom)", weil das
     Seed ueber die Nummer abgleicht und nie umbenennt. Die Wanderung zieht den
     Standardnamen nach; selbst vergebene Namen und ein schon vorhandenes
     "Allgemeinstrom" fasst sie nicht an."""

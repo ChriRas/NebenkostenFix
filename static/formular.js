@@ -32,7 +32,7 @@ document.addEventListener('invalid', (e) => deutschPruefen(e.target), true);
 // ("Please lengthen this text ... using 2 characters").
 ['input', 'change'].forEach(art => document.addEventListener(art, (e) => deutschPruefen(e.target), true));
 
-// Swoosh nach der Anmeldung: Indigo wischt über die Seite, dann
+// Swoosh nach der Anmeldung (Konzept D): Indigo wischt über die Seite, dann
 // geht das Formular ab. Der Zeitstempel sagt der App, dass sie die Fläche
 // wieder wegziehen soll (index.html). Ohne Bewegungswunsch geht es sofort ab.
 let swooshWischt = false;
