@@ -216,3 +216,49 @@ def test_der_zugeordnete_und_der_offene_fall_nebeneinander():
     treffer = [t for t in texte if 'W-HEIZKOSTEN-OHNE-ZUORDNUNG' in t]
     assert len(treffer) == 1
     assert '402,00' in treffer[0]
+
+
+def test_nicht_wenn_die_kostenart_zaehler_hat():
+    """Mit Zählern verteilt der Kern nach Verbrauch, nicht nach Fläche.
+
+    **Dieser Fall hat die erste Fassung der Warnung widerlegt.** Sie kam
+    im Praxisbestand (``tests/test_praxisbestand.py``) bei einer
+    Heizkostenrechnung, die gar nicht nach Fläche verteilt wurde, sondern
+    nach den Zählern der Wohnungen — und behauptete im Text etwas, das
+    nicht stimmte. Eine Warnung, die falsch begründet, ist schlimmer als
+    keine: der Vermieter sucht einen Fehler, den es nicht gibt.
+
+    Die Frage, ob nach Zählern verteilt wird, stellt der Kern mit
+    ``zaehler_vorhanden`` — und die Warnung stellt jetzt dieselbe.
+    """
+    mit_zaehler = Kategorie(id=9, name='Heizung', braucht_zaehler=True,
+                            betrkv_nr=4)
+    zaehler = tuple(
+        Zaehler(id=i, nummer=f'HZ-{i}', kategorie_id=9,
+                kategorie_name='Heizung', kategorie_betrkv_nr=4,
+                ist_hauptzaehler=False, immobilie_id=1, wohnung_id=i,
+                staende=(Stand(datum=JAHR_BEGINN, wert=0.0),
+                         Stand(datum=date(2025, 1, 1), wert=1000.0 * i)))
+        for i in (1, 2))
+    texte = warnungen([rechnung(kategorie=mit_zaehler)], zaehler=zaehler)
+
+    assert not hat_warnung(texte)
+
+
+def test_aber_schon_wenn_die_zaehler_zu_einer_anderen_kostenart_gehoeren():
+    """Ein Kaltwasserzähler hilft der Heizkostenrechnung nicht.
+
+    Die Gegenprobe zum Test darüber: es zählt nur, ob **diese** Kostenart
+    Zähler hat. Sonst würde ein einziger Zähler irgendwo im Haus die
+    Warnung für alle Heizkosten abschalten.
+    """
+    wasser = tuple(
+        Zaehler(id=i, nummer=f'W-{i}', kategorie_id=2,
+                kategorie_name='Kaltwasser', kategorie_betrkv_nr=2,
+                ist_hauptzaehler=False, immobilie_id=1, wohnung_id=i,
+                staende=(Stand(datum=JAHR_BEGINN, wert=0.0),
+                         Stand(datum=date(2025, 1, 1), wert=30.0 * i)))
+        for i in (1, 2))
+    texte = warnungen(zaehler=wasser)
+
+    assert hat_warnung(texte)

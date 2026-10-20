@@ -661,6 +661,13 @@ def pruefe_heizkosten_zuordnung(vorgang: Vorgang) -> list:
             continue
         if posten.wohnung_id is not None or posten.heizungsanlage_id is not None:
             continue
+        # Fuenfte Bedingung, und sie hat die erste Fassung widerlegt: hat
+        # die Kostenart Zaehler, verteilt der Kern nach Verbrauch und
+        # nicht nach Flaeche. Die Warnung haette dort etwas behauptet, was
+        # nicht stimmt -- gefunden im Praxisbestand, nicht im Entwurf.
+        # Gefragt wird mit derselben Funktion, die der Kern selbst nimmt.
+        if zaehler_vorhanden(vorgang, posten.kategorie.id):
+            continue
         offen.append(HINWEIS_HEIZKOSTEN_OHNE_ZUORDNUNG.format(
             kategorie=posten.kategorie.name,
             # euro_text, nicht zahl_text: der Betrag muss aussehen wie
@@ -1027,8 +1034,8 @@ HINWEIS_ALLGEMEIN_NEGATIV = (
 #:
 #: **Die Warnung ist eng gefasst, und das ist Absicht.** Sie kommt nur bei
 #: den drei Heizkostennummern (``betrkv.GESPERRT``), nur ohne Zuordnung zu
-#: Wohnung **und** Anlage, und nur in einem Objekt mit mehr als einer
-#: Wohnung. Bei einer Wohnung ist die Flaechenverteilung 100 %, also
+#: Wohnung **und** Anlage, nur ohne Zaehler an der Kostenart, und nur in
+#: einem Objekt mit mehr als einer Wohnung. Bei einer Wohnung ist die Flaechenverteilung 100 %, also
 #: richtig; mit Anlage gilt die HeizkostenV und der Kern warnt mit seinen
 #: eigenen Meldungen; und fast jede gewoehnliche Rechnung hat keine
 #: Wohnungszuordnung -- waere die Warnung breiter, erschiene sie in jeder
