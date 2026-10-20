@@ -766,6 +766,7 @@ async function hausgeldPruefungPruefen() {
         anzahl_umlagefaehig: 1, anzahl_eigentuemer: 1, anzahl_offen: 0,
         summenprobe: { erwartet: '1050.00', angesetzt: '1050.00', abweichung: '0.00', stimmt: true, hinweis: null },
         zeitraum_hinweis: 'Abflussprinzip … BGH … VIII ZR 27/07 …',
+        heizkosten_hinweis: 'Die Heizkosten … ordnen Sie diese Rechnung der Wohnung zu … nach Wohnfläche …',
     };
 
     // Leere Zeilen zählen nicht mit: der Dialog startet mit dreien.
@@ -807,6 +808,14 @@ async function hausgeldPruefungPruefen() {
 
     pruefe('Phase 50: der Zeitraum-Hinweis (BGH VIII ZR 27/07) steht dabei',
         voll.felder['hg-zeitraum'].textContent.includes('VIII ZR 27/07'));
+
+    // Der Weg fuer die Heizkosten ist der, den der Vermieter sonst nicht
+    // findet: eine Rechnung, die der Wohnung zugeordnet ist. Ohne die
+    // Zuordnung verteilt der Kern sie nach Flaeche auf alle Wohnungen --
+    // rechnerisch sauber, fachlich falsch, ohne Fehlermeldung.
+    pruefe('Phase 50: der Dialog sagt, wohin die Heizkosten des Messdienstes gehören',
+        voll.felder['hg-heizkosten'].textContent.includes('ordnen Sie')
+        && voll.felder['hg-heizkosten'].textContent.includes('Wohnfläche'));
 
     // Ohne Endsumme entfällt die Summenprobe, statt eine leere Zeile zu zeigen.
     const ohneSumme = lauf([['Müll', '2400.00', '300.00']],

@@ -4451,6 +4451,11 @@ async function hausgeldPruefen() {
         </tr>`;
     }).join('');
 
+    // Der Heizkosten-Hinweis steht vor dem Zeitraum-Hinweis und nicht in
+    // Grau: er ist kein Kleingedrucktes, sondern der Griff, den der
+    // Vermieter sonst nicht findet -- eine nicht zugeordnete
+    // Heizkostenrechnung verteilt sich stillschweigend nach Flaeche.
+    document.getElementById('hg-heizkosten').textContent = bericht.heizkosten_hinweis;
     document.getElementById('hg-zeitraum').textContent = bericht.zeitraum_hinweis;
     document.getElementById('hg-ergebnis').hidden = false;
 }

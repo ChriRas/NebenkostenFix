@@ -43,6 +43,7 @@ __all__ = [
     'Position',
     'Bericht',
     'RUNDUNGSGRENZE',
+    'HEIZKOSTEN_HINWEIS',
     'ZEITRAUM_HINWEIS',
     'pruefe_position',
     'pruefe_summe',
@@ -69,6 +70,22 @@ RUNDUNGSGRENZE = Decimal('1.00')
 #: Offen bleibt es beim Mieterwechsel: dann traegt ein Mieter eine
 #: Rechnung, die in die Zeit des anderen gehoerte. Darauf weist die App
 #: hin, statt es stillschweigend zu uebernehmen.
+#: Wohin die Heizkosten gehoeren. Der Messdienst rechnet sie getrennt ab
+#: und nennt einen festen Betrag je Wohnung -- in der Hausgeldabrechnung
+#: stehen sie oft nur als Sammelposten. Der Weg dafuer ist in der App
+#: vorhanden: eine Rechnung, die **einer Wohnung zugeordnet** ist, geht
+#: ungeteilt an deren Mieter ("Direkt zugewiesen"). Ohne die Zuordnung
+#: verteilt der Kern sie nach Wohnflaeche auf alle Wohnungen des Objekts
+#: -- rechnerisch sauber und fachlich falsch, und ohne Fehlermeldung.
+#: Deshalb steht der Satz hier und nicht nur in der Hilfe.
+HEIZKOSTEN_HINWEIS = (
+    'Die Heizkosten aus der Abrechnung Ihres Messdienstes gehören nicht in '
+    'diese Liste. Tragen Sie sie als eigene Rechnung ein und ordnen Sie '
+    'diese Rechnung der Wohnung zu — dann geht der Betrag ungeteilt an '
+    'Ihren Mieter. Ohne die Zuordnung wird er nach Wohnfläche auf alle '
+    'Wohnungen des Objekts verteilt.')
+
+
 ZEITRAUM_HINWEIS = (
     'Die Hausgeldabrechnung verteilt, was im Kalenderjahr bezahlt wurde, '
     'nicht was in ihm verbraucht wurde (Abflussprinzip). Für die '

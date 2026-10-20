@@ -3360,6 +3360,7 @@ def hausgeld_pruefen():
         # Der Hinweis zum Zeitraum steht hier und nicht in der Oberflaeche,
         # damit er mit der Rechtslage wandert (BGH VIII ZR 27/07).
         'zeitraum_hinweis': hausgeld.ZEITRAUM_HINWEIS,
+        'heizkosten_hinweis': hausgeld.HEIZKOSTEN_HINWEIS,
     })
 
 

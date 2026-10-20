@@ -314,6 +314,11 @@ def test_die_route_rechnet_die_abrechnung_durch(auth_client):
     assert daten['anzahl_eigentuemer'] == 3
     assert daten['summenprobe']['stimmt'] is True
     assert 'VIII ZR 27/07' in daten['zeitraum_hinweis']
+    # Der Weg fuer die Heizkosten steht dabei: eine Rechnung, die der
+    # Wohnung zugeordnet ist. Ohne die Zuordnung verteilt der Kern sie
+    # nach Flaeche auf alle Wohnungen -- ohne Fehlermeldung.
+    assert 'ordnen Sie' in daten['heizkosten_hinweis']
+    assert 'Wohnfläche' in daten['heizkosten_hinweis']
 
     # Jede Zeile traegt ihre Begruendung mit -- die Oberflaeche erfindet
     # keine Texte dazu.
