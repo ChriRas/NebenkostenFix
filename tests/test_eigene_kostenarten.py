@@ -328,3 +328,21 @@ def test_kein_neues_feld_ohne_migration():
     spalten = {c.name for c in CostCategory.__table__.columns}
     assert spalten == {'id', 'name', 'allocation_method', 'requires_meter',
                        'betrkv_nr'}
+
+
+def test_nr3_raet_zum_umbenennen_statt_zu_nummer_17(auth_client, app_ctx):
+    """Befund aus Issue #30: der Rat muss fachlich tragen.
+
+    Ein Nutzer bekommt von seiner Hausverwaltung „Schmutzwasser“ -- das ist
+    Nr. 3. Unter Nr. 3 ist schon die Entwässerung, weil die App dort das
+    Niederschlagswasser am Namen erkennt. Der alte Text riet, stattdessen
+    Nr. 17 zu nehmen. Das wäre falsch: Schmutzwasser **ist** Nr. 3, und
+    Nr. 17 verlangt eine eigene Vereinbarung im Mietvertrag. Der Weg, der
+    trägt, ist das Umbenennen -- und den nennt die Meldung jetzt.
+    """
+    antwort = auth_client.post('/api/categories',
+                               data={'name': 'Schmutzwasser', 'betrkv_nr': 3})
+    assert antwort.status_code == 409
+    meldung = antwort.get_json()['error']
+    assert 'umbenennen' in meldung.lower() or 'Benennen' in meldung, meldung
+    assert 'Nr. 17' not in meldung, meldung

@@ -1604,8 +1604,10 @@ def _nr3_schluessel_pruefen(name: str | None, nr: int | None,
         if not betrkv.ist_niederschlag(kat.name):
             return _kostenart_ablehnen(
                 f'Unter Nr. 3 (Entwässerung) gibt es bereits „{kat.name}“. '
-                'Eine zweite Kostenart dort würde den Seed kippen -- bitte '
-                'eine andere Nummer wählen, zum Beispiel Nr. 17.')
+                'Die App erkennt das Niederschlagswasser dort am Namen, '
+                'daneben bleibt Platz für genau eine Kostenart. Benennen '
+                f'Sie „{kat.name}“ in den Namen Ihrer Abrechnung um, statt '
+                'eine zweite anzulegen.')
     return None
 
 
