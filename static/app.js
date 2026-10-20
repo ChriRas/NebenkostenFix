@@ -4326,6 +4326,135 @@ async function saveKategorie() {
     await ladeKostenarten();
 }
 
+// --- Phase 50: die Hausgeld-Einzelabrechnung pruefen ---------------------
+// Der Dialog rechnet nur. Uebernommen wird nichts: der Vermieter legt die
+// Kostenarten und Rechnungen danach selbst an, und zwar die, die er
+// bestaetigt hat (R-KAT-01).
+
+function geldText(betrag) {
+    return Number(betrag).toLocaleString('de-DE',
+        { style: 'currency', currency: 'EUR' });
+}
+
+function openHausgeldModal() {
+    document.getElementById('hg-eigener-anteil').value = '';
+    document.getElementById('hg-gesamtanteile').value = '';
+    document.getElementById('hg-abrechnungssumme').value = '';
+    document.getElementById('hg-zeilen').innerHTML = '';
+    document.getElementById('hg-ergebnis').hidden = true;
+    document.getElementById('hg-fehler').hidden = true;
+    // Drei leere Zeilen als Anfang -- eine einzelne wirkt wie ein Formular
+    // fuer eine Position, und es sind immer mehrere.
+    for (let i = 0; i < 3; i++) hausgeldZeile();
+    document.getElementById('hausgeld-modal').classList.add('active');
+}
+
+function closeHausgeldModal() {
+    document.getElementById('hausgeld-modal').classList.remove('active');
+}
+
+function hausgeldZeile() {
+    const zeile = document.createElement('tr');
+    zeile.innerHTML =
+        '<td><input type="text" class="hg-name" maxlength="100" placeholder="z. B. Müllentsorgung"></td>' +
+        '<td class="text-right"><input type="number" class="hg-gesamt" step="0.01" placeholder="0,00"></td>' +
+        '<td class="text-right"><input type="number" class="hg-mein" step="0.01" placeholder="0,00"></td>' +
+        '<td class="spalte-knopf"><button class="btn-icon" aria-label="Zeile entfernen" ' +
+        'onclick="this.closest(\'tr\').remove()"><i class="ph ph-trash"></i></button></td>';
+    document.getElementById('hg-zeilen').appendChild(zeile);
+}
+
+function hausgeldPositionen() {
+    return Array.from(document.querySelectorAll('#hg-zeilen tr'))
+        .map(zeile => ({
+            name: zeile.querySelector('.hg-name').value.trim(),
+            gesamtbetrag: zeile.querySelector('.hg-gesamt').value.trim(),
+            eigener_betrag: zeile.querySelector('.hg-mein').value.trim(),
+        }))
+        .filter(p => p.name || p.gesamtbetrag || p.eigener_betrag);
+}
+
+//: Wie eine Position in der Ergebniszeile erscheint. Die Begruendung kommt
+//: vom Server -- die Oberflaeche erfindet keine eigenen Rechtstexte.
+const HG_URTEIL = {
+    true: ['Ja', 'chip-ok'],
+    false: ['Nein', 'chip-rot'],
+    null: ['Offen', 'chip-warn'],
+};
+
+async function hausgeldPruefen() {
+    const positionen = hausgeldPositionen();
+    const fehlerfeld = document.getElementById('hg-fehler');
+    fehlerfeld.hidden = true;
+    if (!positionen.length) {
+        showError('Bitte mindestens eine Position eintragen.');
+        return;
+    }
+    const summe = document.getElementById('hg-abrechnungssumme').value.trim();
+    let bericht;
+    try {
+        const res = await fetch('/api/hausgeld/pruefen', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                positionen,
+                eigener_anteil: document.getElementById('hg-eigener-anteil').value.trim(),
+                gesamtanteile: document.getElementById('hg-gesamtanteile').value.trim(),
+                abrechnungssumme: summe || null,
+            }),
+        });
+        if (!res.ok) throw await serverFehler(res);
+        bericht = await res.json();
+    } catch (e) {
+        fehlerfeld.textContent = meldungZu(e, 'Die Abrechnung konnte nicht geprüft werden.');
+        fehlerfeld.hidden = false;
+        document.getElementById('hg-ergebnis').hidden = true;
+        return;
+    }
+
+    // Alles maskiert, auch die eigenen Zahlen: die Positionsnamen gehen vom
+    // Vermieter zum Server und zurueck, und eine Schablone, in der eine
+    // Einsetzung ungeprueft steht, laedt die naechste dazu ein. Der
+    // Aufruf steht ausgeschrieben da: eine Abkuerzung wie `zahl(x)` macht
+    // den Waechter in test_html_maskierung blind, der escapeHtml woertlich
+    // sucht -- und dann faellt die naechste Einsetzung hier nicht mehr auf.
+    document.getElementById('hg-summen').innerHTML =
+        `Umlagefähig: <strong>${escapeHtml(geldText(bericht.summe_umlagefaehig))}</strong> ` +
+        `(${escapeHtml(bericht.anzahl_umlagefaehig)} Positionen) · ` +
+        `Bleibt beim Eigentümer: <strong>${escapeHtml(geldText(bericht.summe_eigentuemer))}</strong> ` +
+        `(${escapeHtml(bericht.anzahl_eigentuemer)}) · ` +
+        `Offen: <strong>${escapeHtml(geldText(bericht.summe_offen))}</strong> (${escapeHtml(bericht.anzahl_offen)})`;
+
+    const probe = document.getElementById('hg-summenprobe');
+    if (!bericht.summenprobe) {
+        probe.textContent = '';
+        probe.hidden = true;
+    } else {
+        probe.hidden = false;
+        probe.textContent = bericht.summenprobe.stimmt
+            ? `Die Summenprobe geht auf: ${geldText(bericht.summenprobe.angesetzt)}.`
+            : bericht.summenprobe.hinweis;
+        probe.className = 'karten-text';
+    }
+
+    document.getElementById('hg-bericht').innerHTML = bericht.positionen.map(p => {
+        const [wort, klasse] = HG_URTEIL[String(p.umlagefaehig)];
+        const nummer = p.betrkv_nr == null ? ''
+            : ` <span class="text-muted">Nr. ${escapeHtml(p.betrkv_nr)}</span>`;
+        const anmerkung = p.stimmt ? p.begruendung : `${p.hinweis} ${p.begruendung}`;
+        return `<tr>
+            <td>${escapeHtml(p.name)}</td>
+            <td><span class="chip ${klasse}">${escapeHtml(wort)}</span>${nummer}</td>
+            <td class="text-right">${escapeHtml(geldText(p.eigener_betrag))}</td>
+            <td class="text-right">${escapeHtml(geldText(p.erwartet))}</td>
+            <td>${escapeHtml(anmerkung)}</td>
+        </tr>`;
+    }).join('');
+
+    document.getElementById('hg-zeitraum').textContent = bericht.zeitraum_hinweis;
+    document.getElementById('hg-ergebnis').hidden = false;
+}
+
 async function loescheKategorie(id) {
     const ok = await frageLoeschen(
         'Die Kostenart und ihre Kostenprofile werden gelöscht. Rechnungen und Zähler sperren das Löschen. Wirklich löschen?');

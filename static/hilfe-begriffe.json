@@ -25,6 +25,11 @@
   "satz": "Der Zähler des Versorgers für das ganze Haus; nach ihm stellt der Versorger seine Rechnung."
  },
  {
+  "schluessel": "hausgeldabrechnung",
+  "begriff": "Hausgeldabrechnung",
+  "satz": "Die Abrechnung, die Sie als Eigentümer einer Wohnung von der Hausverwaltung bekommen. Daraus dürfen nur die Betriebskosten an den Mieter weiter; Verwaltung, Rücklage und Instandsetzung bleiben bei Ihnen (§ 1 Abs. 2 BetrKV)."
+ },
+ {
   "schluessel": "waermemengenzaehler",
   "begriff": "Wärmemengenzähler",
   "satz": "Ein Zähler, der Kilowattstunden Wärme misst statt Kubikmeter. Bei einer Wärmepumpe darf damit auch das Warmwasser erfasst werden (§ 9 Abs. 2 Satz 1 HeizkostenV); tragen Sie beim Zähler dann „kWh“ als Maßeinheit ein."

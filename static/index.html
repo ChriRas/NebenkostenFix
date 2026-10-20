@@ -493,6 +493,7 @@
                             ein, sobald eine Rechnung oder ein Zähler daran hängt.
                         </p>
                         <button class="btn-primary" onclick="openKategorieModal()"><i class="ph ph-plus" aria-hidden="true"></i> Kostenart anlegen</button>
+                        <button class="btn-secondary" onclick="openHausgeldModal()"><i class="ph ph-calculator" aria-hidden="true"></i> Hausgeldabrechnung prüfen</button>
                         <div class="tabellen-rolle">
                             <table class="tabelle tabelle-kompakt abstand-oben-klein">
                                 <thead>
@@ -1970,6 +1971,82 @@
         </div>
     </div>
 
+    <!-- Phase 50: die Hausgeld-Einzelabrechnung nachrechnen und trennen -->
+    <div class="modal-overlay" id="hausgeld-modal">
+        <div class="modal glass-panel dialog-breit">
+            <div class="modal-header">
+                <h2>Hausgeldabrechnung prüfen</h2>
+                <button class="btn-icon" aria-label="Schließen" onclick="closeHausgeldModal()"><i class="ph ph-x"></i></button>
+            </div>
+            <div class="modal-body">
+                <p class="karten-text">
+                    Sie vermieten eine Eigentumswohnung und haben die Einzelabrechnung
+                    Ihrer Hausverwaltung vor sich. Tragen Sie die Positionen hier ein:
+                    Die App rechnet nach, ob Ihr Anteil stimmt, und sagt Ihnen zu jeder
+                    Position, ob Sie sie an Ihren Mieter weitergeben dürfen. Verwaltung,
+                    Rücklage und Instandsetzung gehören nach § 1 Abs. 2 BetrKV nicht dazu.
+                    Hier wird nur gerechnet — übernommen wird nichts.
+                </p>
+                    <div class="form-group">
+                        <label for="hg-eigener-anteil">Ihr Anteil</label>
+                        <input type="number" id="hg-eigener-anteil" step="0.001" min="0"
+                            placeholder="z. B. 125">
+                        <small class="feld-hilfe">Miteigentumsanteile, Quadratmeter oder Einheiten — wie in der Abrechnung.</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="hg-gesamtanteile">Gesamtanteile</label>
+                        <input type="number" id="hg-gesamtanteile" step="0.001" min="0"
+                            placeholder="z. B. 1000">
+                    </div>
+                    <div class="form-group">
+                        <label for="hg-abrechnungssumme">Endsumme der Abrechnung (optional)</label>
+                        <input type="number" id="hg-abrechnungssumme" step="0.01"
+                            placeholder="z. B. 5560,00">
+                        <small class="feld-hilfe">Damit prüft die App, ob keine Zeile fehlt.</small>
+                    </div>
+                <div class="tabellen-rolle">
+                    <table class="tabelle tabelle-kompakt">
+                        <thead>
+                            <tr>
+                                <th>Position</th>
+                                <th class="text-right">Gesamtbetrag</th>
+                                <th class="text-right">Ihr Betrag</th>
+                                <th class="spalte-knopf"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="hg-zeilen"></tbody>
+                    </table>
+                </div>
+                <button class="btn-secondary abstand-oben" onclick="hausgeldZeile()"><i class="ph ph-plus" aria-hidden="true"></i> Position erfassen</button>
+                <p id="hg-fehler" class="karten-text text-muted" hidden></p>
+                <div id="hg-ergebnis" hidden>
+                    <h3 class="abstand-oben">Ergebnis</h3>
+                    <p id="hg-summen" class="karten-text"></p>
+                    <p id="hg-summenprobe" class="karten-text"></p>
+                    <div class="tabellen-rolle">
+                        <table class="tabelle tabelle-kompakt">
+                            <thead>
+                                <tr>
+                                    <th>Position</th>
+                                    <th>Weitergeben?</th>
+                                    <th class="text-right">Ihr Betrag</th>
+                                    <th class="text-right">Erwartet</th>
+                                    <th>Anmerkung</th>
+                                </tr>
+                            </thead>
+                            <tbody id="hg-bericht"></tbody>
+                        </table>
+                    </div>
+                    <p id="hg-zeitraum" class="karten-text text-muted"></p>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn-secondary" onclick="closeHausgeldModal()">Schließen</button>
+                    <button class="btn-primary" onclick="hausgeldPruefen()">Abrechnung prüfen</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Phase 49: Kaltmiete-Soll mit Erinnerung an die Mieterhöhung -->
     <div class="modal-overlay" id="kaltmiete-modal">
         <div class="modal glass-panel dialog-vorauszahlung">
@@ -2915,7 +2992,7 @@
     </div>
     <script src="/static/formular.js?v=2"></script>
     <script src="/static/umzug.js?v=1"></script>
-    <script src="/static/app.js?v=37"></script>
+    <script src="/static/app.js?v=38"></script>
 </body>
 
 </html>

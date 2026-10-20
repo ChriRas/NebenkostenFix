@@ -713,6 +713,113 @@ async function kaltmietePruefen() {
         && html.includes('id="kaltmiete-modal"'));
 }
 
+// Phase 50 (Issue #30): die Hausgeld-Einzelabrechnung prüfen — was der
+// Dialog sammelt und was er an den Server schickt, vom Quelltext her.
+async function hausgeldPruefungPruefen() {
+    const funktion = name => {
+        const m = appQuelle.match(new RegExp(`(async )?function ${name}\\([^)]*\\) \\{[\\s\\S]*?\\n\\}`));
+        if (!m) throw new Error(`${name} nicht gefunden`);
+        return m[0];
+    };
+    const quelltext =
+        "const HG_URTEIL = { true: ['Ja', 'chip-ok'], false: ['Nein', 'chip-rot'], null: ['Offen', 'chip-warn'] };"
+        + funktion('geldText') + funktion('hausgeldPositionen') + funktion('hausgeldPruefen');
+
+    // Jede Zeile ist ein Tripel [Name, Gesamtbetrag, eigener Betrag].
+    const lauf = (zeilen, felder, antwort) => {
+        const aufrufe = [];
+        const meldungen = [];
+        const zellen = klasse => zeilen.map(z => ({
+            value: { '.hg-name': z[0], '.hg-gesamt': z[1], '.hg-mein': z[2] }[klasse],
+        }));
+        const dokument = {
+            getElementById(id) {
+                if (!(id in felder)) felder[id] = { value: '', innerHTML: '', textContent: '', hidden: false, className: '' };
+                return felder[id];
+            },
+            querySelectorAll: () => zeilen.map((_, i) => ({
+                querySelector: klasse => zellen(klasse)[i],
+            })),
+        };
+        const holen = (url, opt = {}) => {
+            aufrufe.push({ url, methode: opt.method || 'GET', koerper: opt.body });
+            return Promise.resolve({ ok: true, json: () => Promise.resolve(antwort) });
+        };
+        const fns = new Function('document', 'fetch', 'showError', 'serverFehler', 'meldungZu',
+            'escapeHtml',
+            quelltext + '; return { hausgeldPositionen, hausgeldPruefen };')(
+            dokument, holen, m => meldungen.push(m), async () => new Error('Server'),
+            (e, ersatz) => ersatz,
+            t => String(t).replace(/</g, '&lt;').replace(/>/g, '&gt;'));
+        return { fns, aufrufe, meldungen, felder };
+    };
+
+    const BERICHT = {
+        positionen: [
+            { name: 'Müllentsorgung', umlagefaehig: true, betrkv_nr: 8, begruendung: 'Nr. 8',
+              eigener_betrag: '300.00', erwartet: '300.00', abweichung: '0.00', stimmt: true, hinweis: null },
+            { name: 'Verwaltervergütung', umlagefaehig: false, betrkv_nr: null,
+              begruendung: 'Verwaltungskosten … § 1 Abs. 2 BetrKV …',
+              eigener_betrag: '750.00', erwartet: '750.00', abweichung: '0.00', stimmt: true, hinweis: null },
+        ],
+        summe_umlagefaehig: '300.00', summe_eigentuemer: '750.00', summe_offen: '0.00',
+        anzahl_umlagefaehig: 1, anzahl_eigentuemer: 1, anzahl_offen: 0,
+        summenprobe: { erwartet: '1050.00', angesetzt: '1050.00', abweichung: '0.00', stimmt: true, hinweis: null },
+        zeitraum_hinweis: 'Abflussprinzip … BGH … VIII ZR 27/07 …',
+    };
+
+    // Leere Zeilen zählen nicht mit: der Dialog startet mit dreien.
+    const leer = lauf([['', '', ''], ['Müll', '2400.00', '300.00'], ['', '', '']], {}, BERICHT);
+    pruefe('Phase 50: leere Zeilen gehen nicht mit hinaus',
+        leer.fns.hausgeldPositionen().length === 1);
+
+    const ohne = lauf([['', '', '']], {}, BERICHT);
+    await ohne.fns.hausgeldPruefen();
+    pruefe('Phase 50: ohne Position geht nichts hinaus',
+        ohne.aufrufe.length === 0 && ohne.meldungen.length === 1);
+
+    const felder = {
+        'hg-eigener-anteil': { value: '125' },
+        'hg-gesamtanteile': { value: '1000' },
+        'hg-abrechnungssumme': { value: '1050.00' },
+    };
+    const voll = lauf([['Müllentsorgung', '2400.00', '300.00'],
+                       ['Verwaltervergütung', '6000.00', '750.00']], felder, BERICHT);
+    await voll.fns.hausgeldPruefen();
+    const koerper = voll.aufrufe.length === 1 ? JSON.parse(voll.aufrufe[0].koerper) : {};
+    pruefe('Phase 50: die Positionen gehen als POST an /api/hausgeld/pruefen',
+        voll.aufrufe.length === 1 && voll.aufrufe[0].url === '/api/hausgeld/pruefen'
+        && voll.aufrufe[0].methode === 'POST'
+        && koerper.positionen.length === 2
+        && koerper.positionen[0].name === 'Müllentsorgung'
+        && koerper.eigener_anteil === '125' && koerper.gesamtanteile === '1000'
+        && koerper.abrechnungssumme === '1050.00');
+
+    pruefe('Phase 50: das Ergebnis trennt umlagefähig von dem, was beim Eigentümer bleibt',
+        voll.felder['hg-ergebnis'].hidden === false
+        && voll.felder['hg-summen'].innerHTML.includes('300,00')
+        && voll.felder['hg-summen'].innerHTML.includes('750,00'));
+
+    pruefe('Phase 50: jede Zeile trägt die Begründung des Servers, nicht einen eigenen Text',
+        voll.felder['hg-bericht'].innerHTML.includes('§ 1 Abs. 2 BetrKV')
+        && voll.felder['hg-bericht'].innerHTML.includes('chip-rot')
+        && voll.felder['hg-bericht'].innerHTML.includes('chip-ok'));
+
+    pruefe('Phase 50: der Zeitraum-Hinweis (BGH VIII ZR 27/07) steht dabei',
+        voll.felder['hg-zeitraum'].textContent.includes('VIII ZR 27/07'));
+
+    // Ohne Endsumme entfällt die Summenprobe, statt eine leere Zeile zu zeigen.
+    const ohneSumme = lauf([['Müll', '2400.00', '300.00']],
+        { 'hg-eigener-anteil': { value: '125' }, 'hg-gesamtanteile': { value: '1000' },
+          'hg-abrechnungssumme': { value: '' } },
+        { ...BERICHT, summenprobe: null });
+    await ohneSumme.fns.hausgeldPruefen();
+    const leerKoerper = JSON.parse(ohneSumme.aufrufe[0].koerper);
+    pruefe('Phase 50: ohne Endsumme entfällt die Summenprobe',
+        leerKoerper.abrechnungssumme === null
+        && ohneSumme.felder['hg-summenprobe'].hidden === true);
+}
+
 // Phase 54 (Issue #30): eigene Kostenarten — Tabelle, Nummernvorschlag,
 // Nummernmenü und die Nr.-17-Bestätigung, vom Quelltext her geprüft.
 async function kategorienPruefen() {
@@ -1964,6 +2071,7 @@ async function zaehlerPflegePruefen() {
         ['jahreswechselPruefen', 'NK-267: Jahreswechsel-Prüfung'],
         ['pruefstandPruefen', 'NK-265: Prüfstand-Prüfung'],
         ['kategorienPruefen', 'Phase 54: Kostenarten-Prüfung'],
+        ['hausgeldPruefungPruefen', 'Phase 50: Hausgeld-Prüfung'],
     ];
     for (const [name, label] of schritte) {
         try {
