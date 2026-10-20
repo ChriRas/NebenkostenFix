@@ -43,6 +43,7 @@ __all__ = [
     'Position',
     'Bericht',
     'RUNDUNGSGRENZE',
+    'ZEITRAUM_HINWEIS',
     'pruefe_position',
     'pruefe_summe',
     'einschaetzung',
@@ -59,6 +60,22 @@ class HausgeldFehler(ValueError):
 #: ein Cent-Hinweis je Position waere nur Laerm. Ein Euro ist die Grenze,
 #: ab der es nicht mehr Rundung sein kann (Plan Phase 50).
 RUNDUNGSGRENZE = Decimal('1.00')
+
+
+#: Der Hinweis zum Abrechnungszeitraum. Die WEG rechnet nach dem
+#: Abflussprinzip ueber das Kalenderjahr -- sie verteilt, was im Jahr
+#: bezahlt wurde, nicht was im Jahr verbraucht wurde. Fuer die
+#: Betriebskostenabrechnung ist das nach BGH VIII ZR 27/07 zulaessig.
+#: Offen bleibt es beim Mieterwechsel: dann traegt ein Mieter eine
+#: Rechnung, die in die Zeit des anderen gehoerte. Darauf weist die App
+#: hin, statt es stillschweigend zu uebernehmen.
+ZEITRAUM_HINWEIS = (
+    'Die Hausgeldabrechnung verteilt, was im Kalenderjahr bezahlt wurde, '
+    'nicht was in ihm verbraucht wurde (Abflussprinzip). Für die '
+    'Betriebskostenabrechnung ist das zulässig (BGH, Urteil vom 20.02.2008, '
+    'VIII ZR 27/07). Prüfen Sie es aber, wenn in diesem Zeitraum ein '
+    'Mieterwechsel lag: dann kann eine Rechnung in die Zeit des anderen '
+    'Mieters gehören.')
 
 
 #: Positionen, die nach § 1 Abs. 2 BetrKV beim Eigentuemer bleiben, als

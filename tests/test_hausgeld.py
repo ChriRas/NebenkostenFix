@@ -293,3 +293,66 @@ def test_eine_leere_abrechnung_ist_kein_absturz():
 
     assert bericht.positionen == []
     assert bericht.summe_umlagefaehig == Decimal('0.00')
+
+
+# --- Die Route ------------------------------------------------------------
+
+
+def test_die_route_rechnet_die_abrechnung_durch(auth_client):
+    """POST /api/hausgeld/pruefen -- rechnet und speichert nichts."""
+    antwort = auth_client.post('/api/hausgeld/pruefen', json={
+        'positionen': [{'name': n, 'gesamtbetrag': g, 'eigener_betrag': e}
+                       for n, g, e in ABRECHNUNG],
+        'eigener_anteil': '125', 'gesamtanteile': '1000',
+        'abrechnungssumme': '5560.00'})
+
+    assert antwort.status_code == 200
+    daten = antwort.get_json()
+    assert daten['summe_umlagefaehig'] == '2810.00'
+    assert daten['summe_eigentuemer'] == '2750.00'
+    assert daten['anzahl_umlagefaehig'] == 8
+    assert daten['anzahl_eigentuemer'] == 3
+    assert daten['summenprobe']['stimmt'] is True
+    assert 'VIII ZR 27/07' in daten['zeitraum_hinweis']
+
+    # Jede Zeile traegt ihre Begruendung mit -- die Oberflaeche erfindet
+    # keine Texte dazu.
+    verwaltung = next(p for p in daten['positionen']
+                      if p['name'] == 'Verwaltervergütung')
+    assert verwaltung['umlagefaehig'] is False
+    assert '§ 1 Abs. 2 BetrKV' in verwaltung['begruendung']
+
+
+def test_die_route_weist_eine_unbrauchbare_angabe_ab(auth_client):
+    """Gesamtanteile 0 -- kein stilles Ergebnis, sondern 400 mit Grund."""
+    antwort = auth_client.post('/api/hausgeld/pruefen', json={
+        'positionen': [{'name': 'Müllentsorgung', 'gesamtbetrag': '2400.00',
+                        'eigener_betrag': '300.00'}],
+        'eigener_anteil': '125', 'gesamtanteile': '0'})
+
+    assert antwort.status_code == 400
+    assert 'Gesamtanteile' in antwort.get_json()['error']
+
+
+def test_die_route_braucht_positionen(auth_client):
+    antwort = auth_client.post('/api/hausgeld/pruefen', json={
+        'eigener_anteil': '125', 'gesamtanteile': '1000'})
+
+    assert antwort.status_code == 400
+    assert antwort.get_json()['feld'] == 'positionen'
+
+
+def test_die_route_aendert_nichts_am_bestand(auth_client):
+    """Die Pruefung ist eine Rechnung, keine Uebernahme.
+
+    Haette sie Kostenarten oder Rechnungen angelegt, waere der Bestand
+    nach zwei Proben voller Dubletten -- der Vermieter uebernimmt von Hand,
+    was er bestaetigt hat.
+    """
+    vorher = auth_client.get('/api/categories').get_json()
+    auth_client.post('/api/hausgeld/pruefen', json={
+        'positionen': [{'name': 'Fußmatten', 'gesamtbetrag': '400.00',
+                        'eigener_betrag': '50.00'}],
+        'eigener_anteil': '125', 'gesamtanteile': '1000'})
+
+    assert auth_client.get('/api/categories').get_json() == vorher

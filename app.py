@@ -42,6 +42,7 @@ Oberflaeche und Betrieb
   GET         /api/belege/export                           -> belege_exportieren
   GET         /api/haftung                                 -> haftung_anzeigen
   POST        /api/haftung                                 -> haftung_bestaetigen
+  POST        /api/hausgeld/pruefen                        -> hausgeld_pruefen
   GET         /api/ueber                                   -> ueber_anzeigen
   GET         /api/drittlizenzen                           -> drittlizenzen_anzeigen
   GET         /api/aktualisierung/einstellung              -> update_einstellung_anzeigen
@@ -283,6 +284,7 @@ from nebenkostenfix import betrkv
 from nebenkostenfix import abrechnungsart
 from nebenkostenfix.rechenkern import einheit_fuer
 from nebenkostenfix.betrkv import EINHEITEN_ZAEHLER
+from nebenkostenfix import hausgeld
 from nebenkostenfix import mieter_daten
 from nebenkostenfix import beispielimmobilie
 from nebenkostenfix import zeitleiste
@@ -3297,6 +3299,68 @@ def haftung_bestaetigen():
                                  'ihn noch einmal.'}), 409
     haftung.bestaetigen()
     return jsonify(haftung.stand())
+
+
+def _hausgeld_position(posten: dict) -> dict:
+    """Eine Zeile des Berichts, wie die Oberflaeche sie braucht."""
+    return {
+        'name': posten.name,
+        'gesamtbetrag': str(posten.gesamtbetrag),
+        'eigener_betrag': str(posten.eigener_betrag),
+        'umlagefaehig': posten.rat.umlagefaehig,
+        'betrkv_nr': posten.rat.betrkv_nr,
+        'begruendung': posten.rat.begruendung,
+        'erwartet': str(posten.probe.erwartet),
+        'abweichung': str(posten.probe.abweichung),
+        'stimmt': posten.probe.stimmt,
+        'hinweis': posten.probe.hinweis,
+    }
+
+
+def _hausgeld_probe(probe):
+    if probe is None:
+        return None
+    return {'erwartet': str(probe.erwartet), 'angesetzt': str(probe.angesetzt),
+            'abweichung': str(probe.abweichung), 'stimmt': probe.stimmt,
+            'hinweis': probe.hinweis}
+
+
+@app.route('/api/hausgeld/pruefen', methods=['POST'])
+def hausgeld_pruefen():
+    """Rechnet eine Hausgeld-Einzelabrechnung nach (Phase 50, Issue #30).
+
+    Rechnet nur und speichert nichts: der Vermieter sieht erst, was die App
+    vorschlaegt, und uebernimmt dann von Hand, was er bestaetigt. Deshalb
+    POST und nicht GET -- die Positionen gehoeren in den Rumpf, nicht in
+    die Adresszeile -- aber ohne jede Aenderung am Bestand.
+    """
+    daten = request.get_json(silent=True) or {}
+    positionen = daten.get('positionen')
+    if not isinstance(positionen, list):
+        return jsonify({'error': 'Es fehlen die Positionen der Abrechnung.',
+                        'feld': 'positionen'}), 400
+    try:
+        bericht = hausgeld.uebernahme(
+            [p for p in positionen if isinstance(p, dict)],
+            eigener_anteil=daten.get('eigener_anteil'),
+            gesamtanteile=daten.get('gesamtanteile'),
+            abrechnungssumme=daten.get('abrechnungssumme'))
+    except hausgeld.HausgeldFehler as fehler:
+        return jsonify({'error': str(fehler)}), 400
+
+    return jsonify({
+        'positionen': [_hausgeld_position(p) for p in bericht.positionen],
+        'summe_umlagefaehig': str(bericht.summe_umlagefaehig),
+        'summe_eigentuemer': str(bericht.summe_eigentuemer),
+        'summe_offen': str(bericht.summe_offen),
+        'anzahl_umlagefaehig': len(bericht.umlagefaehig),
+        'anzahl_eigentuemer': len(bericht.beim_eigentuemer),
+        'anzahl_offen': len(bericht.offen),
+        'summenprobe': _hausgeld_probe(bericht.summenprobe),
+        # Der Hinweis zum Zeitraum steht hier und nicht in der Oberflaeche,
+        # damit er mit der Rechtslage wandert (BGH VIII ZR 27/07).
+        'zeitraum_hinweis': hausgeld.ZEITRAUM_HINWEIS,
+    })
 
 
 @app.route('/api/ueber', methods=['GET'])

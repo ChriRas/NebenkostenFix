@@ -31,6 +31,9 @@ ROUTEN_INVENTAR = frozenset({
     'huelle_passwort',
     'haftung_anzeigen',
     'haftung_bestaetigen',
+    # Phase 50: rechnet eine Hausgeldabrechnung nach, schreibt nichts.
+    # Nicht oeffentlich -- sie gehoert dem angemeldeten Vermieter.
+    'hausgeld_pruefen',
     'ueber_anzeigen',
     'drittlizenzen_anzeigen',
     'update_einstellung_anzeigen',
