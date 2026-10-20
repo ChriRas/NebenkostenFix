@@ -85,7 +85,7 @@ global.Chart = class {
     constructor() {}
     destroy() {}
 };
-// Dunkelmodus (Runde 4): themaAnzeigen liest Tokens und setzt Chart.defaults.
+// Dunkelmodus: themaAnzeigen liest Tokens und setzt Chart.defaults.
 global.Chart.defaults = { elements: { arc: {} } };
 global.Chart.instances = {};
 global.getComputedStyle = () => ({ getPropertyValue: () => '' });
@@ -379,7 +379,7 @@ pruefe('K2: „Immobilie anlegen“ genau einmal in der Seite',
     (ui.match(/Immobilie anlegen/g) || []).length === 1);
 pruefe('K1: Immobilien-Seitenkopf trägt den Primärknopf',
     ui.indexOf('Immobilie anlegen') > ui.indexOf('id="tab-properties"'));
-// Konzept D: „Rechnungen & Belege“ trägt Seitenkopf (Beleg hochladen) und Ansichtskopf (Rechnungen).
+// „Rechnungen & Belege“ trägt Seitenkopf (Beleg hochladen) und Ansichtskopf (Rechnungen).
 pruefe('K1: .kopf-aktionen in allen neun Köpfen mit Knöpfen (global + acht Bereiche)',
     (ui.match(/class="kopf-aktionen"/g) || []).length === 9
     && css.includes('.kopf-aktionen {'));
@@ -394,12 +394,12 @@ pruefe('K1: auch „Heute“ beginnt mit einem Seitenkopf',
 // --- NK-102: Leerzustand als eine Komponente (K4) ---
 const app = fs.readFileSync(path.join(__dirname, '..', 'static', 'app.js'), 'utf8');
 
-// Konzept D, Zähler-Detail: Verbrauch je Zeitraum, bei Zweitarif HT plus NT.
+// Zähler-Detail: Verbrauch je Zeitraum, bei Zweitarif HT plus NT.
 const verbrauchQuelle = (app.match(/function zaehlerVerbrauch\([\s\S]*?\n\}\n/) || [''])[0];
 const zaehlerVerbrauch = new Function(verbrauchQuelle + 'return zaehlerVerbrauch;')();
-pruefe('Konzept D: Verbrauch eines Eintarifzählers ist die Differenz',
+pruefe('Verbrauch eines Eintarifzählers ist die Differenz',
     zaehlerVerbrauch({ value: 100 }, { value: 130.5 }) === 30.5);
-pruefe('Konzept D: Verbrauch eines Zweitarifzählers zählt HT und NT',
+pruefe('Verbrauch eines Zweitarifzählers zählt HT und NT',
     zaehlerVerbrauch({ value: 100, value_nt: 40 }, { value: 130, value_nt: 50 }) === 40);
 pruefe('K4: der Erzeuger leerzustand() existiert genau einmal',
     (app.match(/function leerzustand\(/g) || []).length === 1);
@@ -1364,7 +1364,7 @@ pruefe('NK-224: der Gruß steht im Kopf von „Heute“ und nirgends sonst',
     && html.indexOf('id="begruessung"') < html.indexOf('id="erste-schritte"')
     && !html.includes('class="greeting"'));
 
-// Konzept D: Klick auf einen Reiter schaltet den Leisteneintrag seines
+// Klick auf einen Reiter schaltet den Leisteneintrag seines
 // Bereichs aktiv; die Leiste öffnet die zuletzt gezeigte Seite des Bereichs.
 {
     const quelle = (appQuelle.match(/function initTabs\(\)[\s\S]*?\n\}/) || [''])[0]
@@ -1399,9 +1399,9 @@ pruefe('NK-224: der Gruß steht im Kopf von „Heute“ und nirgends sonst',
         reiter[3].klick(); stand.push(aktiv(), String(unter.hidden));
         leiste[1].klick();
     }
-    pruefe('Konzept D: der Reiter „Mieter“ macht „Haus“ in der Leiste aktiv, „Rechnungen“ dann „Kosten“',
+    pruefe('der Reiter „Mieter“ macht „Haus“ in der Leiste aktiv, „Rechnungen“ dann „Kosten“',
         stand.join('|') === 'haus|false|kosten|true');
-    pruefe('Konzept D: „Haus“ in der Leiste öffnet die zuletzt gezeigte Seite (Mieter)',
+    pruefe('„Haus“ in der Leiste öffnet die zuletzt gezeigte Seite (Mieter)',
         gewechselt.join() === 'tenants' && leiste[1].attr['aria-current'] === undefined);
 }
 
@@ -1426,17 +1426,17 @@ pruefe('NK-224: der Gruß steht im Kopf von „Heute“ und nirgends sonst',
         /getElementById\('tab-hilfe'\)\.classList\.contains\('active'\)\) return;/.test(versuch));
 }
 
-// Konzept D: die Befehlspalette markiert jedes Suchwort und maskiert den Rest.
+// die Befehlspalette markiert jedes Suchwort und maskiert den Rest.
 {
     const funktion = name => (appQuelle.match(new RegExp('function ' + name + '\\([\\s\\S]*?\\n\\}')) || [''])[0];
     const quelle = funktion('escapeHtml') + funktion('befehlMarkiert');
     const markiert = quelle.includes('befehlMarkiert')
         && new Function(quelle + '; return befehlMarkiert;')()('Strom <b>2. OG', ['strom', 'og']);
-    pruefe('Konzept D: Suchwörter in <mark>, Text maskiert',
+    pruefe('Suchwörter in <mark>, Text maskiert',
         markiert === '<mark>Strom</mark> &lt;b&gt;2. <mark>OG</mark>');
 }
 
-// Konzept D: „Heute“ nennt Zähler ohne Stand im laufenden Jahr, Belege ohne
+// „Heute“ nennt Zähler ohne Stand im laufenden Jahr, Belege ohne
 // Rechnung, fällige Abrechnungen und offene Zahlungen zugestellter Abrechnungen
 // (Phase 47); Beispieldaten erzeugen keine Aufgabe.
 {
@@ -1461,7 +1461,7 @@ pruefe('NK-224: der Gruß steht im Kopf von „Heute“ und nirgends sonst',
             { id: 4, tenant_id: 8, tenant_name: 'Bezahlt', apartment_name: 'EG', zugestellt_am: '2026-02-01', offen_betrag: '0.00' }],
         b => b + ' €', () => {});
     const stand = (gruppen || []).map(g => g.name + ':' + g.aufgaben.map(a => a.titel + '/' + a.chip).join(',')).join('|');
-    pruefe('Konzept D: Heute zeigt nur Zähler ohne Stand, offene Belege, echte fällige Abrechnungen und offene Zahlungen',
+    pruefe('Heute zeigt nur Zähler ohne Stand, offene Belege, echte fällige Abrechnungen und offene Zahlungen',
         stand === 'Erfassen:Strom B2/fehlt|Belege:Stadtwerke/offen|Abrechnen:Echt (EG)/fällig|Zahlungen:Echt (EG)/offen');
 }
 
@@ -1512,7 +1512,7 @@ pruefe('NK-224: der Gruß steht im Kopf von „Heute“ und nirgends sonst',
         && /id="erste-schritte-beispiel"[^>]*>Die Beispielimmobilie zählt nicht mit\.</.test(html));
     pruefe('NK-225: ohne Beispielhaus kein Hinweis',
         !!ohne['erste-schritte-beispiel'] && ohne['erste-schritte-beispiel'].hidden === true);
-    pruefe('Runde 4: die Einführung startet von selbst nur in der leeren App, nicht neben dem Beispielhaus',
+    pruefe('die Einführung startet von selbst nur in der leeren App, nicht neben dem Beispielhaus',
         ohne.tourGestartet === true && !mit.tourGestartet);
 }
 
@@ -1899,7 +1899,7 @@ async function ablesenPruefen() {
         const css = fs.readFileSync(path.join(__dirname, '..', 'static', 'style.css'), 'utf8');
         pruefe('NK-260: Hover der klickbaren Kacheln steht im Stylesheet',
             /\.kpi-clickable:hover\s*\{[^}]*background: var\(--surface-alt\)/.test(css)
-            // Konzept D: Aufsteigen nur in @keyframes, kein Anheben beim Hover
+            // Aufsteigen nur in @keyframes, kein Anheben beim Hover
             && !/translateY/.test(css.replace(/@keyframes[^{]*\{(?:[^{}]*\{[^}]*\})*\s*\}/g, ''))
             && /\.kpi-karte\s*\{[^}]*border-left:\s*4px solid var\(--kpi-farbe/.test(css));
     }

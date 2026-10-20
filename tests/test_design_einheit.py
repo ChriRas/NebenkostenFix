@@ -111,7 +111,7 @@ def test_globaler_kopf_traegt_nur_was_ueberall_gilt():
 
 
 def test_begruessung_ohne_zurueck_beim_ersten_besuch():
-    # Konzept D: der Gruß steht als Untertitel im Kopf von „Heute“.
+    # der Gruß steht als Untertitel im Kopf von „Heute“.
     assert '<span id="begruessung">Willkommen bei NebenkostenFix!</span>' in SEITE
     assert "'Willkommen zurück!' : 'Willkommen bei NebenkostenFix!'" in SKRIPT
 
@@ -153,7 +153,7 @@ def test_kontoblatt_halbtransparente_farben_nur_als_token():
 
 
 def test_kontoblatt_ohne_schatten_und_anheben():
-    # Konzept D: Inhalte dürfen beim Erscheinen aufsteigen (nur in @keyframes),
+    # Inhalte dürfen beim Erscheinen aufsteigen (nur in @keyframes),
     # aber nichts hebt sich beim Überfahren.
     ohne_keyframes = re.sub(r'@keyframes[^{]*\{(?:[^{}]*\{[^}]*\})*\s*\}', '', STIL)
     for name, text in (('style.css', ohne_keyframes), ('index.html', SEITE), ('app.js', SKRIPT)):
@@ -228,7 +228,7 @@ def test_kontoblatt_inline_abstaende_auf_dem_raster():
 
 def test_kontoblatt_seitentitel_und_tabellenkopf_einheitlich():
     # Jede Seite beginnt mit einem Kopf samt h2; die gemeinsame Regel macht
-    # daraus das Seitenband mit dem 28-px-Titel (Konzept D).
+    # daraus das Seitenband mit dem 28-px-Titel.
     seiten = list(re.finditer(r'<section[^>]*\btab-content\b[^>]*>', SEITE))
     assert len(seiten) >= 10
     for seite in seiten:
@@ -253,7 +253,7 @@ def test_betraege_in_geist_mono():
     assert not nackt, nackt
 
 
-# --- Konzept D „Aufgaben“ ----------------------------------------------------
+# --- Leiste, Kopf und Befehlspalette -------------------------------------
 
 def _regel(selektor: str, text: str = STIL) -> str:
     treffer = re.search(r'(?:^|\n)\s*' + re.escape(selektor) + r' \{([^}]*)\}', text)
@@ -365,7 +365,7 @@ def test_pruefskripte_wechseln_reiter_ueber_die_funktion():
         assert 'wechsleZuTab(' in text, skript
 
 
-# --- Konzept D: Bewegung und Kontomenü --------------------------------------
+# --- Bewegung und Kontomenü --------------------------------------
 
 def test_konzept_d_bewegung_ueber_tokens_und_abschaltbar():
     for token in ('--dauer-kurz:', '--dauer-mittel:', '--kurve:'):
@@ -394,7 +394,7 @@ def test_konzept_d_kontomenue_im_kopf_auf_jeder_breite():
     assert re.search(r'\.top-header > \.kopf-aktionen\.mit-menue\.offen \{\s*display: flex;', STIL)
 
 
-# --- Konzept D: Beleg-Eingang ------------------------------------------------
+# --- Beleg-Eingang ------------------------------------------------
 
 def test_konzept_d_eingang_liste_vorschau_formular():
     eingang = SEITE[SEITE.index('id="kosten-eingang"'):SEITE.index('id="kosten-rechnungen"')]
@@ -418,7 +418,7 @@ def test_konzept_d_formular_wird_spalte_und_kehrt_zurueck():
 
 
 def test_konzept_d_drei_ansichten_mit_kopfzahl():
-    # Runde 2: Pillen Eingang · Alle Rechnungen · Nach Kostenart, darüber die Summe.
+    # Pillen Eingang · Alle Rechnungen · Nach Kostenart, darüber die Summe.
     for ansicht in ('eingang', 'alle', 'kostenart'):
         assert re.search(rf'id="pill-{ansicht}"\s+onclick="zeigeKostenAnsicht\(\'{ansicht}\'\)"', SEITE)
     assert 'id="kosten-kopfzahl"' in SEITE
@@ -457,7 +457,7 @@ def test_konzept_d_leerer_eingang_blendet_formular_aus():
     assert "eingang.classList.toggle('eingang-leer', !eingangBeleg);" in SKRIPT
 
 
-# --- Konzept D: Zähler als Liste plus Detail --------------------------------
+# --- Zähler als Liste plus Detail --------------------------------
 
 def test_konzept_d_zaehler_liste_und_detail():
     # Das Detail liegt neben, nicht in #meters-container: ERSTER_STAND_JS
@@ -505,7 +505,7 @@ def test_tabellen_zeilen_hover_einheitlich():
 
 
 def test_seitenband_titel_und_unterzeile_auf_jeder_seite():
-    # Konzept D: jedes Seitenband trägt Titel und eine Zeile, wozu die Seite da ist.
+    # jedes Seitenband trägt Titel und eine Zeile, wozu die Seite da ist.
     seite = _ohne_kommentare_html(SEITE)
     seiten = re.findall(r'<section[^>]*\bid="(tab-\w+)"', seite)
     assert len(seiten) == 10
@@ -530,7 +530,7 @@ def test_kategorie_chip_zaehlt_einzahl():
 
 
 def test_konzept_d_login_swoosh_und_einflug():
-    """Runde 2: Nach „Anmelden“ wischt Indigo über die Seite, die App schiebt
+    """Nach „Anmelden“ wischt Indigo über die Seite, die App schiebt
     sich danach herein. Beides entfällt ohne Bewegungswunsch."""
     formular = (WURZEL / 'static' / 'formular.js').read_text(encoding='utf-8')
     for teil in ("'nk-einflug'", 'requestSubmit', 'prefers-reduced-motion', "'pageshow'"):
@@ -559,7 +559,7 @@ def test_konzept_d_gerichtete_seitenwechsel_und_kopfzahl():
 
 
 def test_runde2_kleinfehler_datum_einzahl_zeitraum():
-    """Runde 2: Datumsanzeigen laufen über datumText (keine UTC-Verschiebung,
+    """Datumsanzeigen laufen über datumText (keine UTC-Verschiebung,
     Zeitstempel erlaubt), „1 Rechnung“ in Einzahl, Von–bis-Felder bündig."""
     import re
     # Nur echte Date-Objekte (Überschneidungsprüfung) dürfen noch direkt formatieren.
@@ -576,7 +576,7 @@ def _regel(selektor: str, text: str = STIL) -> str:
 
 
 def test_runde3_feldpaare_unten_buendig():
-    """Runde 3: Bricht in einem Feldpaar eine Beschriftung um, bleiben die
+    """Bricht in einem Feldpaar eine Beschriftung um, bleiben die
     Eingabefelder auf einer Linie. Hilfetexte stehen deshalb unter der Zeile,
     nie in nur einer Hälfte. Unter 640 px stapeln die Felder in voller Breite."""
     assert 'align-items: flex-end' in _regel('.felder-nebeneinander')
@@ -597,7 +597,7 @@ def test_runde3_feldpaare_unten_buendig():
 
 
 def test_runde3_fotovorschau_nicht_vom_tabellenrahmen_beschnitten():
-    """Runde 3: Die Fotovorschau einer Ablesung liegt fest im Fenster. Absolut
+    """Die Fotovorschau einer Ablesung liegt fest im Fenster. Absolut
     beschnitt sie das overflow-x der Tabellenrolle (oberste Zeile halb)."""
     regel = _regel('.image-hover-preview')
     assert 'position: fixed' in regel
@@ -716,7 +716,7 @@ def test_runde4_tabellen_sortieren_und_summieren_wie_excel():
 
 
 def test_runde4_enter_springt_in_der_ablese_runde_und_schrift_im_kontomenue():
-    enter = SKRIPT[SKRIPT.index('// Runde 4: in der Ablese-Runde springt Enter'):][:700]
+    enter = SKRIPT[SKRIPT.index('// in der Ablese-Runde springt Enter'):][:700]
     assert "feld.closest('#ablesen-liste')" in enter
     assert 'if (!naechstes) return;' in enter
     assert 'naechstes.focus();' in enter

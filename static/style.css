@@ -1,5 +1,5 @@
 /* =====================================================================
-   Aufgaben (Konzept D): dunkle Leiste links, weiße Arbeitsfläche,
+   Aufgaben: dunkle Leiste links, weiße Arbeitsfläche,
    Indigo aus dem Logo; Ocker heißt „zu tun“, Ziegel „Fehler/Löschen“,
    Grün „erledigt“.
 
@@ -53,7 +53,7 @@
     --danger-bg: #F7E4E2;
     --danger-border: #E3B7B2;
 
-    /* Leiste links (Konzept D) */
+    /* Leiste links */
     --leiste: #16172A;
     --leiste-text: #A9ABC4;
     --leiste-hover: #22233A;
@@ -95,7 +95,7 @@
     --seiten-rand: clamp(16px, 3vw, 32px);
 }
 
-/* Runde 4: Dunkelmodus. Das Skript im <head> setzt data-theme vor dem ersten
+/* Dunkelmodus. Das Skript im <head> setzt data-theme vor dem ersten
    Bild, aus der Wahl in nk-thema oder sonst aus der Systemeinstellung. Nur
    auf dem Bildschirm, gedruckt wird immer hell. Primär- und Gefahrknöpfe
    werden hell mit dunkler Schrift (--on-primary). Die Kontraste rechnet
@@ -258,7 +258,7 @@ a:hover {
     border-bottom-color: var(--field-border);
 }
 
-/* Layout (Konzept D „Aufgaben“): dunkle Leiste links über die volle Höhe,
+/* Layout: dunkle Leiste links über die volle Höhe,
    daneben Kopfleiste und Arbeitsfläche über die ganze Breite. */
 .app-container {
     display: flex;
@@ -311,7 +311,7 @@ a:hover {
     flex: 1;
 }
 
-/* Runde 4: Sonne/Mond über den Einstellungen. Auf dem Handy steht der
+/* Sonne/Mond über den Einstellungen. Auf dem Handy steht der
    Schalter im Kopfmenü (#kopf-thema), die Fußleiste bleibt bei fünf. */
 .thema-knopf {
     width: 40px;
@@ -506,7 +506,7 @@ a:hover {
     color: var(--warning-strong);
 }
 
-/* Tasten (Konzept D): Mono, unten doppelt gerandet wie eine Taste. */
+/* Tasten: Mono, unten doppelt gerandet wie eine Taste. */
 kbd {
     display: inline-grid;
     place-items: center;
@@ -541,7 +541,7 @@ kbd {
     padding-bottom: 0;
 }
 
-/* Seitentitel: eine Stufe für jede Seite (Konzept D: 28 px). */
+/* Seitentitel: eine Stufe für jede Seite (28 px). */
 .tab-content > .section-header:first-child h2 {
     font-size: 28px;
     font-weight: 600;
@@ -784,7 +784,7 @@ kbd {
     gap: var(--space-2);
 }
 
-/* Runde 4: graue Platzhalter in Form der Liste, bis die Daten da sind. */
+/* graue Platzhalter in Form der Liste, bis die Daten da sind. */
 .skelett {
     grid-column: 1 / -1;
     display: flex;
@@ -994,7 +994,7 @@ kbd {
     color: var(--text-muted);
 }
 
-/* Runde 6: auch die geöffnete Liste im Design, gebaut wie das Kontomenü.
+/* auch die geöffnete Liste im Design, gebaut wie das Kontomenü.
    Customizable Select gibt es ab Chromium 135 (Edge, WebView2); andere
    Browser zeigen weiter die Liste des Systems. Den Pfeil malt das Feld. */
 @supports (appearance: base-select) {
@@ -1215,7 +1215,7 @@ progress {
     display: block;
 }
 
-/* Runde 4: Tabellen wie in Excel, aber ohne Gitter. Neben dem Spaltennamen
+/* Tabellen wie in Excel, aber ohne Gitter. Neben dem Spaltennamen
    sitzt ein Pfeilknopf wie der Filterpfeil in Excel (tabelleSortieren); er
    zeigt die aktive Richtung. */
 .sortier-knopf {
@@ -1521,7 +1521,7 @@ td.text-right {
     border-color: var(--border-color) transparent transparent transparent;
 }
 
-/* Auch per Tastatur: das Etikett „geschätzt“ ist fokussierbar (Runde 7). */
+/* Auch per Tastatur: das Etikett „geschätzt“ ist fokussierbar. */
 .interpolated-wrapper:hover .glass-tooltip,
 .interpolated-wrapper:focus-within .glass-tooltip {
     visibility: visible;
@@ -1733,7 +1733,7 @@ td.text-right {
     white-space: nowrap;
 }
 
-/* Runde 4: Anbieter wählen oder gleich im Formular anlegen. */
+/* Anbieter wählen oder gleich im Formular anlegen. */
 .anbieter-zeile {
     display: flex;
     gap: var(--space-2);
@@ -1754,7 +1754,7 @@ td.text-right {
     margin-top: var(--space-2);
 }
 
-/* Runde 4: leerer Bereich in einer Karte, ein Satz plus der nächste Schritt. */
+/* leerer Bereich in einer Karte, ein Satz plus der nächste Schritt. */
 .leer-zeile {
     display: flex;
     flex-wrap: wrap;
@@ -2229,7 +2229,7 @@ i.feld-hilfe:hover {
     }
 }
 
-/* Auswahlknöpfe (NK-067, Konzept D „Filter“): sie benennen Kategorien,
+/* Auswahlknöpfe (NK-067): sie benennen Kategorien,
    keine Handlungen. 36 px, gedrückt in Tinte. */
 .filter-pill {
     display: inline-flex;
@@ -2731,7 +2731,7 @@ a.btn-primary:hover {
     }
 }
 
-/* Telefon (Konzept D, E-Mobil): die Leiste wird zur dunklen Leiste am
+/* Telefon: die Leiste wird zur dunklen Leiste am
    unteren Rand; der Inhalt hält unten Platz für sie frei. */
 @media (max-width: 560px) {
     .app-container {
@@ -2782,7 +2782,7 @@ a.btn-primary:hover {
         font-size: 22px;
     }
 
-    /* Konzept D, Handy (E-Mobil): eine Zeile aus Suchsymbol, Hauswahl und
+    /* Handy: eine Zeile aus Suchsymbol, Hauswahl und
        Menüknopf; der Suchtext bleibt für Screenreader im Knopf. */
     .top-header {
         flex-wrap: nowrap;
@@ -2933,7 +2933,7 @@ a.btn-primary:hover {
     color: var(--text-main);
 }
 
-/* Runde 4: Einführung als Sprechblasen-Tour. Der Ring legt mit seiner
+/* Einführung als Sprechblasen-Tour. Der Ring legt mit seiner
    breiten Kontur den Schleier über alles außer der Zielstelle (kein
    box-shadow, siehe Schattenregel); Klicks gehen durch ihn hindurch. */
 .tour-ring {
@@ -3388,7 +3388,7 @@ td .btn-icon,
 }
 
 /* ------------------------------------------------------------------ */
-/* Heute (Konzept D): Aufgaben nach Art, jede mit genau einer Handlung. */
+/* Heute: Aufgaben nach Art, jede mit genau einer Handlung. */
 .aufgaben {
     display: flex;
     flex-direction: column;
@@ -3482,7 +3482,7 @@ td .btn-icon,
     }
 }
 
-/* Befehlspalette (Konzept D): oben im Fenster, Treffer nach Art gruppiert. */
+/* Befehlspalette: oben im Fenster, Treffer nach Art gruppiert. */
 .modal-overlay.befehl-overlay {
     align-items: flex-start;
     padding-top: 12vh;
@@ -3599,7 +3599,7 @@ td .btn-icon,
     gap: var(--space-1);
 }
 
-/* Kontomenü (Konzept D): Hilfe, Drucken und Abmelden liegen auf jeder
+/* Kontomenü: Hilfe, Drucken und Abmelden liegen auf jeder
    Breite hinter dem Namen; der Kopf behält die Suche im Mittelpunkt. */
 .top-header > .kopf-menue-knopf {
     display: inline-flex;
@@ -3660,7 +3660,7 @@ td .btn-icon,
     }
 }
 
-/* Eingang (Konzept D): links die Belege, in der Mitte das Blatt, rechts das
+/* Eingang: links die Belege, in der Mitte das Blatt, rechts das
    Rechnungsformular als Spalte mit „Rechnung übernehmen“ am Fuß. */
 .pill-zahl {
     display: inline-flex;
@@ -4017,7 +4017,7 @@ td .btn-icon,
     }
 }
 
-/* Zähler (Konzept D „Haus“): links die Liste, rechts das Detail des gewählten
+/* Zähler: links die Liste, rechts das Detail des gewählten
    Zählers mit Kennzahlen, Verbrauchsbalken und Ablesungen. */
 .zaehler-ansicht {
     display: flex;
@@ -4208,7 +4208,7 @@ td .btn-icon,
     }
 }
 
-/* Bewegung (Konzept D): kurz und gerichtet. Neue Inhalte steigen 8 px auf,
+/* Bewegung: kurz und gerichtet. Neue Inhalte steigen 8 px auf,
    Dialoge wachsen aus 98 %. Wer weniger Bewegung wünscht, sieht keine. */
 :root {
     --dauer-kurz: 140ms;
@@ -4329,7 +4329,7 @@ html.einflug .app-container {
     }
 }
 
-/* Runde 7: eine Abrechnungstabelle für „Details zur Abrechnung“ und die
+/* eine Abrechnungstabelle für „Details zur Abrechnung“ und die
    Vorschau (abrechnungsTabelle in app.js). Ergebnis zuerst, je Kostenart eine
    Zeile; die Aufschlüsselung klappt darunter über die volle Breite auf. */
 .abr-kopf {

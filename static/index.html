@@ -19,17 +19,17 @@
     <link rel="stylesheet" href="/static/vendor/phosphor/regular/style.css">
     <link rel="stylesheet" href="/static/vendor/phosphor/fill/style.css">
     <link rel="stylesheet" href="/static/style.css?v=14">
-    <!-- Einflug (Konzept D): kommt die Seite frisch von der Anmeldung
+    <!-- Einflug: kommt die Seite frisch von der Anmeldung
          (formular.js, höchstens 15 s alt), zieht style.css die Indigo-Fläche weg. -->
     <script>try { if (Date.now() - Number(sessionStorage.getItem('nk-einflug')) < 15000) document.documentElement.classList.add('einflug'); sessionStorage.removeItem('nk-einflug'); } catch (e) { /* ohne Speicher kein Einflug */ }</script>
-    <!-- Runde 4: Thema vor dem ersten Bild setzen, sonst blitzt es hell auf. -->
+    <!-- Thema vor dem ersten Bild setzen, sonst blitzt es hell auf. -->
     <script>(function () { var t = null; try { t = localStorage.getItem('nk-thema'); } catch (e) { /* ohne Speicher gilt das System */ } if (t !== 'dark' && t !== 'light') t = window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'; document.documentElement.dataset.theme = t; })();</script>
     <script src="/static/vendor/chartjs/chart.umd.min.js"></script>
 </head>
 
 <body>
     <div class="app-container">
-        <!-- Leiste (Konzept D): vier Bereiche und die Einstellungen. Jeder
+        <!-- Leiste: vier Bereiche und die Einstellungen. Jeder
              Bereich hat seine Seiten als Reiter im Seitenkopf (.unter-reiter);
              initTabs() hält Leiste und Reiter gleich. -->
         <aside class="sidebar">
@@ -51,7 +51,7 @@
         <!-- Main Content -->
         <main class="main-content">
             <header class="top-header">
-                <!-- Befehlsfeld (Konzept D): springt zu Seiten, Mietern, Zählern,
+                <!-- Befehlsfeld: springt zu Seiten, Mietern, Zählern,
                      Rechnungen und Zahlungen; Strg+K öffnet es überall. -->
                 <button type="button" class="befehl-knopf" id="befehl-oeffnen" onclick="befehlOeffnen()"
                     aria-haspopup="dialog" aria-keyshortcuts="Control+K">
@@ -79,7 +79,7 @@
                         title="Grundlagen, Checkliste, Begriffe und Kurzanleitung">
                         <i class="ph ph-question"></i> Hilfe öffnen
                     </button>
-                    <!-- Runde 4: Schnellschalter für größere Schrift (wie unter Einstellungen). -->
+                    <!-- Schnellschalter für größere Schrift (wie unter Einstellungen). -->
                     <button class="btn-secondary" id="kopf-schrift" onclick="schriftgroesseWechseln()"
                         title="Schrift in drei Stufen vergrößern: 100, 115 und 130 %">
                         <i class="ph ph-text-aa"></i> <span id="kopf-schrift-text">Größere Schrift einschalten</span>
@@ -101,7 +101,7 @@
                 </div>
             </header>
 
-            <!-- Seiten eines Bereichs als Reiter (Konzept D). initTabs() hängt die
+            <!-- Seiten eines Bereichs als Reiter. initTabs() hängt die
                  Leiste unter den Kopf der offenen Seite; ein Bereich mit nur einer
                  Seite zeigt keine Reiter. Ziel, Beschriftung und Icon wie im
                  Glossar § 5. -->
@@ -136,7 +136,7 @@
                             <span id="heute-stand"></span></p>
                     </div>
                 </div>
-                <!-- Aufgaben (Konzept D): was jetzt zu tun ist, gebaut von
+                <!-- Aufgaben: was jetzt zu tun ist, gebaut von
                      zeigeHeute() aus den geladenen Daten. -->
                 <div id="heute-aufgaben" class="aufgaben" hidden></div>
                 <!-- Erste Schritte (NK-072): die Führung bei leerer Anwendung.
@@ -205,7 +205,7 @@
                             erfassen</button>
                     </div>
                 </div>
-                <!-- Konzept D: Liste links, Detail des gewählten Zählers rechts (app.js zeigeZaehlerDetail). -->
+                <!-- Liste links, Detail des gewählten Zählers rechts (app.js zeigeZaehlerDetail). -->
                 <div class="zaehler-ansicht">
                     <div class="spalte" id="meters-container"><div class="skelett" role="status" aria-label="Wird geladen"><span></span><span></span><span></span></div></div>
                     <aside class="zaehler-detail glass-panel" id="zaehler-detail" aria-label="Gewählter Zähler"></aside>
@@ -220,7 +220,7 @@
                         <!-- Kopfzahl: Summe und Zahl der Rechnungen, per JS (zeigeKopfzahl). -->
                         <p class="section-untertitel" id="kosten-kopfzahl">Belege hochladen und als Rechnung übernehmen</p>
                     </div>
-                    <!-- Konzept D: drei Ansichten einer Seite. Eingang und „Alle Rechnungen“
+                    <!-- drei Ansichten einer Seite. Eingang und „Alle Rechnungen“
                          zeigen links die Liste, in der Mitte den Beleg, rechts das Formular. -->
                     <div class="zeile-eng knopf-zeile" role="group" aria-label="Ansicht">
                         <button class="filter-pill" id="pill-eingang"
@@ -1272,7 +1272,7 @@
     <!-- NK-160: „Jahr abrechnen“ in fünf Schritten. Früh im Dokument, damit
          Rechnungs-, Ablese- und Anschreibendialog darüber liegen. Gerechnet
          wird über die vorhandenen Routen (generate, finalize). -->
-    <!-- Befehlspalette (Konzept D): Strg+K, siehe initBefehl() in app.js. -->
+    <!-- Befehlspalette: Strg+K, siehe initBefehl() in app.js. -->
     <div class="modal-overlay befehl-overlay" id="befehl-dialog">
         <div class="modal befehl">
             <h2 class="sr-only">Springen und suchen</h2>
@@ -1561,7 +1561,7 @@
                         <tbody id="payment-details-list">
                             <!-- Injected via JS -->
                         </tbody>
-                        <!-- Runde 4: Summe wie in Excel; Prognosen (Zukunft) zählen nicht mit. -->
+                        <!-- Summe wie in Excel; Prognosen (Zukunft) zählen nicht mit. -->
                         <tfoot id="payment-details-fuss">
                             <tr class="summenzeile">
                                 <td></td>
@@ -2494,7 +2494,7 @@
                             <select id="invoice-provider" required></select>
                             <button type="button" class="btn-secondary" onclick="anbieterFeldZeigen()">Anbieter anlegen</button>
                         </div>
-                        <!-- Runde 4: Anbieter direkt hier anlegen, nicht erst in den Einstellungen. -->
+                        <!-- Anbieter direkt hier anlegen, nicht erst in den Einstellungen. -->
                         <div id="anbieter-neu" class="anbieter-zeile" hidden>
                             <input type="text" id="anbieter-neu-name" maxlength="200" placeholder="z. B. Stadtwerke"
                                 aria-label="Name des neuen Anbieters">
@@ -2966,7 +2966,7 @@
         <button type="button" class="btn-secondary" onclick="entwurfVerwerfen()">Entwurf löschen</button>
     </div>
 
-    <!-- Runde 4: die Einführung als Sprechblasen-Tour. Der Ring hebt die
+    <!-- die Einführung als Sprechblasen-Tour. Der Ring hebt die
          Stelle hervor, auf die die Blase zeigt; gezeichnet von tourZeigen(). -->
     <div id="tour-ring" class="tour-ring" hidden></div>
     <div id="tour" class="tour-blase" role="dialog" aria-modal="false"

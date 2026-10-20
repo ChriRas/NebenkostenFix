@@ -63,6 +63,6 @@ def test_speichern_knopf_bekommt_seine_beschriftung_zurueck():
     ende = quelle.index("\n}\n", start)
     rumpf = quelle[start:ende]
     finally_teil = rumpf[rumpf.index("finally"):]
-    # Konzept D: in der Spalte heißt der Knopf „Rechnung übernehmen“, solange
+    # in der Spalte heißt der Knopf „Rechnung übernehmen“, solange
     # eine neue Rechnung entsteht; eine bestehende wird gespeichert.
     assert "btn.textContent = btn.closest('.als-spalte') && !invId ? 'Rechnung übernehmen' : 'Rechnung speichern'" in finally_teil
