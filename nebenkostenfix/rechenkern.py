@@ -642,6 +642,37 @@ def zaehler_einheit(zaehler) -> str:
         zaehler.kategorie_name, zaehler.kategorie_betrkv_nr)
 
 
+def pruefe_heizkosten_zuordnung(vorgang: Vorgang) -> list:
+    """Heizkostenrechnungen, die nach Flaeche zerfallen, ohne es zu sollen.
+
+    Gibt die Warntexte zurueck -- je betroffener Rechnung einen, nicht
+    einen pauschalen Satz. Welche Rechnung es ist, muss dastehen: der
+    Vermieter soll sie finden, nicht suchen.
+
+    Die vier Bedingungen stehen bei ``HINWEIS_HEIZKOSTEN_OHNE_ZUORDNUNG``
+    und sind der eigentliche Inhalt dieser Funktion.
+    """
+    if len(vorgang.wohnungen) < 2:
+        return []
+    offen = []
+    for posten in vorgang.rechnungen:
+        nummer = posten.kategorie.betrkv_nr if posten.kategorie else None
+        if nummer not in betrkv.GESPERRT:
+            continue
+        if posten.wohnung_id is not None or posten.heizungsanlage_id is not None:
+            continue
+        offen.append(HINWEIS_HEIZKOSTEN_OHNE_ZUORDNUNG.format(
+            kategorie=posten.kategorie.name,
+            # euro_text, nicht zahl_text: der Betrag muss aussehen wie
+            # in der Betragsspalte, sonst liest der Vermieter „über 402 €“
+            # als gerundet und sucht die falsche Rechnung.
+            betrag=euro_text(posten.betrag),
+            beginn=posten.beginn.strftime('%d.%m.%Y'),
+            ende=posten.ende.strftime('%d.%m.%Y'),
+            anzahl=len(vorgang.wohnungen)))
+    return offen
+
+
 def einheit_fuer(kategorie_name: str, betrkv_nr: Optional[int] = None) -> str:
     """Die Einheit der Menge, die ein Zaehler dieser Kostenart misst.
 
@@ -986,6 +1017,33 @@ HINWEIS_ALLGEMEIN_NEGATIV = (
     "Wohnungszähler dem falschen Hauptzähler zugeordnet. Prüfen Sie die "
     "Stände und die Zuordnung der Zähler."
 )
+
+#: Phase 50: eine Heizkostenrechnung, die niemand zugeordnet hat. Der
+#: Messdienst rechnet je Wohnung ab; wer seinen Betrag als Rechnung
+#: eintraegt und die Zuordnung vergisst, dem teilt die App ihn nach
+#: Wohnflaeche auf alle Wohnungen -- rechnerisch sauber, fachlich falsch,
+#: und bisher ohne ein Wort. Dieselbe Familie wie die ungepruefte
+#: Zahlungsart und die gemischten Masseinheiten.
+#:
+#: **Die Warnung ist eng gefasst, und das ist Absicht.** Sie kommt nur bei
+#: den drei Heizkostennummern (``betrkv.GESPERRT``), nur ohne Zuordnung zu
+#: Wohnung **und** Anlage, und nur in einem Objekt mit mehr als einer
+#: Wohnung. Bei einer Wohnung ist die Flaechenverteilung 100 %, also
+#: richtig; mit Anlage gilt die HeizkostenV und der Kern warnt mit seinen
+#: eigenen Meldungen; und fast jede gewoehnliche Rechnung hat keine
+#: Wohnungszuordnung -- waere die Warnung breiter, erschiene sie in jeder
+#: Abrechnung und niemand laese sie mehr.
+HINWEIS_HEIZKOSTEN_OHNE_ZUORDNUNG = (
+    "W-HEIZKOSTEN-OHNE-ZUORDNUNG · Die Heizkostenrechnung „{kategorie}“ "
+    "über {betrag} ({beginn} – {ende}) ist weder einer Wohnung noch einer "
+    "Heizungsanlage zugeordnet. Sie wird deshalb nach Wohnfläche auf alle "
+    "{anzahl} Wohnungen des Objekts verteilt. Rechnet Ihr Messdienst je "
+    "Wohnung ab, ordnen Sie die Rechnung der Wohnung zu — dann geht der "
+    "Betrag ungeteilt an deren Mieter. Versorgt die Anlage wirklich alle "
+    "Wohnungen, legen Sie eine Heizungsanlage an, damit nach § 7 und § 8 "
+    "HeizkostenV gerechnet wird."
+)
+
 
 #: F-137: eine Wohnungsrechnung mit Zaehler wird nach Verbrauch geteilt. Ein
 #: Grundpreis faellt aber auch im Leerstand an; ohne die Angabe, wie viel
@@ -2840,6 +2898,10 @@ def rechne(vorgang: Vorgang) -> dict:
     """
     line_items = []
     warnings = []
+    # Phase 50: die Heizkostenrechnung, die niemand zugeordnet hat. Frueh
+    # geprueft, damit die Warnung oben steht -- sie betrifft das Geld der
+    # ganzen Zeile, nicht ein Detail darin.
+    warnings.extend(pruefe_heizkosten_zuordnung(vorgang))
     # Was von den qm-Rechnungen beim Vermieter bleibt (R-NUM-05, NK-047).
     vermieter_positionen = []
     # Geld ist Decimal (R-NUM-01). Ein 0.0 hier vergiftet die ganze
