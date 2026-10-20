@@ -256,3 +256,51 @@ def test_die_oberflaeche_hat_das_auswahlfeld():
     assert tag, 'Feld meter-einheit fehlt'
     assert 'value="m³"' in tag.group(1) and 'value="kWh"' in tag.group(1)
     assert 'Maßeinheit' in html
+
+
+# --- Wer die Einheit nennt, muss sie vom Zähler nehmen ------------------------
+# Befund aus der Durchsicht vor 0.16.0: die Zählerliste nahm die Einheit vom
+# Zähler, zwei andere Wege leiteten sie weiter aus der Kostenart ab. Für den
+# Aufbau aus Issue #32 (Warmwasser Nr. 5, Wärmemengenzähler in kWh) hieß das:
+# dieselbe Zahl, drei Mal gezeigt, zwei Mal mit der falschen Einheit daneben.
+
+
+def _wmz_mit_ablesungen(auth_client):
+    """Ein Warmwasserzähler (Nr. 5), der kWh misst, mit zwei Ablesungen."""
+    from nebenkostenfix.models import CostCategory
+    from tests import billing_factories as f
+    haus = f.house()
+    wohnung = f.apt(haus, 'EG links', 60.0)
+    warmwasser = CostCategory.query.filter_by(betrkv_nr=5).first()
+    antwort = auth_client.post('/api/meters', data={
+        'category_id': warmwasser.id, 'property_id': haus.id,
+        'apartment_id': wohnung.id, 'meter_number': 'WMZ-API-1',
+        'einheit': 'kWh'})
+    assert antwort.status_code == 201, antwort.get_json()
+    zaehler_id = antwort.get_json()['id']
+    for datum, wert in (('2025-01-01', 1000), ('2025-12-31', 2400)):
+        a = auth_client.post('/api/readings', data={
+            'meter_id': zaehler_id, 'reading_date': datum, 'value': wert})
+        assert a.status_code == 201, a.get_json()
+    return wohnung, zaehler_id
+
+
+def test_die_ableseliste_nennt_die_einheit_des_zaehlers(auth_client, app_ctx):
+    """``GET /api/readings`` darf nicht wieder aus der Kostenart ableiten."""
+    _wmz_mit_ablesungen(auth_client)
+    zeilen = [z for z in auth_client.get('/api/readings').get_json()
+              if z['meter_number'] == 'WMZ-API-1']
+    assert zeilen, 'keine Ablesung gefunden'
+    for zeile in zeilen:
+        assert zeile['einheit'] == 'kWh', zeile
+
+
+def test_der_eigenverbrauch_nennt_die_einheit_des_zaehlers(auth_client, app_ctx):
+    """Die Verbrauchsübersicht einer Wohnung ebenso."""
+    wohnung, _ = _wmz_mit_ablesungen(auth_client)
+    antwort = auth_client.get(f'/api/analytics/apartment/{wohnung.id}')
+    assert antwort.status_code == 200, antwort.get_json()
+    zeilen = antwort.get_json().get('own_consumption') or []
+    assert zeilen, 'kein Eigenverbrauch berechnet'
+    for zeile in zeilen:
+        assert zeile['unit'] == 'kWh', zeile

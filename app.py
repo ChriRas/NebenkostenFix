@@ -1782,10 +1782,7 @@ def get_meters():
             'category_id': m.category_id,
             'category_name': m.category.name,
             # NK-220 (V3): dieselbe Einheit, mit der die Abrechnung rechnet.
-            # Phase 55: sie steht jetzt am Zaehler. Der Rueckfall auf die
-            # Ableitung bleibt fuer Objekte ohne das Feld -- nach der
-            # Wanderung e8b4a7c25f91 ist das derselbe Wert.
-            'einheit': m.einheit or einheit_fuer(m.category.name, m.category.betrkv_nr),
+            'einheit': _einheit_am_zaehler(m),
             'property_id': m.property_id,
             'property_name': m.property.name,
             'apartment_id': m.apartment_id,
@@ -1814,6 +1811,19 @@ def _anlage_pruefen(heizungsanlage_id, property_id):
         raise EingabeFehler(
             'Der Zähler kann nur eine Anlage derselben Immobilie messen.',
             'heizungsanlage_id')
+
+def _einheit_am_zaehler(zaehler):
+    """Die Masseinheit, die dieser Zaehler anzeigt (Phase 55).
+
+    Sie steht seit der Wanderung e8b4a7c25f91 am Zaehler. Der Rueckfall auf
+    die Ableitung aus der Kostenart bleibt fuer Objekte ohne das Feld -- nach
+    der Wanderung ist das derselbe Wert. Jeder Weg, der eine Einheit zu einem
+    Zaehler nennt, geht hierdurch: sonst zeigt ein Warmwasser-Waermemengen-
+    zaehler (Issue #32) an einer Stelle kWh und an der naechsten m3.
+    """
+    return zaehler.einheit or einheit_fuer(
+        zaehler.category.name, zaehler.category.betrkv_nr)
+
 
 def _zaehlereinheit(eingabe, kategorie_id):
     """Die Einheit des Zaehlers -- gewaehlt oder aus der Kostenart.
@@ -1984,7 +1994,7 @@ def get_readings():
             'meter_id': r.meter_id,
             'meter_number': r.meter.meter_number,
             'category_name': r.meter.category.name,
-            'einheit': einheit_fuer(r.meter.category.name, r.meter.category.betrkv_nr),
+            'einheit': _einheit_am_zaehler(r.meter),
             'property_name': r.meter.property.name,
             'apartment_name': r.meter.apartment.name if r.meter.apartment else None,
             'reading_date': r.reading_date.isoformat(),
@@ -4884,7 +4894,7 @@ def analytics_apartment(apartment_id):
                     'period': period_str,
                     'category': cat_name,
                     'value': round(diff, 2),
-                    'unit': _get_unit(cat_name)
+                    'unit': _einheit_am_zaehler(m)
                 })
     tenants = Tenant.query.filter_by(apartment_id=apartment_id).all()
     tenant_ids = [t.id for t in tenants]
