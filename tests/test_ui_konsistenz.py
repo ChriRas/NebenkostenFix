@@ -661,3 +661,22 @@ def test_waechter_uebergeht_von_js_gefuellte_felder():
     über Fremdschlüssel geprüft, nicht über eine Liste."""
     assert _festmenge_selects('<select id="invoice-tenant"></select>') == {}
     assert _festmenge_selects('<select id="x"><option value="">Bitte wählen</option></select>') == {}
+
+
+def test_das_feld_des_paragraf_7_erklaert_seinen_grauen_zustand():
+    """Befund aus Issue #32: das graue Feld muss sagen, was fehlt.
+
+    Der Posten nach § 7 Abs. 2 ist gesperrt, solange keine Heizungsanlage
+    gewählt ist -- fachlich richtig, denn ohne Anlage gibt es keinen Posten
+    zu verteilen. Der Melder von Issue #32 sah nur das graue Feld und den
+    Fehler beim Übernehmen und fragte: „Wie kann ich diesem Fehler
+    entgegenwirken?" Die Logik war schon damals richtig; gefehlt hat der
+    Satz, der ihn zur Anlage führt.
+    """
+    seite = INDEX.read_text(encoding="utf-8")
+    block = seite[seite.index('id="invoice-heizkostenart"'):][:600]
+    assert 'id="hilfe-heizkostenart"' in block, 'kein Hilfetext am Feld'
+    hinweis = block[block.index('id="hilfe-heizkostenart"'):]
+    hinweis = hinweis[hinweis.index('>') + 1:hinweis.index('</small>')]
+    assert 'Heizungsanlage' in hinweis, hinweis
+    assert 'feld-hilfe' in block, 'der Hinweis traegt nicht die uebliche Klasse'
