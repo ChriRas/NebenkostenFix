@@ -195,6 +195,10 @@ def _zaehler(meter: Meter, readings, auszugstage=frozenset()) -> Zaehler:
         staende=_staende(readings, auszugstage),
         heizungsanlage_id=meter.heizungsanlage_id,
         ersetzt_id=meter.ersetzt_id,
+        # Was das Geraet anzeigt (Phase 55). None heisst: die Kostenart
+        # gibt es vor -- so steht es bei jedem Zaehler, den die Wanderung
+        # nicht ausdruecklich anders eingetragen hat.
+        einheit=meter.einheit,
     )
 
 

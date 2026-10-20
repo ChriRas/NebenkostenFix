@@ -43,6 +43,7 @@ kern:
 	  -o addopts="" -p no:cacheprovider \
 	  tests/test_rechenkern.py tests/test_billing_engine_characterization.py \
 	  tests/test_heizkostenverteilung.py tests/test_warmwassertrennung.py \
+	  tests/test_waermepumpe_warmwasser.py \
 	  tests/test_allgemeinanteil_zeitschnitt.py \
 	  tests/test_leerstand_personenschluessel.py \
 	  tests/test_zwischenablesung.py tests/test_co2_aufteilung.py \

@@ -25,6 +25,11 @@
   "satz": "Der Zähler des Versorgers für das ganze Haus; nach ihm stellt der Versorger seine Rechnung."
  },
  {
+  "schluessel": "waermemengenzaehler",
+  "begriff": "Wärmemengenzähler",
+  "satz": "Ein Zähler, der Kilowattstunden Wärme misst statt Kubikmeter. Bei einer Wärmepumpe darf damit auch das Warmwasser erfasst werden (§ 9 Abs. 2 Satz 1 HeizkostenV); tragen Sie beim Zähler dann „kWh“ als Maßeinheit ein."
+ },
+ {
   "schluessel": "kaltmiete",
   "begriff": "Kaltmiete-Soll",
   "satz": "Die vereinbarte Kaltmiete mit ihrem Stichtagsverlauf; das Modal stellt sie den erfassten Mietzahlungen je Monat gegenüber. Gezählt wird nur, was als Zahlung vom Typ „Miete\" erfasst ist — kein Kontoabgleich. Künftige Stufen sind als geplant markiert."

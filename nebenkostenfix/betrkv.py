@@ -47,6 +47,7 @@ __all__ = [
     'FRUEHERE_NAMEN',
     'EINHEITEN',
     'EINHEITEN_ZAEHLER',
+    'NUMMERN_WARMWASSER',
     'RUBRIKEN',
     'BEREICHE',
     'BetrKVFehler',
@@ -448,6 +449,19 @@ def katalogeintrag(name) -> dict:
 #: uebliche Aufbau) hatte damit keinen Platz. Jetzt steht sie am Zaehler,
 #: und diese Liste ist die Autoritaet dafuer.
 EINHEITEN_ZAEHLER = ('m³', 'kWh')
+
+#: Die Kostenarten, deren Zaehler das **Warmwasser** erfassen und damit
+#: nach § 8 HeizkostenV verteilt werden -- Nr. 2 Wasserversorgung, Nr. 3
+#: Entwaesserung, Nr. 5 Warmwasser. Alles andere an einer Heizungsanlage
+#: zaehlt die Waerme (§ 7); namentlich die Nr. 6 der verbundenen Anlage,
+#: die "Warmwasser" heisst und trotzdem Kilowattstunden misst.
+#:
+#: Das ist eine Aussage ueber den **Zweck**, nicht ueber die Masseinheit.
+#: Bis Phase 55 entschied sie dieselben Faelle mittelbar -- genau diese
+#: drei Nummern sind die Kubikmeter-Nummern in ``EINHEITEN`` --, aber seit
+#: der Zaehler seine Einheit selbst tragen kann, faellt das auseinander:
+#: ein Warmwasser-Waermemengenzaehler (Nr. 5, kWh) bleibt § 8.
+NUMMERN_WARMWASSER = (2, 3, 5)
 
 EINHEITEN = {
     1: 'Einheiten',

@@ -257,6 +257,15 @@ class Zaehler:
     ersetzt_id: Optional[int] = None
     # Die Wechsel, aus denen verkette() diese Kette gebaut hat, nach Datum.
     wechsel: tuple = ()
+    # Was dieser Zaehler misst (Phase 55) -- 'm³' oder 'kWh', oder None.
+    # None heisst: nimm, was die Kostenart vorgibt; so rechnen alle
+    # Bestandszaehler weiter wie bisher. Gesetzt wird das Feld, wo die
+    # Kostenart nicht passt: ein Warmwasser-Waermemengenzaehler misst
+    # Kilowattstunden (§ 9 Abs. 2 Satz 1 HeizkostenV), obwohl Nr. 5 im
+    # Katalog eine Kubikmeter-Kostenart ist. Es aendert **nur** die
+    # Angabe in der Abrechnung, nie die Zuordnung zu § 7 oder § 8 --
+    # die entscheidet der Zweck, siehe ist_warmwasserzaehler.
+    einheit: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -612,6 +621,25 @@ def zaehler_vorhanden(vorgang: Vorgang, kategorie_id: int) -> bool:
 # ---------------------------------------------------------------------------
 # Einheiten und Belege
 # ---------------------------------------------------------------------------
+
+
+def zaehler_einheit(zaehler) -> str:
+    """Die Masseinheit, die dieser Zaehler anzeigt.
+
+    Erst das Feld am Zaehler (Phase 55), dann die Ableitung aus der
+    Kostenart. So rechnet jeder Bestandszaehler unveraendert weiter -- die
+    Wanderung ``e8b4a7c25f91`` hat ihm genau die abgeleitete Einheit
+    eingetragen --, und wer ein Geraet hat, das die Kostenart nicht
+    vorhersieht, traegt sie von Hand ein.
+
+    Die Einheit ist eine **Angabe**, keine Rechengroesse: sie steht in der
+    Abrechnung, damit der Mieter den Rechenweg lesen kann (R-DOC-01). Die
+    Verteilung selbst ist einheitenneutral, weil der Anteil
+    ``eigener / gesamt`` sich herauskuerzt. Welche Vorschrift gilt, sagt
+    ``ist_warmwasserzaehler`` -- und das haengt am Zweck, nicht hier.
+    """
+    return zaehler.einheit or einheit_fuer(
+        zaehler.kategorie_name, zaehler.kategorie_betrkv_nr)
 
 
 def einheit_fuer(kategorie_name: str, betrkv_nr: Optional[int] = None) -> str:
@@ -1068,7 +1096,7 @@ def verbrauch_in(zaehler: Zaehler, von: date, bis: date) -> dict:
     Winteranteil eines Ablesejahrs traegt den Grossteil der Waerme. Die
     Auskunft sagt es mit ``gradtage``. Wasser und Strom bleiben linear.
     """
-    einheit = einheit_fuer(zaehler.kategorie_name, zaehler.kategorie_betrkv_nr)
+    einheit = zaehler_einheit(zaehler)
     heiz = ist_heizwaermezaehler(zaehler)
 
     def wirksame_tage(a: date, b: date, basis_von: date, basis_bis: date) -> Decimal:
@@ -1784,15 +1812,25 @@ def ist_heizwaermezaehler(zaehler) -> bool:
 def ist_warmwasserzaehler(zaehler) -> bool:
     """Ob dieser Zaehler das Warmwasser erfasst und nicht die Waerme.
 
-    Entschieden wird nach der Einheit: ein Warmwasserzaehler zaehlt
-    Kubikmeter, ein Waermezaehler Kilowattstunden. Das ist kein Kunstgriff,
-    sondern der Unterschied der beiden Vorschriften -- § 8 verteilt nach
-    Kubikmetern Warmwasser, § 7 nach erfasster Waerme. Die Einheit kommt
-    aus der BetrKV-Nummer (NK-121): der Wärmezähler der verbundenen Anlage
-    (Nr. 6) heisst "Warmwasser" und bleibt trotzdem Wärmezähler.
+    Entschieden wird nach dem **Zweck** der Kostenart, nicht nach der
+    Masseinheit: ``betrkv.NUMMERN_WARMWASSER`` zaehlt die drei Nummern auf,
+    deren Zaehler nach § 8 verteilt werden. Der Wärmezähler der verbundenen
+    Anlage (Nr. 6) heisst "Warmwasser" und bleibt trotzdem § 7 (NK-121).
+
+    Bis Phase 55 stand hier die Einheit, und sie entschied dieselben Faelle
+    -- Nr. 2, 3 und 5 sind genau die Kubikmeter-Nummern. Seit der Zaehler
+    seine Einheit selbst tragen kann, faellt das auseinander: ein
+    Warmwasser-Waermemengenzaehler (Nr. 5, kWh nach § 9 Abs. 2 Satz 1, bei
+    Waermepumpen der uebliche Aufbau) gehoert in den Nenner des § 8, nicht
+    in den des § 7. Wuerde die Einheit entscheiden, zahlte der Mieter
+    Heizkosten nach seinem Warmwasserverbrauch.
+
+    Ein Zaehler ohne Nummer -- eine Probe ohne Katalog, ein von Hand
+    gebauter Testzaehler -- faellt auf die alte Ableitung zurueck.
     """
-    return einheit_fuer(
-        zaehler.kategorie_name, zaehler.kategorie_betrkv_nr) == 'm³'
+    if zaehler.kategorie_betrkv_nr is not None:
+        return zaehler.kategorie_betrkv_nr in betrkv.NUMMERN_WARMWASSER
+    return einheit_fuer(zaehler.kategorie_name, None) == 'm³'
 
 
 def _anlagenzaehler(vorgang: Vorgang, anlage_id: int,
@@ -2044,18 +2082,31 @@ def _verteilzeile(vorgang: Vorgang, anlage, rechnungen: Sequence[Rechnung],
     # der die Wahrheit sagt: der Anteil der uebrigen waere zu hoch.
     ohne_zaehler = [w.name for w in wohnungen if w.id not in zaehler]
 
+    # Phase 55: alle Zaehler eines Nenners muessen dieselbe Masse zeigen.
+    # Seit die Einheit am Zaehler steht, kann ein Nenner gemischt sein --
+    # beim Umbau etwa, wenn eine Wohnung schon den Waermemengenzaehler hat
+    # und die andere noch den Wasserzaehler. Die Summe waere eine Zahl ohne
+    # Bedeutung, und der Anteil daran verschiebt Geld zwischen den Mietern.
+    # Behandelt wird das wie ein fehlender Zaehler: nach Flaeche, mit Grund.
+    masse_im_nenner = sorted({zaehler_einheit(z) for z in zaehler.values()})
+    gemischte_masse = masse_im_nenner if len(masse_im_nenner) > 1 else []
+
     # Derselbe Satz fuer beide Zwecke: § 8 Abs. 1 verweist fuer die
     # Warmwasserkosten auf denselben Rahmen wie § 7 Abs. 1. Ein zweiter Satz
     # waere ein zweites Feld -- und eine Angabe, die kaum jemand pflegt.
     satz = heizung.pruefe_anteil(
         anlage.verbrauchsanteil_prozent, anlage.sonderfall_70)
     eigener = eigener_zaehler is not None
-    einheit = einheit_fuer(
-        eigener_zaehler.kategorie_name if eigener
-        else ('Warmwasser' if zweck == heizung.WARMWASSER else 'Waerme'),
-        eigener_zaehler.kategorie_betrkv_nr if eigener
-        else (betrkv.NR_WARMWASSER if zweck == heizung.WARMWASSER
-              else betrkv.NR_HEIZUNG))
+    # Die Einheit kommt vom eigenen Zaehler, wenn es einen gibt -- sie ist
+    # die Angabe, die der Mieter in seiner Zeile liest (Phase 55). Ohne
+    # eigenen Zaehler bleibt der Katalog die Quelle; dann steht in der Zeile
+    # ohnehin kein gemessener Verbrauch.
+    einheit = (
+        zaehler_einheit(eigener_zaehler) if eigener
+        else einheit_fuer(
+            'Warmwasser' if zweck == heizung.WARMWASSER else 'Waerme',
+            betrkv.NR_WARMWASSER if zweck == heizung.WARMWASSER
+            else betrkv.NR_HEIZUNG))
 
     verbrauchsanteil = NULL
     flaechenanteil = NULL
@@ -2163,9 +2214,11 @@ def _verteilzeile(vorgang: Vorgang, anlage, rechnungen: Sequence[Rechnung],
         gesamtverbrauch += summe_zaehler
         eigener_verbrauch += eigen
 
-        erfasst = not ohne_zaehler and summe_zaehler > 0
+        erfasst = (not ohne_zaehler and not gemischte_masse
+                   and summe_zaehler > 0)
         if not erfasst:
-            ohne_staende = ohne_staende or not ohne_zaehler
+            ohne_staende = (ohne_staende or
+                            not (ohne_zaehler or gemischte_masse))
             # Kein erfasster Verbrauch heisst nicht: keine Verteilung. Die
             # Kosten sind angefallen und muessen getragen werden. Sie gehen
             # dann ganz nach Flaeche -- mit einer Warnung, denn dem Mieter
@@ -2292,6 +2345,9 @@ def _verteilzeile(vorgang: Vorgang, anlage, rechnungen: Sequence[Rechnung],
         fehlgrund = heizung.OHNE_ZAEHLER.format(
             zaehler=heizung.ZAEHLERART[zweck],
             wohnungen=', '.join(ohne_zaehler))
+    elif gemischte_masse:
+        fehlgrund = heizung.GEMISCHTE_MASSE.format(
+            masse=' und '.join(gemischte_masse))
     elif ohne_staende:
         fehlgrund = heizung.OHNE_STAENDE
 
