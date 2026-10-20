@@ -25,17 +25,16 @@ Die Nebenkostenabrechnung für private Vermieter. Kostenlos, und Ihre Daten blei
 
 ## Neuerungen in dieser Version
 
-Version 0.15.0: Neues Design mit vier Arbeitsbereichen, Beleg-Eingang und Zählern mit Detailbereich. Die Rechenregeln bleiben unverändert.
+Version 0.16.0: Eigene Kostenarten, die Miete im Blick und die Maßeinheit am Zähler. Die Rechenregeln sind unverändert, bis auf einen behobenen Fehler bei gemischten Maßeinheiten.
 
-- Die Seitenleiste ordnet die App in Heute, Haus, Kosten und Abrechnung. „Heute“ sammelt offene Aufgaben, die Befehlspalette (Strg+K) findet jede Seite.
-- Im Beleg-Eingang stehen Belegliste, Beleg und Rechnungsformular nebeneinander, der nächste Beleg rückt nach. „Heute“ zeigt Belege ohne Rechnung.
-- Der Beleg-Viewer blättert, zoomt und zeigt die Seitenzahl, auch bei PDF-Belegen.
-- Zähler erscheinen als Liste mit Detailbereich und Verlauf.
-- Der Immobilienfilter im Kopf gilt für die ganze App. Hilfe, Drucken und Abmelden liegen im Kontomenü.
-- Die Abrechnungstabelle zeigt das Ergebnis oben, die Kostenarten lassen sich aufklappen.
-- Tabellen sortieren per Klick, eine Einführung führt durch die leere App, der Dunkelmodus lässt sich bei den Einstellungen einschalten.
-- Kostenart Nr. 11 heißt jetzt „Allgemeinstrom“. Der unveränderte Standardname wird beim Update umbenannt, eigene Namen bleiben.
-- Erzeugte PDFs und der GiroCode nutzen die Farben der App.
+- Sie legen eigene Kostenarten an und benennen vorhandene um, damit die Namen zu Ihrer Abrechnung passen. Jede gehört zu einer Nummer aus § 2 BetrKV, mehrere dürfen sich eine Nummer teilen.
+- Zur Kaltmiete tragen Sie ein Soll je Stichtag ein. Eine künftige Mieterhöhung legen Sie im Voraus an, sie erscheint als „geplant“. Eine Monatsübersicht stellt Soll, Ist und Differenz gegenüber.
+- Jede Abrechnung zeigt ihren Zahlungsstand: offen, teilweise beglichen oder beglichen. Eine Zahlung gehört immer zu einer Abrechnung desselben Mieters.
+- Am Zähler steht jetzt die Maßeinheit. Ein Warmwasserzähler, der Kilowattstunden misst, ist damit erfassbar; bei Wärmepumpen ist das der übliche Aufbau.
+- Die Hausgeldabrechnung Ihrer Verwaltung lässt sich nachrechnen: welche Position umlagefähig ist, was auf Ihren Anteil entfällt, ob die Summen stimmen.
+- Behoben: Der Posten nach § 7 Abs. 2 HeizkostenV ließ sich nicht wählen. Er öffnet sich, sobald die Heizungsanlage gewählt ist.
+- Behoben: Zähler mit verschiedenen Maßeinheiten unter einer Kostenart wurden zusammengezählt. Jetzt verteilt die Abrechnung nach Wohnfläche und weist darauf hin.
+- Neu: eine Warnung, wenn eine Heizkostenrechnung weder einer Wohnung noch einer Anlage zugeordnet ist.
 
 ## Produktmerkmale
 
