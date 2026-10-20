@@ -47,6 +47,17 @@ def test_schalttag_klemmt_auch():
     assert fristenkalender.mietanpassung(D(2024, 2, 29), indexmiete=True) == D(2025, 2, 28)
 
 
+def test_ohne_stichtag_sagt_die_frist_was_fehlt():
+    """Kein Datum, keine Frist -- und kein roher AttributeError.
+
+    ``termine`` reicht nur Kaltmieten mit ``gueltig_ab`` weiter, aber die
+    Funktion ist oeffentlich. Wer sie ohne Stichtag ruft, soll lesen, was
+    fehlt, statt den Kalender abstuerzen zu sehen.
+    """
+    with pytest.raises(TypeError, match='Stichtag'):
+        fristenkalender.mietanpassung(None)
+
+
 def test_termine_nennen_die_frueheste_erhoehung():
     termine = fristenkalender.termine([], [], [], [], D(2024, 4, 1),
                                       kaltmiete=[(7, 'Mieter A', D(2024, 3, 15), False)])

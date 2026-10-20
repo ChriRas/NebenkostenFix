@@ -45,7 +45,14 @@ def mietanpassung(letzte: date, indexmiete: bool = False) -> date:
     § 558 BGB: mindestens 15 Monate muessen seit der letzten Erhoehung
     vergangen sein -- am 15-Monats-Tag selbst ist es so weit. Bei der
     Indexmiete nach § 557b BGB reicht ein Jahr seit der letzten Aenderung.
+
+    Ohne Stichtag gibt es keine Frist. ``termine`` sammelt nur Kaltmieten
+    mit ``gueltig_ab``, aber die Funktion ist oeffentlich -- ein fehlendes
+    Datum soll sagen, was fehlt, statt im Kalender abzustuerzen.
     """
+    if not isinstance(letzte, date):
+        raise TypeError('Die Mietanpassung braucht den Stichtag der letzten '
+                        'Erhöhung als Datum.')
     return _monate_weiter(letzte, 12 if indexmiete else 15)
 
 
