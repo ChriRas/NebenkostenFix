@@ -43,6 +43,9 @@ kern:
 	  -o addopts="" -p no:cacheprovider \
 	  tests/test_rechenkern.py tests/test_billing_engine_characterization.py \
 	  tests/test_heizkostenverteilung.py tests/test_warmwassertrennung.py \
+	  tests/test_waermepumpe_warmwasser.py \
+	  tests/test_hausgeld.py \
+	  tests/test_heizkosten_ohne_zuordnung.py \
 	  tests/test_allgemeinanteil_zeitschnitt.py \
 	  tests/test_leerstand_personenschluessel.py \
 	  tests/test_zwischenablesung.py tests/test_co2_aufteilung.py \
@@ -54,7 +57,8 @@ kern:
 	  tests/test_allgemein_messabschnitte.py tests/test_allgemein_negativ.py \
 	  tests/test_zahlformat_umlage.py tests/test_lohnausweis_35a.py \
 	  tests/test_vorauszahlung.py tests/test_vorauszahlung_soll_ist.py tests/test_jahressprung.py \
-	  tests/test_fristenkalender.py \
+	  tests/test_zahlungsstand.py \
+	  tests/test_fristenkalender.py tests/test_kaltmiete_soll.py \
 	  tests/test_mehrjahresblick.py \
 	  tests/test_jahreswechsel.py \
 	  tests/test_pruefstand.py \

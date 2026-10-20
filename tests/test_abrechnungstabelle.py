@@ -245,13 +245,13 @@ def test_jede_klasse_hat_eine_regel_mit_tokens():
     assert klassen, 'keine abr-Klassen gefunden'
     ohne_regel = sorted(k for k in klassen - ANKER if not re.search(rf'\.{k}\b', CSS))
     assert ohne_regel == []
-    block = CSS[CSS.index('/* Eine Abrechnungstabelle'):]
+    block = CSS[CSS.index('/* eine Abrechnungstabelle'):]
     assert re.findall(r'#[0-9a-fA-F]{3,8}\b|\brgba?\(|\bhsla?\(', block) == []
 
 
 def test_handy_zeilen_als_raster_ohne_seitliches_scrollen():
     """Bei 390 px liefen drei Spalten über (Tabelle 350 px, Rahmen 286 px)."""
-    block = CSS[CSS.index('/* Eine Abrechnungstabelle'):]
+    block = CSS[CSS.index('/* eine Abrechnungstabelle'):]
     handy = block[block.index('@media (max-width: 560px)'):]
     assert re.search(r'\.abr-tabelle tr\s*\{[^}]*display:\s*grid', handy)
     assert re.search(r'grid-template-columns:\s*minmax\(0,\s*1fr\)\s+auto', handy)

@@ -18,7 +18,7 @@ import doctest
 
 import pytest
 
-from nebenkostenfix import betrkv
+from nebenkostenfix import abrechnungsart, betrkv
 from nebenkostenfix.betrkv import (
     BEZEICHNUNGEN,
     KATALOG,
@@ -80,8 +80,8 @@ def test_niederschlagswasser_ist_eigener_eintrag_nach_flaeche():
     """
     nr3 = {p['name']: p for p in KATALOG if p['nr'] == 3}
     assert set(nr3) == {'Entwässerung', 'Niederschlagswasser'}
-    assert nr3['Entwässerung']['verteilung'] == 'METER_READING'
-    assert nr3['Niederschlagswasser']['verteilung'] == 'PER_SQM'
+    assert nr3['Entwässerung']['verteilung'] == 'qm'
+    assert nr3['Niederschlagswasser']['verteilung'] == 'qm'
     assert nr3['Niederschlagswasser']['zaehler'] is False
 
 
@@ -112,9 +112,13 @@ def test_seed_namen_passen_in_die_spalte():
         assert len(posten['name']) <= 100, posten['name']
 
 
-def test_seed_kennt_nur_die_drei_umlagewege():
+def test_seed_kennt_nur_gueltige_umlagewege():
+    """Der Katalog schreibt nur Werte, die abrechnungsart.ARTEN kennt. Der
+    Seed trug seit je ``PER_SQM``/``METER_READING`` -- nichts, das eine der
+    fuenf Arten versteht; sichtbar wurde es erst, als die Kostenarten-Tabelle
+    (Phase 54) die Spalte zeigte. Der Test schliesst den Weg wieder."""
     for posten in KATALOG:
-        assert posten['verteilung'] in ('PER_SQM', 'PER_ACTIVE_HEAD', 'METER_READING')
+        assert posten['verteilung'] in abrechnungsart.GUELTIG, posten
         assert isinstance(posten['zaehler'], bool)
 
 
@@ -291,7 +295,7 @@ def test_die_verbundene_anlage_geht_nicht_an_warmwasser():
 
 
 def test_nr_11_heisst_in_der_oberflaeche_allgemeinstrom():
-    """Der Name "Beleuchtung (Allgemeinstrom)" stand im Katalog und damit in
+    """"Beleuchtung (Allgemeinstrom)" stand im Katalog und damit in
     jeder Abrechnung. Der Name ist jetzt "Allgemeinstrom"; das Wort
     "Beleuchtung" bleibt nur als amtliche Kurzform in BEZEICHNUNGEN und als
     Erkennungswort fuer den Import."""

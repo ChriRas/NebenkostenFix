@@ -103,8 +103,10 @@ def test_index_nutzt_die_designklassen_statt_inline_farben():
     assert 'class="btn-gefahr"' in html
     assert 'btn-secondary btn-tint' in html
     # NK-144: zwei Auswahlpillen im Rechnungen-Tab (Liste / Zeitleiste);
-    # NK-156: fünf Gruppen der Einstellungen; Rechnungen: Eingang / Alle / Nach Kostenart.
-    assert len(re.findall(r'class="filter-pill', html)) == 15
+    # NK-156: fünf Gruppen der Einstellungen (K8); Eingang / Alle / Nach Kostenart;
+    # Phase 47: „Nur offene Zahlungen“ in der Historie; Phase 54: sechste
+    # Einstellungs-Gruppe „Kostenarten“.
+    assert len(re.findall(r'class="filter-pill', html)) == 17
 
 
 def test_kein_off_palette_farbliteral_in_inline_styles():
@@ -387,3 +389,294 @@ def test_kopfaktionen_am_handy_im_menue():
     titel = re.search(r"\.section-header > div:first-child \{([^}]*)\}", schmal)
     assert titel and "min-width: 0" in titel.group(1) and "flex: 1 1 0" in titel.group(1)
     assert re.search(r"\.kopf-menue-knopf \{\s*display: inline-flex;\s*align-self: flex-start;", schmal)
+
+
+# --- Re-Review der Phasen 47/49/53/54 (2026-10-18) -----------------------------
+
+def test_kostenart_modal_nutzt_die_designfelder():
+    """Das Modal nutzt .form-group wie die übrige App: .feld ohne Styling
+    ließ das Namensfeld wie einen Browser-Standard (XP-Look) aussehen."""
+    html = (BASIS / 'static' / 'index.html').read_text(encoding='utf-8')
+    block = html.split('id="kategorie-modal"', 1)[1].split('<!-- ', 1)[0]
+    assert 'class="feld"' not in block
+    assert 'class="form-group"' in block
+
+
+def test_die_kostenart_fragt_nicht_nach_der_umlage():
+    """Die Umlage-Spalte der Kostenart ist keine Abrechnungsentscheidung --
+    das Blatt liest das Kostenprofil des Mieters. Nach dem Re-Review fragt
+    die Oberfläche sie nicht mehr: kein Feld im Modal, keine Spalte in der
+    Tabelle, keine Liste im Quelltext. Ein Feld, das nichts bewirkt, ist
+    der reinste Verwirrungs-Generator."""
+    html = (BASIS / 'static' / 'index.html').read_text(encoding='utf-8')
+    block = html.split('id="kategorie-modal"', 1)[1].split('<!-- ', 1)[0]
+    assert 'kategorie-verteilung' not in block
+    assert 'kategorie-heizhinweis' not in block
+    karten_block = html.split('data-gruppe="kostenarten"', 1)[1].split('data-gruppe="konto"', 1)[0]
+    assert '<th>Umlage</th>' not in karten_block
+    js = (BASIS / 'static' / 'app.js').read_text(encoding='utf-8')
+    assert 'KATEGORIE_VERTEILUNGEN' not in js
+
+
+def test_kostenarten_karte_nimmt_die_volle_breite():
+    """Die Einzelkarte der Kostenarten-Gruppe streckt sich über das ganze
+    Einstellungs-Raster, statt als 600-px-Spalte ihre Tabelle querrollen zu
+    lassen -- die übrigen Gruppen behalten ihr bestehendes Raster."""
+    css = (BASIS / 'static' / 'style.css').read_text(encoding='utf-8')
+    assert '.einstellungs-raster > .dashboard-card[data-gruppe="kostenarten"]' in css
+    assert 'grid-column: 1 / -1' in css
+
+
+def test_soll_ist_liste_gruppiert_jahresweise():
+    """Die Soll/Ist-Tabelle von Vorauszahlungen und Kaltmiete gruppiert je
+    Jahr: Kopfzeile mit Summen, Monate dahinter, aufklappbar statt 90
+    Zeilen zum Scrollen seit dem Einzug."""
+    js = (BASIS / 'static' / 'app.js').read_text(encoding='utf-8')
+    for merkmal in ('jahr-kopf', 'jahr-zeile', 'jahrUmschalten',
+                    'data-jahr=', 'data-ziel='):
+        assert merkmal in js, merkmal
+
+
+# ---------------------------------------------------------------------------
+# Live-Issue #32: Umschalter brauchen ihr Ereignis am Steuerfeld
+# ---------------------------------------------------------------------------
+# Ein Umschalter, der den Grundzustand eines abhaengigen Feldes sperrt oder
+# verbirgt, laeuft beim Oeffnen des Dialogs -- aber nur dann. Haengt er nicht
+# zusaetzlich am change-Ereignis seines Steuerfeldes, bleibt das abhaengige
+# Feld nach der Wahl gesperrt. Verlangt das Backend dessen Wert, ist der
+# Datensatz nicht speicherbar: genau die Sackgasse aus Issue #32.
+
+
+def _umschalter_bloecke(js: str) -> dict:
+    """Jede toggle*-Funktion aus app.js mit ihrem Rumpf."""
+    bloecke = {}
+    zeilen = js.split("\n")
+    for i, zeile in enumerate(zeilen):
+        treffer = re.match(r"^function (toggle\w*)\s*\(", zeile)
+        if not treffer:
+            continue
+        rumpf = []
+        for folge in zeilen[i + 1:]:
+            if folge.startswith("}"):
+                break
+            rumpf.append(folge)
+        bloecke[treffer.group(1)] = "\n".join(rumpf)
+    return bloecke
+
+
+def _gelesene_felder(rumpf: str) -> set:
+    """Die Felder, deren Wert der Umschalter liest -- nicht die, die er setzt."""
+    gelesen = set()
+    muster = r"getElementById\(['\"]([\w-]+)['\"]\)\s*\.(?:value|checked)\s*(={1,3})?"
+    for treffer in re.finditer(muster, rumpf):
+        if treffer.group(2) == "=":
+            continue  # eine Zuweisung: dieses Feld wird gesteuert, nicht gelesen
+        gelesen.add(treffer.group(1))
+    return gelesen
+
+
+def _hat_ereignis(html: str, js: str, feld: str) -> bool:
+    """Traegt das Feld einen Ereignis-Handler -- im HTML oder aus dem JS?"""
+    name = re.escape(feld)
+    for tag in re.finditer(r"<[^>]*\bid=\"" + name + r"\"[^>]*>", html):
+        if re.search(r"\bon(?:change|input|click)\s*=", tag.group(0)):
+            return True
+    direkt = (r"getElementById\(['\"]" + name
+              + r"['\"]\)\s*\.(?:onchange|oninput|onclick|addEventListener)")
+    if re.search(direkt, js):
+        return True
+    # der Umweg ueber eine Variable: const feld = getElementById(...); feld.onchange = ...
+    ueber_var = r"(?:const|let|var)\s+(\w+)\s*=\s*document\.getElementById\(['\"]" + name + r"['\"]\)"
+    for zuweisung in re.finditer(ueber_var, js):
+        hebel = re.escape(zuweisung.group(1))
+        if re.search(r"\b" + hebel + r"\s*\.(?:onchange|oninput|onclick|addEventListener)", js):
+            return True
+    return False
+
+
+def test_umschalter_haengen_am_steuerfeld():
+    """Jeder Umschalter haengt am change-Ereignis des Feldes, das ihn steuert.
+
+    Ohne das Ereignis laeuft er nur beim Oeffnen des Dialogs: das abhaengige
+    Feld bleibt gesperrt oder verborgen, und wenn das Backend dessen Wert
+    verlangt, laesst sich der Datensatz nicht speichern (Live-Issue #32).
+    """
+    js = _liest(APP)
+    html = _liest(INDEX)
+    offen = []
+    for name, rumpf in sorted(_umschalter_bloecke(js).items()):
+        for feld in sorted(_gelesene_felder(rumpf)):
+            if not _hat_ereignis(html, js, feld):
+                offen.append(f"{name}() liest #{feld}, aber #{feld} loest kein Ereignis aus")
+    assert offen == [], (
+        "Umschalter ohne Ereignis am Steuerfeld:\n  " + "\n  ".join(offen))
+
+
+def test_rechnung_posten_entsperrt_nach_der_anlagenwahl():
+    """Live-Issue #32: die Wahl der Heizungsanlage entsperrt den Posten.
+
+    populateInvoiceHeizung() sperrt das Posten-Feld als Grundzustand;
+    toggleInvoiceHeizkosten() entsperrt es wieder. Ohne das Ereignis am
+    Anlagen-Feld bleibt der Posten ausgegraut, und saveInvoice() lehnt die
+    Rechnung mit "braucht beides" ab.
+    """
+    tag = re.search(r'<select id="invoice-heizungsanlage"[^>]*>', _liest(INDEX))
+    assert tag, "Feld invoice-heizungsanlage fehlt"
+    assert "toggleInvoiceHeizkosten()" in tag.group(0), tag.group(0)
+
+
+def test_warmwasserweg_zeigt_seine_pflichtfelder():
+    """Der Wechsel des Warmwasser-Weges blendet die Pflichtfelder ein.
+
+    app.py verlangt beim Weg "zaehler" die kWh, bei "formel" Volumen und
+    Temperatur. Ohne das Ereignis bleibt die jeweilige Feldgruppe verborgen
+    und die Anlage ist nicht speicherbar -- dasselbe Muster wie Issue #32.
+    """
+    tag = re.search(r'<select id="heizung-ww-weg"[^>]*>', _liest(INDEX))
+    assert tag, "Feld heizung-ww-weg fehlt"
+    assert "toggleWwWeg()" in tag.group(0), tag.group(0)
+
+
+def test_waechter_findet_das_fehlende_ereignis():
+    """Negativprobe: der Waechter meldet ein Steuerfeld ohne Ereignis."""
+    js = ("function toggleProbe() {\n"
+          "    const wahl = document.getElementById('probe-feld').value;\n"
+          "    document.getElementById('probe-ziel').disabled = !wahl;\n"
+          "}\n")
+    bloecke = _umschalter_bloecke(js)
+    assert "toggleProbe" in bloecke
+    # nur das gelesene Feld zaehlt, nicht das gesteuerte
+    assert _gelesene_felder(bloecke["toggleProbe"]) == {"probe-feld"}
+    assert not _hat_ereignis('<select id="probe-feld"></select>', js, "probe-feld")
+    assert _hat_ereignis(
+        '<select id="probe-feld" onchange="toggleProbe()"></select>', js, "probe-feld")
+
+
+def test_waechter_haelt_zuweisungen_auseinander():
+    """Negativprobe: ein Feld, dem der Umschalter nur einen Wert setzt, ist
+    kein Steuerfeld -- sonst meldete der Waechter togglePaymentRecurring()
+    wegen des geleerten Enddatums."""
+    rumpf = ("    document.getElementById('a-feld').value = '';\n"
+             "    if (document.getElementById('b-feld').value === 'x') { }\n")
+    assert _gelesene_felder(rumpf) == {"b-feld"}
+
+
+# ---------------------------------------------------------------------------
+# Die zweite Bug-Klasse: ein Auswahlfeld ohne Pruefung im Backend
+# ---------------------------------------------------------------------------
+# Ein <select> hat eine geschlossene Wertemenge. Nimmt die Route seinen Wert
+# als freien Text an, laesst sich an der Oberflaeche vorbei jeder Wert setzen.
+# Steuert das Feld die Rechnung -- wie die Zahlungsart seit Phase 53 --, ist
+# das kein Schoenheitsfehler, sondern ein stiller Rechenfehler: der Datensatz
+# steht in der Liste und zaehlt in keiner Auswertung. Genau das war der Fall
+# bei POST /api/payments ('Kaltmiete' statt 'Miete').
+
+RUMPF = BASIS / 'app.py'
+
+
+def _festmenge_selects(html: str) -> dict:
+    """Jedes <select>, dessen Optionen im HTML stehen (nicht von JS gefuellt)."""
+    gefunden = {}
+    for treffer in re.finditer(r'<select[^>]*\bid="([\w-]+)"[^>]*>(.*?)</select>', html, re.S):
+        werte = [w for w in re.findall(r'<option[^>]*value="([^"]*)"', treffer.group(2)) if w]
+        if werte:
+            gefunden[treffer.group(1)] = werte
+    return gefunden
+
+
+def _text_lesungen(rumpf: str) -> dict:
+    """Feldname -> die Variablen, in die eingabe.text() ihn legt."""
+    lesungen = {}
+    for treffer in re.finditer(r"(\w+)\s*=\s*eingabe\.text\(\s*['\"]([\w_]+)['\"]", rumpf):
+        lesungen.setdefault(treffer.group(2), []).append(treffer.group(1))
+    return lesungen
+
+
+def _wird_geprueft(rumpf: str, feld: str, variablen: list) -> bool:
+    """Prueft die Route den Wert -- gegen eine Liste oder per pruefe_*-Funktion?"""
+    for name in variablen:
+        if re.search(rf'\b{re.escape(name)}\s+not\s+in\b', rumpf):
+            return True
+        if re.search(rf'pruefe_\w+\(\s*{re.escape(name)}\b', rumpf):
+            return True
+    # die Kurzform: pruefe_xyz(eingabe.text('feld', ...)) ohne Zwischenvariable
+    if re.search(rf"pruefe_\w+\(\s*\n?\s*eingabe\.text\(\s*['\"]{re.escape(feld)}['\"]", rumpf):
+        return True
+    return False
+
+
+def _paare(html: str, rumpf: str) -> list:
+    """(Feld-Id, Backend-Feldname, Variablen) fuer jedes Select, das die Route liest."""
+    gefunden = []
+    lesungen = _text_lesungen(rumpf)
+    for feld_id, _werte in sorted(_festmenge_selects(html).items()):
+        kurz = feld_id.split('-')[-1]
+        for feld, variablen in lesungen.items():
+            if feld == kurz or feld.endswith('_' + kurz) or kurz in feld:
+                gefunden.append((feld_id, feld, variablen))
+                break
+    return gefunden
+
+
+def test_auswahlfelder_werden_im_backend_geprueft():
+    """Jedes Auswahlfeld mit fester Wertemenge prüft das Backend nachweislich.
+
+    Ohne die Prüfung nimmt die Route an der Oberfläche vorbei jeden Text an.
+    Bei der Zahlungsart hieß das: eine Zahlung mit „Kaltmiete" statt „Miete"
+    stand in der Liste und zählte in keinem Soll/Ist — ein Rückstand, den es
+    nicht gibt. Die App prüft solche Felder sonst durchgehend, über
+    ``not in LISTE`` oder eine ``pruefe_*``-Funktion.
+    """
+    html, rumpf = _liest(INDEX), _liest(RUMPF)
+    paare = _paare(html, rumpf)
+    assert len(paare) >= 5, f'zu wenige Paare gefunden, Heuristik prüfen: {paare}'
+    offen = [f"#{fid} -> eingabe.text('{feld}') ohne Prüfung"
+             for fid, feld, variablen in paare
+             if not _wird_geprueft(rumpf, feld, variablen)]
+    assert offen == [], 'Auswahlfelder ohne Prüfung im Backend:\n  ' + '\n  '.join(offen)
+
+
+def test_die_zahlungsart_steht_in_der_liste_der_geprueften():
+    """Der Fall, der die Regel ausgelöst hat, ist von ihr erfasst."""
+    paare = _paare(_liest(INDEX), _liest(RUMPF))
+    assert ('payment-type', 'type', ['type_']) in paare
+
+
+def test_waechter_findet_ein_ungepruefte_auswahlfeld():
+    """Negativprobe: ohne Prüfung meldet der Wächter das Feld."""
+    html = '<select id="probe-art"><option value="a">A</option></select>'
+    ohne = "    art = eingabe.text('art', pflicht=True)\n"
+    mit_liste = ohne + "    if art not in ARTEN:\n        raise EingabeFehler('x', 'art')\n"
+    mit_funktion = "    art = eingabe.text('art')\n    pruefe_art(art)\n"
+    assert _paare(html, ohne) == [('probe-art', 'art', ['art'])]
+    assert not _wird_geprueft(ohne, 'art', ['art'])
+    assert _wird_geprueft(mit_liste, 'art', ['art'])
+    assert _wird_geprueft(mit_funktion, 'art', ['art'])
+
+
+def test_waechter_uebergeht_von_js_gefuellte_felder():
+    """Negativprobe: ein Select, das JS füllt, hat keine Wertemenge im HTML.
+
+    Solche Felder tragen Datenbank-Ids (Mieter, Immobilie, Anlage) und werden
+    über Fremdschlüssel geprüft, nicht über eine Liste."""
+    assert _festmenge_selects('<select id="invoice-tenant"></select>') == {}
+    assert _festmenge_selects('<select id="x"><option value="">Bitte wählen</option></select>') == {}
+
+
+def test_das_feld_des_paragraf_7_erklaert_seinen_grauen_zustand():
+    """Befund aus Issue #32: das graue Feld muss sagen, was fehlt.
+
+    Der Posten nach § 7 Abs. 2 ist gesperrt, solange keine Heizungsanlage
+    gewählt ist -- fachlich richtig, denn ohne Anlage gibt es keinen Posten
+    zu verteilen. Der Melder von Issue #32 sah nur das graue Feld und den
+    Fehler beim Übernehmen und fragte: „Wie kann ich diesem Fehler
+    entgegenwirken?" Die Logik war schon damals richtig; gefehlt hat der
+    Satz, der ihn zur Anlage führt.
+    """
+    seite = INDEX.read_text(encoding="utf-8")
+    block = seite[seite.index('id="invoice-heizkostenart"'):][:600]
+    assert 'id="hilfe-heizkostenart"' in block, 'kein Hilfetext am Feld'
+    hinweis = block[block.index('id="hilfe-heizkostenart"'):]
+    hinweis = hinweis[hinweis.index('>') + 1:hinweis.index('</small>')]
+    assert 'Heizungsanlage' in hinweis, hinweis
+    assert 'feld-hilfe' in block, 'der Hinweis traegt nicht die uebliche Klasse'

@@ -145,7 +145,12 @@ def test_der_lader_traegt_die_katalognummer_in_den_zaehler():
         id=7, meter_number='W-07', category_id=3,
         category=SimpleNamespace(name='Heizung', betrkv_nr=4),
         is_main_meter=True, property_id=1, apartment_id=None,
-        heizungsanlage_id=None, ersetzt_id=None)
+        heizungsanlage_id=None, ersetzt_id=None,
+        # Phase 55: das Modell hat das Feld, die Attrappe braucht es
+        # deshalb auch. None heisst "wie die Kostenart" -- der Fall, den
+        # dieser Test prueft. Der Lader liest streng und faellt nicht
+        # stillschweigend auf eine Vorgabe zurueck.
+        einheit=None)
     geladen = _zaehler(meter, [])
     assert geladen.kategorie_betrkv_nr == 4
     assert einheit_fuer(geladen.kategorie_name,

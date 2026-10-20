@@ -273,6 +273,11 @@ HINWEIS_KUERZUNG_15 = (
 #: Warum die Erfassung unvollstaendig ist -- fuer ``HINWEIS_OHNE_VERBRAUCH``.
 OHNE_ZAEHLER = "ohne {zaehler}: {wohnungen}"
 OHNE_STAENDE = "kein abgelesener Verbrauch"
+#: Phase 55: ein Nenner aus verschiedenen Massen ist kein Nenner. 30 m3
+#: plus 6.000 kWh ist keine Menge, und ein Anteil daran ist keine Zahl.
+#: Der Fall entsteht beim Umbau -- eine Wohnung hat schon den
+#: Waermemengenzaehler, die andere noch den Wasserzaehler.
+GEMISCHTE_MASSE = "verschiedene Maßeinheiten an den Zählern: {masse}"
 
 
 HINWEIS_ANTEIL = (

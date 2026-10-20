@@ -84,7 +84,7 @@ function schriftgroesseWaehlen(wert) {
 }
 window.schriftgroesseWaehlen = schriftgroesseWaehlen;
 
-// Der Knopf im Kontomenü schaltet reihum durch die drei Stufen.
+// der Knopf im Kontomenü schaltet reihum durch die drei Stufen.
 function schriftgroesseWechseln() {
     const jetzt = Number(document.documentElement.dataset.schrift || '1');
     schriftgroesseWaehlen(SCHRIFTGROESSEN[(SCHRIFTGROESSEN.indexOf(jetzt) + 1) % SCHRIFTGROESSEN.length]);
@@ -628,7 +628,7 @@ function seitenRichtung(von, nach) {
     return gruppen.indexOf(nach.dataset.gruppe) > gruppen.indexOf(von.dataset.gruppe) ? 'vor' : 'zurueck';
 }
 
-// Die Leiste zeigt den Bereich, die Reiter im Seitenkopf seine
+// die Leiste zeigt den Bereich, die Reiter im Seitenkopf seine
 // Seiten. Die Reiter wandern in den Kopf der offenen Seite.
 const letzteSeite = {};
 function zeigeBereich(item) {
@@ -689,8 +689,8 @@ function wechsleZuTab(tabName) {
 
 // --- Heute --------------------------------------------------------
 // Was jetzt zu tun ist, abgelesen aus den geladenen Daten: Zähler ohne Stand
-// im laufenden Jahr, Belege ohne Rechnung und fällige Abrechnungen. Zahlungen
-// haben keinen Status, an dem sich „offen“ ablesen ließe; sie fehlen darum hier.
+// im laufenden Jahr, Belege ohne Rechnung, fällige Abrechnungen und zugestellte
+// Abrechnungen, deren Nachzahlung oder Guthaben noch offen ist (Phase 47).
 
 let abrechnungsVorschlaege = [];
 
@@ -807,6 +807,19 @@ function heuteAufgaben() {
                 chip: 'fällig', art: 'ind', aktion: 'Offene Kosten abrechnen',
                 los: () => openBillingSelectionModal(v),
             })) },
+        { name: 'Zahlungen', aufgaben: abrechnungsHistorie
+            .filter(r => r.zugestellt_am && Number(r.offen_betrag) && !beispielMieter.has(r.tenant_id))
+            .sort((a, b) => a.zugestellt_am.localeCompare(b.zugestellt_am)).map(r => {
+                const schuldet = Number(r.offen_betrag) > 0;
+                return {
+                    titel: `${r.tenant_name} (${r.apartment_name})`,
+                    info: `${schuldet ? 'Nachzahlung offen' : 'Guthaben noch auszahlen'}: `
+                        + `${euroText(Math.abs(Number(r.offen_betrag)))} · zugestellt am ${datumText(r.zugestellt_am)}`,
+                    chip: schuldet ? 'offen' : 'auszahlen', art: schuldet ? 'rot' : 'warn',
+                    aktion: 'Zahlung erfassen',
+                    los: () => zahlungZurAbrechnung(r.id, r.tenant_id, r.offen_betrag),
+                };
+            }) },
     ].filter(gruppe => gruppe.aufgaben.length);
 }
 
@@ -1513,7 +1526,7 @@ function initKopfMenues() {
         aktionen.parentElement.querySelector('.kopf-menue-knopf')
             .setAttribute('aria-expanded', String(offen));
     };
-    // Auch der App-Kopf (Hilfe, Drucken, Abmelden) klappt am Handy ein.
+    // auch der App-Kopf (Hilfe, Drucken, Abmelden) klappt am Handy ein.
     document.querySelectorAll('.section-header > .kopf-aktionen, .top-header > .kopf-aktionen').forEach(aktionen => {
         if (aktionen.querySelectorAll('button').length < 2) return;
         const knopf = document.createElement('button');
@@ -1525,7 +1538,7 @@ function initKopfMenues() {
         knopf.setAttribute('aria-label', 'Aktionen');
         knopf.title = 'Aktionen';
         knopf.innerHTML = '<i class="ph ph-dots-three-vertical" aria-hidden="true"></i>';
-        // Im App-Kopf ist es das Kontomenü, mit dem Namen als Aufschrift.
+        // im App-Kopf ist es das Kontomenü, mit dem Namen als Aufschrift.
         if (aktionen.parentElement.classList.contains('top-header')) {
             knopf.classList.add('konto-knopf');
             knopf.setAttribute('aria-label', 'Konto und Hilfe');
@@ -2508,6 +2521,15 @@ async function fetchTenants() {
                 vzBtn.setAttribute('aria-label', 'Vorauszahlungen');
                 vzBtn.onclick = () => openVorauszahlungModal(t);
 
+                // Phase 49: die vereinbarte Kaltmiete ab Stichtag; der
+                // Fristenkalender erinnert an die nächste Mieterhöhung.
+                const kmBtn = document.createElement('button');
+                kmBtn.className = 'btn-icon';
+                kmBtn.innerHTML = '<i class="ph ph-house-line" aria-hidden="true"></i>';
+                kmBtn.title = 'Kaltmiete';
+                kmBtn.setAttribute('aria-label', 'Kaltmiete');
+                kmBtn.onclick = () => openKaltmieteModal(t);
+
                 // NK-078: Auskunft als ZIP -- JSON mit allen Zeilen zum
                 // Mietverhaeltnis und die Dateien dazu.
                 const exportBtn = document.createElement('button');
@@ -2525,6 +2547,7 @@ async function fetchTenants() {
                 tdActions.appendChild(profileBtn);
                 tdActions.appendChild(householdBtn);
                 tdActions.appendChild(vzBtn);
+                tdActions.appendChild(kmBtn);
                 tdActions.appendChild(exportBtn);
                 tdActions.appendChild(deleteBtn);
                 
@@ -2626,7 +2649,7 @@ async function deleteTenant(id) {
 // NK-156 (K8): Einstellungen in Gruppen. Eine eigene Klasse statt
 // ``hidden``, damit die Gruppe nie eine Karte zeigt, die aus anderem Grund
 // verborgen ist (Gefahrenzone nur im Entwicklungsstapel).
-const EINSTELLUNGS_GRUPPEN = ['vermieter', 'sicherung', 'konto', 'updates', 'datenschutz'];
+const EINSTELLUNGS_GRUPPEN = ['vermieter', 'kostenarten', 'sicherung', 'konto', 'updates', 'datenschutz'];
 
 function zeigeEinstellungsgruppe(gruppe) {
     if (!EINSTELLUNGS_GRUPPEN.includes(gruppe)) gruppe = 'vermieter';
@@ -2643,6 +2666,8 @@ function zeigeEinstellungsgruppe(gruppe) {
     } catch (e) {
         // ohne Sitzungsspeicher (privater Modus) beginnt die Seite bei „Vermieter“
     }
+    // Phase 54: die Kostenarten-Liste lädt, wenn ihre Gruppe gezeigt wird.
+    if (gruppe === 'kostenarten') ladeKostenarten();
 }
 window.zeigeEinstellungsgruppe = zeigeEinstellungsgruppe;
 
@@ -3007,7 +3032,7 @@ function zeigeMeldung(message, art) {
     setTimeout(() => meldung.remove(), 6000);
 }
 
-// Ein laufender Balken im Knopf, solange eine lange Aktion arbeitet.
+// ein laufender Balken im Knopf, solange eine lange Aktion arbeitet.
 function zeigeArbeit(el, an) {
     if (!el) return;
     el.classList.toggle('arbeitet', an);
@@ -3227,7 +3252,7 @@ function getReadingHtml(r, einheit) {
 }
 
 // --- Render Meters ---
-// Links die Liste mit Filterpillen nach Art, rechts das Detail des
+// links die Liste mit Filterpillen nach Art, rechts das Detail des
 // gewählten Zählers (zeigeZaehlerDetail). Ohne Wahl gilt der erste sichtbare.
 let zaehlerGewaehlt = null;
 let zaehlerArtFilter = null;
@@ -3991,6 +4016,76 @@ function closeVorauszahlungModal() {
     document.getElementById('vorauszahlung-modal').classList.remove('active');
 }
 
+// Je Jahr eine Kopfzeile mit den Summen, darunter die Monatszeilen; genutzt
+// von Vorauszahlungen und Kaltmiete. Aufgeklappt ist das laufende Jahr und
+// jedes Jahr mit Rückstand -- der Rest bleibt zu, damit aus acht Jahren
+// Vorauszahlungen keine 90 Zeilen zum Scrollen werden.
+function monatsZeilen(monate, praefix) {
+    const jahre = [...new Set(monate.map(m => m.monat.slice(0, 4)))].reverse();
+    return jahre.map(jahr => {
+        const gruppe = monate.filter(m => m.monat.startsWith(jahr));
+        const summe = feld => gruppe.reduce(
+            (g, m) => g + (m[feld] === null ? 0 : Number(m[feld])), 0);
+        const rueckstand = gruppe.some(m => m.rueckstand);
+        const [klasse, stand] = rueckstand ? ['dq-status-badge red', 'Rückstand']
+            : gruppe.some(m => m.laufend) ? ['text-muted', 'laufend']
+            : gruppe.every(m => m.soll === null) ? ['text-muted', 'kein Soll']
+            : ['dq-status-badge green', 'bezahlt'];
+        const offen = rueckstand || jahr === String(new Date().getFullYear());
+        // Das Präfix ('vz' oder 'km') macht die Ziele eindeutig, wenn beide
+        // Tabellen im selben Dokument liegen.
+        const id = 'jahr-' + (praefix || 'm') + '-' + jahr;
+        const kopf = `<tr class="jahr-kopf" data-ziel="${escapeHtml(id)}">
+            <td style="padding: 8px; cursor: pointer;" role="button" tabindex="0"
+                aria-expanded="${escapeHtml(String(offen))}">
+                <i class="ph ph-caret-right jahr-pfeil${offen ? ' jahr-pfeil-offen' : ''}" aria-hidden="true"></i>
+                <strong>${escapeHtml(jahr)}</strong>
+                <span class="text-muted">· ${gruppe.length} Monate</span>
+            </td>
+            <td style="padding: 8px; text-align: right;">${escapeHtml(gruppe.every(m => m.soll === null) ? '–' : euroText(summe('soll')))}</td>
+            <td style="padding: 8px; text-align: right;">${escapeHtml(euroText(summe('ist')))}</td>
+            <td style="padding: 8px; text-align: right;">${escapeHtml(gruppe.every(m => m.differenz === null) ? '–' : euroText(summe('differenz')))}</td>
+            <td style="padding: 8px;"><span class="${escapeHtml(klasse)}">${escapeHtml(stand)}</span></td>
+        </tr>`;
+        const zeilen = [...gruppe].reverse().map(m => {
+            const [mklasse, mstand] = m.laufend ? ['text-muted', 'laufend']
+                : m.rueckstand ? ['dq-status-badge red', 'Rückstand']
+                : m.soll === null ? ['text-muted', 'kein Soll']
+                : ['dq-status-badge green', 'bezahlt'];
+            return `<tr class="jahr-zeile" data-jahr="${escapeHtml(id)}"${offen ? '' : ' hidden'}>
+            <td style="padding: 8px 8px 8px 32px;">${escapeHtml(m.monat.slice(5) + '/' + m.monat.slice(0, 4))}</td>
+            <td style="padding: 8px; text-align: right;">${escapeHtml(m.soll === null ? '–' : euroText(m.soll))}</td>
+            <td style="padding: 8px; text-align: right;">${escapeHtml(euroText(m.ist))}</td>
+            <td style="padding: 8px; text-align: right;">${escapeHtml(m.differenz === null ? '–' : euroText(m.differenz))}</td>
+            <td style="padding: 8px;"><span class="${escapeHtml(mklasse)}">${escapeHtml(mstand)}</span></td>
+        </tr>`;
+        }).join('');
+        return kopf + zeilen;
+    }).join('');
+}
+
+// Klappt eine Jahresgruppe der Soll/Ist-Tabelle auf oder zu; der Kopf schaltet
+// die Monatszeilen des eigenen Jahres um.
+function jahrUmschalten(kopf) {
+    const zeilen = document.querySelectorAll(`.jahr-zeile[data-jahr="${CSS.escape(kopf.dataset.ziel)}"]`);
+    const auf = zeilen.length > 0 && zeilen[0].hidden;
+    zeilen.forEach(zeile => { zeile.hidden = !auf; });
+    const pfeil = kopf.querySelector('.jahr-pfeil');
+    if (pfeil) pfeil.classList.toggle('jahr-pfeil-offen', auf);
+    kopf.setAttribute('aria-expanded', auf ? 'true' : 'false');
+}
+// Tastaturbedienung für die Jahresköpfe (Enter/Leertaste), wie für die Klickzeilen der Zählerliste.
+document.addEventListener('keydown', function (ereignis) {
+    if (ereignis.key !== 'Enter' && ereignis.key !== ' ') return;
+    const kopf = ereignis.target.closest && ereignis.target.closest('.jahr-kopf');
+    if (kopf) { ereignis.preventDefault(); jahrUmschalten(kopf); }
+});
+// Klick-Delegation: eine einzige Listener-Registrierung statt einer je Kopfzeile.
+document.addEventListener('click', function (ereignis) {
+    const kopf = ereignis.target.closest && ereignis.target.closest('.jahr-kopf');
+    if (kopf) jahrUmschalten(kopf);
+});
+
 async function ladeVorauszahlungen(tenantId) {
     let d;
     try {
@@ -4009,19 +4104,7 @@ async function ladeVorauszahlungen(tenantId) {
             <td><button type="button" class="btn-icon" aria-label="Soll löschen" title="Soll löschen" onclick="loescheVorauszahlungSoll(${Number(s.id)}, ${Number(tenantId)})"><i class="ph ph-trash" aria-hidden="true"></i></button></td>
         </tr>`).join('');
     // Der jüngste Monat oben: dort schaut man zuerst hin.
-    document.getElementById('vz-monate').innerHTML = [...d.monate].reverse().map(m => {
-        const [klasse, stand] = m.laufend ? ['text-muted', 'laufend']
-            : m.rueckstand ? ['dq-status-badge red', 'Rückstand']
-            : m.soll === null ? ['text-muted', 'kein Soll']
-            : ['dq-status-badge green', 'bezahlt'];
-        return `<tr>
-            <td style="padding: 8px;">${escapeHtml(m.monat.slice(5) + '/' + m.monat.slice(0, 4))}</td>
-            <td style="padding: 8px; text-align: right;">${escapeHtml(m.soll === null ? '–' : euroText(m.soll))}</td>
-            <td style="padding: 8px; text-align: right;">${escapeHtml(euroText(m.ist))}</td>
-            <td style="padding: 8px; text-align: right;">${escapeHtml(m.differenz === null ? '–' : euroText(m.differenz))}</td>
-            <td style="padding: 8px;"><span class="${escapeHtml(klasse)}">${escapeHtml(stand)}</span></td>
-        </tr>`;
-    }).join('');
+    document.getElementById('vz-monate').innerHTML = monatsZeilen(d.monate, 'vz');
     const saldo = Number(d.saldo);
     document.getElementById('vz-saldo').textContent = saldo > 0
         ? `Offen sind insgesamt ${euroText(saldo)} (fällige Monate, Überzahlungen gegengerechnet).`
@@ -4065,6 +4148,401 @@ async function loescheVorauszahlungSoll(id, tenantId) {
     }
 }
 
+// --- Phase 49: Kaltmiete-Soll, Erinnerung an die Mieterhöhung ---
+
+async function openKaltmieteModal(tenant) {
+    document.getElementById('km-tenant-name').textContent = tenant.name;
+    document.getElementById('km-tenant-id').value = tenant.id;
+    document.getElementById('km-betrag').value = '';
+    document.getElementById('km-indexmiete').checked = false;
+    const daten = await ladeKaltmiete(tenant.id);
+    // Ohne Stichtag ist der Einzug der naheliegende erste.
+    document.getElementById('km-gueltig-ab').value =
+        daten && daten.soll.length === 0 ? String(tenant.move_in_date || '').slice(0, 10) : '';
+    document.getElementById('kaltmiete-modal').classList.add('active');
+}
+
+function closeKaltmieteModal() {
+    document.getElementById('kaltmiete-modal').classList.remove('active');
+}
+
+// --- Eigene Kostenarten (Phase 54, Issue #30) --------------------------------
+// Der Katalog ist ein Nummernkatalog: der Name gehört dem Vermieter, die
+// Nummer aus § 2 BetrKV entscheidet über die Rechnung. Heizung und Warmwasser
+// (Nr. 4-6) sind gesperrt, Nr. 17 verlangt die Bestätigung (R-KAT-02).
+
+let letzteKategorien = [];
+let katalogHilfe = null;
+
+// Die Stichwortliste kommt einmalig vom Server (betrkv) und bleibt hier;
+// beim Tippen fragt das Formular deshalb nichts nach.
+async function ladeKatalogHilfe() {
+    if (katalogHilfe) return katalogHilfe;
+    const res = await fetch('/api/categories-vorschlaege');
+    if (!res.ok) throw await serverFehler(res);
+    katalogHilfe = await res.json();
+    return katalogHilfe;
+}
+
+// Der Vorschlag aus betrkv, hier nachgerechnet: schlägt nur vor und
+// überschreibt nie eine Nummer, die der Nutzer schon gewählt hat (das
+// regelt der Aufrufer über data-gewaehlt). Gesperrte Nummern (4-6) und
+// Heiz-Namen bekommen keinen Vorschlag.
+function nummernVorschlag(name, hilfe = katalogHilfe) {
+    if (!hilfe) return null;
+    const form = String(name || '').toLowerCase()
+        .replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue')
+        .replace(/ß/g, 'ss')
+        .replace(/[^a-z]/g, '');
+    if (!form) return null;
+    if (hilfe.heizstichwoerter.some(wort => form.includes(wort))) return null;
+    for (const [stichwort, nr] of hilfe.vorschlaege) {
+        if (nr === 4 || nr === 5 || nr === 6) continue;
+        if (form.includes(stichwort)) return nr;
+    }
+    return null;
+}
+
+async function ladeKostenarten() {
+    let d;
+    try {
+        const res = await fetch('/api/categories');
+        if (!res.ok) throw await serverFehler(res);
+        d = await res.json();
+    } catch (e) {
+        showError(meldungZu(e, 'Fehler beim Laden der Kostenarten.'));
+        return;
+    }
+    letzteKategorien = d;
+    document.getElementById('kategorien-liste').innerHTML = d.length === 0
+        ? '<tr><td colspan="5" class="text-muted" style="padding: 8px;">Noch keine eigene Kostenart angelegt.</td></tr>'
+        : d.map(k => kategorieZeile(k)).join('');
+}
+
+function kategorieZeile(k) {
+    const nummer = k.betrkv_nr
+        ? `Nr. ${k.betrkv_nr} · ${escapeHtml(k.betrkv_bezeichnung)}`
+        : '<span class="text-muted">ohne</span>';
+    const zaehler = k.zaehler_anzahl > 0 ? `Zähler (${k.zaehler_anzahl})` : (k.requires_meter ? 'ja' : '—');
+    return `<tr>
+        <td style="padding: 8px;">${escapeHtml(k.name)}</td>
+        <td style="padding: 8px;">${nummer}</td>
+        <td style="padding: 8px;">${escapeHtml(zaehler)}</td>
+        <td style="padding: 8px; text-align: right;" class="tabular-nums">${Number(k.rechnungen)}</td>
+        <td style="padding: 8px;">
+            <button type="button" class="btn-icon" aria-label="Kostenart bearbeiten" title="Bearbeiten" onclick="openKategorieModal(${Number(k.id)})"><i class="ph ph-pencil" aria-hidden="true"></i></button>
+            <button type="button" class="btn-icon" aria-label="Kostenart löschen" title="Löschen" onclick="loescheKategorie(${Number(k.id)})"><i class="ph ph-trash" aria-hidden="true"></i></button>
+        </td>
+    </tr>`;
+}
+
+async function openKategorieModal(id = null) {
+    const hilfe = await ladeKatalogHilfe();
+    const nrWahl = document.getElementById('kategorie-nr');
+    nrWahl.innerHTML = '<option value="">— Nummer wählen —</option>' +
+        hilfe.nummern.map(([nr, bezeichnung]) => {
+            const gesperrt = nr === 4 || nr === 5 || nr === 6;
+            return `<option value="${nr}"${gesperrt ? ' disabled' : ''}>Nr. ${nr} · ${escapeHtml(bezeichnung)}${gesperrt ? ' (gesperrt)' : ''}</option>`;
+        }).join('');
+    const namenFeld = document.getElementById('kategorie-name');
+    document.getElementById('kategorie-id').value = id ? String(id) : '';
+    document.getElementById('kategorie-sperre').hidden = true;
+    nrWahl.dataset.gewaehlt = id ? '1' : '';
+    nrWahl.onchange = () => { nrWahl.dataset.gewaehlt = '1'; };
+    nrWahl.disabled = false;
+    document.getElementById('kategorie-zaehler').disabled = false;
+    if (id) {
+        const k = letzteKategorien.find(x => Number(x.id) === Number(id));
+        document.getElementById('kategorie-modal-titel').textContent = 'Kostenart bearbeiten';
+        namenFeld.value = k.name;
+        nrWahl.value = k.betrkv_nr == null ? '' : String(k.betrkv_nr);
+        document.getElementById('kategorie-zaehler').checked = k.requires_meter;
+        const eingefroren = k.rechnungen > 0 || k.zaehler_anzahl > 0;
+        if (eingefroren) {
+            nrWahl.disabled = true;
+            document.getElementById('kategorie-zaehler').disabled = true;
+            const sperre = document.getElementById('kategorie-sperre');
+            sperre.hidden = false;
+            sperre.textContent = 'Nummer und Zählerkennung bleiben unveränderlich, weil an dieser Kostenart schon '
+                + (k.rechnungen > 0 ? 'Rechnungen' : 'ein Zähler')
+                + ' hängen. Nur der Name ist noch änderbar.';
+        }
+    } else {
+        document.getElementById('kategorie-modal-titel').textContent = 'Kostenart anlegen';
+        namenFeld.value = '';
+        nrWahl.value = '';
+        document.getElementById('kategorie-zaehler').checked = false;
+        // Der Vorschlag füllt nur ein leeres Nummernmenü; wer einmal gewählt
+        // hat, behält seine Nummer.
+        namenFeld.oninput = (e) => {
+            if (nrWahl.dataset.gewaehlt === '1' || nrWahl.disabled) return;
+            const vorschlag = nummernVorschlag(e.target.value, hilfe);
+            nrWahl.value = vorschlag == null ? '' : String(vorschlag);
+        };
+    }
+    document.getElementById('kategorie-modal').classList.add('active');
+}
+
+function closeKategorieModal() {
+    document.getElementById('kategorie-modal').classList.remove('active');
+}
+
+async function saveKategorie() {
+    const id = document.getElementById('kategorie-id').value;
+    const name = document.getElementById('kategorie-name').value.trim();
+    if (!name) { showError('Bitte einen Namen eintragen.'); return; }
+    const nrWert = document.getElementById('kategorie-nr').value;
+    if (!nrWert) { showError('Bitte die Nummer aus § 2 BetrKV wählen.'); return; }
+    const nr = Number(nrWert);
+    // Nr. 17 verlangt die Bestätigung (R-KAT-02): nur umlagefähig, wenn der
+    // Mietvertrag sie einzeln benennt. Wer schon 17 eingetragen hat, wird
+    // beim reinen Umbenennen nicht noch einmal gefragt.
+    if (nr === 17) {
+        const alt = id && letzteKategorien.find(x => Number(x.id) === Number(id));
+        if (!alt || alt.betrkv_nr !== 17) {
+            const ok = await frage(
+                'Nr. 17 (Sonstige Betriebskosten) ist nur umlagefähig, wenn sie im Mietvertrag einzeln vereinbart ist. Wirklich Nr. 17 wählen?',
+                'Nr. 17 wählen');
+            if (!ok) return;
+        }
+    }
+    const body = {
+        name,
+        betrkv_nr: nr,
+        requires_meter: document.getElementById('kategorie-zaehler').checked,
+    };
+    try {
+        const res = await fetch(id ? `/api/categories/${Number(id)}` : '/api/categories', {
+            method: id ? 'PUT' : 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+        if (!res.ok) throw await serverFehler(res);
+    } catch (e) {
+        showError(meldungZu(e, 'Die Kostenart konnte nicht gespeichert werden.'));
+        return;
+    }
+    closeKategorieModal();
+    await ladeKostenarten();
+}
+
+// --- Phase 50: die Hausgeld-Einzelabrechnung pruefen ---------------------
+// Der Dialog rechnet nur. Uebernommen wird nichts: der Vermieter legt die
+// Kostenarten und Rechnungen danach selbst an, und zwar die, die er
+// bestaetigt hat (R-KAT-01).
+
+function geldText(betrag) {
+    return Number(betrag).toLocaleString('de-DE',
+        { style: 'currency', currency: 'EUR' });
+}
+
+function openHausgeldModal() {
+    document.getElementById('hg-eigener-anteil').value = '';
+    document.getElementById('hg-gesamtanteile').value = '';
+    document.getElementById('hg-abrechnungssumme').value = '';
+    document.getElementById('hg-zeilen').innerHTML = '';
+    document.getElementById('hg-ergebnis').hidden = true;
+    document.getElementById('hg-fehler').hidden = true;
+    // Drei leere Zeilen als Anfang -- eine einzelne wirkt wie ein Formular
+    // fuer eine Position, und es sind immer mehrere.
+    for (let i = 0; i < 3; i++) hausgeldZeile();
+    document.getElementById('hausgeld-modal').classList.add('active');
+}
+
+function closeHausgeldModal() {
+    document.getElementById('hausgeld-modal').classList.remove('active');
+}
+
+function hausgeldZeile() {
+    const zeile = document.createElement('tr');
+    zeile.innerHTML =
+        '<td><input type="text" class="hg-name" maxlength="100" placeholder="z. B. Müllentsorgung"></td>' +
+        '<td class="text-right"><input type="number" class="hg-gesamt" step="0.01" placeholder="0,00"></td>' +
+        '<td class="text-right"><input type="number" class="hg-mein" step="0.01" placeholder="0,00"></td>' +
+        '<td class="spalte-knopf"><button class="btn-icon" aria-label="Zeile entfernen" ' +
+        'onclick="this.closest(\'tr\').remove()"><i class="ph ph-trash"></i></button></td>';
+    document.getElementById('hg-zeilen').appendChild(zeile);
+}
+
+function hausgeldPositionen() {
+    return Array.from(document.querySelectorAll('#hg-zeilen tr'))
+        .map(zeile => ({
+            name: zeile.querySelector('.hg-name').value.trim(),
+            gesamtbetrag: zeile.querySelector('.hg-gesamt').value.trim(),
+            eigener_betrag: zeile.querySelector('.hg-mein').value.trim(),
+        }))
+        .filter(p => p.name || p.gesamtbetrag || p.eigener_betrag);
+}
+
+//: Wie eine Position in der Ergebniszeile erscheint. Die Begruendung kommt
+//: vom Server -- die Oberflaeche erfindet keine eigenen Rechtstexte.
+const HG_URTEIL = {
+    true: ['Ja', 'chip-ok'],
+    false: ['Nein', 'chip-rot'],
+    null: ['Offen', 'chip-warn'],
+};
+
+async function hausgeldPruefen() {
+    const positionen = hausgeldPositionen();
+    const fehlerfeld = document.getElementById('hg-fehler');
+    fehlerfeld.hidden = true;
+    if (!positionen.length) {
+        showError('Bitte mindestens eine Position eintragen.');
+        return;
+    }
+    const summe = document.getElementById('hg-abrechnungssumme').value.trim();
+    let bericht;
+    try {
+        const res = await fetch('/api/hausgeld/pruefen', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                positionen,
+                eigener_anteil: document.getElementById('hg-eigener-anteil').value.trim(),
+                gesamtanteile: document.getElementById('hg-gesamtanteile').value.trim(),
+                abrechnungssumme: summe || null,
+            }),
+        });
+        if (!res.ok) throw await serverFehler(res);
+        bericht = await res.json();
+    } catch (e) {
+        fehlerfeld.textContent = meldungZu(e, 'Die Abrechnung konnte nicht geprüft werden.');
+        fehlerfeld.hidden = false;
+        document.getElementById('hg-ergebnis').hidden = true;
+        return;
+    }
+
+    // Alles maskiert, auch die eigenen Zahlen: die Positionsnamen gehen vom
+    // Vermieter zum Server und zurueck, und eine Schablone, in der eine
+    // Einsetzung ungeprueft steht, laedt die naechste dazu ein. Der
+    // Aufruf steht ausgeschrieben da: eine Abkuerzung wie `zahl(x)` macht
+    // den Waechter in test_html_maskierung blind, der escapeHtml woertlich
+    // sucht -- und dann faellt die naechste Einsetzung hier nicht mehr auf.
+    document.getElementById('hg-summen').innerHTML =
+        `Umlagefähig: <strong>${escapeHtml(geldText(bericht.summe_umlagefaehig))}</strong> ` +
+        `(${escapeHtml(bericht.anzahl_umlagefaehig)} Positionen) · ` +
+        `Bleibt beim Eigentümer: <strong>${escapeHtml(geldText(bericht.summe_eigentuemer))}</strong> ` +
+        `(${escapeHtml(bericht.anzahl_eigentuemer)}) · ` +
+        `Offen: <strong>${escapeHtml(geldText(bericht.summe_offen))}</strong> (${escapeHtml(bericht.anzahl_offen)})`;
+
+    const probe = document.getElementById('hg-summenprobe');
+    if (!bericht.summenprobe) {
+        probe.textContent = '';
+        probe.hidden = true;
+    } else {
+        probe.hidden = false;
+        probe.textContent = bericht.summenprobe.stimmt
+            ? `Die Summenprobe geht auf: ${geldText(bericht.summenprobe.angesetzt)}.`
+            : bericht.summenprobe.hinweis;
+        probe.className = 'karten-text';
+    }
+
+    document.getElementById('hg-bericht').innerHTML = bericht.positionen.map(p => {
+        const [wort, klasse] = HG_URTEIL[String(p.umlagefaehig)];
+        const nummer = p.betrkv_nr == null ? ''
+            : ` <span class="text-muted">Nr. ${escapeHtml(p.betrkv_nr)}</span>`;
+        const anmerkung = p.stimmt ? p.begruendung : `${p.hinweis} ${p.begruendung}`;
+        return `<tr>
+            <td>${escapeHtml(p.name)}</td>
+            <td><span class="chip ${klasse}">${escapeHtml(wort)}</span>${nummer}</td>
+            <td class="text-right">${escapeHtml(geldText(p.eigener_betrag))}</td>
+            <td class="text-right">${escapeHtml(geldText(p.erwartet))}</td>
+            <td>${escapeHtml(anmerkung)}</td>
+        </tr>`;
+    }).join('');
+
+    // Der Heizkosten-Hinweis steht vor dem Zeitraum-Hinweis und nicht in
+    // Grau: er ist kein Kleingedrucktes, sondern der Griff, den der
+    // Vermieter sonst nicht findet -- eine nicht zugeordnete
+    // Heizkostenrechnung verteilt sich stillschweigend nach Flaeche.
+    document.getElementById('hg-heizkosten').textContent = bericht.heizkosten_hinweis;
+    document.getElementById('hg-zeitraum').textContent = bericht.zeitraum_hinweis;
+    document.getElementById('hg-ergebnis').hidden = false;
+}
+
+async function loescheKategorie(id) {
+    const ok = await frageLoeschen(
+        'Die Kostenart und ihre Kostenprofile werden gelöscht. Rechnungen und Zähler sperren das Löschen. Wirklich löschen?');
+    if (!ok) return;
+    try {
+        const res = await fetch(`/api/categories/${Number(id)}`, { method: 'DELETE' });
+        if (!res.ok) throw await serverFehler(res);
+    } catch (e) {
+        showError(meldungZu(e, 'Die Kostenart konnte nicht gelöscht werden.'));
+        return;
+    }
+    await ladeKostenarten();
+}
+
+async function ladeKaltmiete(tenantId) {
+    let d;
+    try {
+        const res = await fetch(`/api/tenants/${tenantId}/miete`);
+        if (!res.ok) throw await serverFehler(res);
+        d = await res.json();
+    } catch (e) {
+        showError(meldungZu(e, 'Fehler beim Laden der Kaltmiete.'));
+        return null;
+    }
+    document.getElementById('km-soll-liste').innerHTML = d.soll.length === 0
+        ? '<tr><td colspan="3" class="text-muted" style="padding: 8px;">Noch keine Kaltmiete hinterlegt.</td></tr>'
+        : d.soll.map(s => {
+            const pill = s.geplant ? ' <span class="chip chip-warn">geplant</span>' : '';
+            const serie = s.geplant
+                ? `<button type="button" class="btn-icon" aria-label="Serienbuchung anlegen" title="Serienbuchung anlegen" onclick="serienbuchungAnlegen(${Number(tenantId)}, '${escapeHtml(s.betrag)}', '${escapeHtml(s.gueltig_ab)}', 0, 'Miete')"><i class="ph ph-repeat" aria-hidden="true"></i></button>`
+                : '';
+            return `<tr>
+            <td style="padding: 8px;">${escapeHtml(datumText(s.gueltig_ab))}${s.indexmiete ? ' · Indexmiete (§ 557b)' : ''}${pill}</td>
+            <td style="padding: 8px; text-align: right;">${escapeHtml(euroText(s.betrag))}</td>
+            <td>${serie}<button type="button" class="btn-icon" aria-label="Kaltmiete löschen" title="Kaltmiete löschen" onclick="loescheKaltmieteSoll(${Number(s.id)}, ${Number(tenantId)})"><i class="ph ph-trash" aria-hidden="true"></i></button></td>
+        </tr>`;
+        }).join('');
+    document.getElementById('km-monate').innerHTML = monatsZeilen(d.monate, 'km');
+    const saldo = Number(d.saldo);
+    document.getElementById('km-saldo').textContent = saldo > 0
+        ? `Offen sind insgesamt ${euroText(saldo)} (fällige Monate, Überzahlungen gegengerechnet).`
+        : saldo < 0 ? `Überzahlt um ${euroText(-saldo)}.` : 'Kein Rückstand.';
+    document.getElementById('km-erinnerung').value = d.erinnerung || '';
+    document.getElementById('km-erinnerung-block').hidden = !d.erinnerung;
+    return d;
+}
+
+async function saveKaltmieteSoll() {
+    const tenantId = document.getElementById('km-tenant-id').value;
+    const gueltigAb = document.getElementById('km-gueltig-ab').value;
+    const betrag = document.getElementById('km-betrag').value;
+    const indexmiete = document.getElementById('km-indexmiete').checked;
+    if (!gueltigAb || betrag === '') {
+        showError('Bitte geben Sie an, ab wann welche Kaltmiete gilt.');
+        return;
+    }
+    try {
+        const res = await fetch(`/api/tenants/${tenantId}/kaltmiete_soll`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ gueltig_ab: gueltigAb, betrag: betrag, indexmiete: indexmiete })
+        });
+        if (!res.ok) throw await serverFehler(res);
+        document.getElementById('km-gueltig-ab').value = '';
+        document.getElementById('km-betrag').value = '';
+        document.getElementById('km-indexmiete').checked = false;
+        await ladeKaltmiete(tenantId);
+    } catch (e) {
+        showError(meldungZu(e, 'Fehler beim Speichern der Kaltmiete.'));
+    }
+}
+
+async function loescheKaltmieteSoll(id, tenantId) {
+    if (!await frageLoeschen('Möchten Sie diese Kaltmiete wirklich löschen?')) return;
+    try {
+        const res = await fetch(`/api/kaltmiete_soll/${id}`, { method: 'DELETE' });
+        if (!res.ok) throw await serverFehler(res);
+        await ladeKaltmiete(tenantId);
+    } catch (e) {
+        showError(meldungZu(e, 'Fehler beim Löschen der Kaltmiete.'));
+    }
+}
+
 // --- Meter Modal ---
 function openAddMeterModal() {
     const catSelect = document.getElementById('meter-category');
@@ -4072,14 +4550,14 @@ function openAddMeterModal() {
     // NK-105 (D-63): ein Zaehler ist fuer JEDE Kostenart moeglich. Das alte
     // Pflichtkennzeichen aus dem Katalog wurde hier als Erlaubnis gelesen —
     // davon gab es nur fuer Wasserversorgung eines, und nur das war waehlbar.
-    // Reihenfolge nach BetrKV-Nummer; Verbrauchsarten (METER_READING) und
-    // Allgemeinstrom (Nr. 11, der uebliche Allgemeinstromzaehler) vorn in
-    // ihrer eigenen Gruppe, alles Weitere darunter.
+    // Reihenfolge nach BetrKV-Nummer; die ueblichen Zaehlerposten
+    // (Wasserversorgung Nr. 2, Allgemeinstrom Nr. 11) vorn in ihrer eigenen
+    // Gruppe, alles Weitere darunter.
     const sortiert = [...categories].sort((a, b) => (a.betrkv_nr ?? 999) - (b.betrkv_nr ?? 999));
     const ueblich = [];
     const weitere = [];
     for (const c of sortiert) {
-        (c.allocation_method === 'METER_READING' || c.betrkv_nr === 11 ? ueblich : weitere).push(c);
+        (c.betrkv_nr === 2 || c.betrkv_nr === 11 ? ueblich : weitere).push(c);
     }
     if (ueblich.length) {
         const gruppe = document.createElement('optgroup');
@@ -4109,7 +4587,8 @@ function openAddMeterModal() {
     // NK-258: derselbe Dialog bearbeitet auch; beim Anlegen ist alles frei.
     document.getElementById('meter-id').value = '';
     document.getElementById('meter-modal-title').textContent = 'Neuer Zähler';
-    for (const id of ['meter-ort', 'meter-eichjahr', 'meter-eichart', 'meter-geeicht-bis']) {
+    for (const id of ['meter-ort', 'meter-eichjahr', 'meter-eichart', 'meter-geeicht-bis',
+                      'meter-einheit']) {
         document.getElementById(id).value = '';
     }
     document.getElementById('meter-property').disabled = false;
@@ -4160,6 +4639,7 @@ async function openEditMeterModal(id) {
     await updateMeterApartments();
     document.getElementById('meter-apartment').value = m.apartment_id ?? '';
     document.getElementById('meter-heizungsanlage').value = m.heizungsanlage_id ?? '';
+    document.getElementById('meter-einheit').value = m.einheit ?? '';
     document.getElementById('meter-property').disabled = true;
     document.getElementById('meter-apartment').disabled = true;
     document.getElementById('meter-number').value = m.meter_number;
@@ -4207,6 +4687,10 @@ async function saveMeter() {
             // NK-258: Einbauort und Ende der Eichfrist, beides optional.
             ort: document.getElementById('meter-ort').value.trim() || null,
             geeicht_bis: document.getElementById('meter-geeicht-bis').value || null,
+            // Phase 55: was der Zaehler misst. Leer heisst "wie die Kostenart";
+            // ein Waermemengenzaehler fuer Warmwasser waehlt kWh (§ 9 Abs. 2
+            // Satz 1 HeizkostenV), obwohl die Kostenart m3 vorgibt.
+            einheit: document.getElementById('meter-einheit').value || null,
         };
         if (!editId) {
             daten.property_id = parseInt(propId);
@@ -4276,7 +4760,7 @@ async function deleteMeter(id) {
 function openHistoryModal(meterId) {
     const meter = meters.find(m => m.id === meterId);
     if(!meter) return;
-    // Auf der Zählerseite steht der Verlauf im Detail. Aus einem
+    // auf der Zählerseite steht der Verlauf im Detail. Aus einem
     // Dialog heraus (Jahresassistent, NK-265) bleibt es beim Verlaufsdialog.
     if (document.getElementById('tab-meters').classList.contains('active')
         && !document.querySelector('.modal-overlay.active:not(.als-spalte)')) {
@@ -4688,7 +5172,7 @@ function toggleInvoiceHeizkosten() {
 }
 
 async function openAddInvoiceModal(editInvoiceId = null, spalte = null) {
-    // Im Eingang steht der Dialog als Spalte neben der Vorschau,
+    // im Eingang steht der Dialog als Spalte neben der Vorschau,
     // sonst wie bisher als Overlay. Speichern und Prüfen bleiben dieselben.
     const dialog = document.getElementById('invoice-modal');
     const ziel = spalte || document.body;
@@ -5030,7 +5514,7 @@ function vorschauHtml({ titel, info, adresse, datei, knoepfeHtml = '' }) {
 // Neue Uploads kommen als Datei (fetch auf blob: sperrt die CSP), sonst lädt
 // fetch die Datei. Scheitert pdf.js, zeigt der iframe wie bisher das PDF.
 // Die Leiste darüber bringt Seitenzahl und Zoom wie im Browser-Viewer zurück;
-// Prozent beziehen sich auf die echte Größe, 1 pt = 96/72 px.
+//; Prozent beziehen sich auf die echte Größe, 1 pt = 96/72 px.
 const PDF_STUFEN = [50, 75, 100, 125, 150, 200, 300];
 const PDF_LEISTE = '<div class="pdf-leiste" role="toolbar" aria-label="PDF-Ansicht">' +
     '<button type="button" class="btn-icon" data-pdf-aktion="zurueck" title="Vorherige Seite zeigen" aria-label="Vorherige Seite zeigen"><i class="ph ph-caret-up" aria-hidden="true"></i></button>' +
@@ -5585,7 +6069,7 @@ async function addProvider() {
     } catch(e) { showError(meldungZu(e, 'Fehler beim Speichern des Anbieters.')); }
 }
 
-// Ohne Anbieter ließ sich keine Rechnung speichern, und angelegt
+// ohne Anbieter ließ sich keine Rechnung speichern, und angelegt
 // wurden Anbieter nur in den Einstellungen. Jetzt geht es im Formular.
 function anbieterFeldZeigen() {
     const feld = document.getElementById('anbieter-neu');
@@ -6429,7 +6913,7 @@ document.addEventListener('keydown', ereignis => {
     if (ziel) ziel.querySelector(`[data-spalte="${feld.dataset.spalte}"]`).focus();
 });
 
-// In der Ablese-Runde springt Enter ins nächste Zählerfeld wie in
+// in der Ablese-Runde springt Enter ins nächste Zählerfeld wie in
 // Excel; erst im letzten Feld speichert Enter die Runde.
 document.addEventListener('keydown', ereignis => {
     const feld = ereignis.target;
@@ -7188,6 +7672,14 @@ async function fetchBillingSuggestions() {
     }
 }
 
+// Phase 47: die Historie zeigt auf Wunsch nur Abrechnungen mit offenem Rest.
+let historieNurOffen = false;
+
+function historieFilterUmschalten() {
+    historieNurOffen = !historieNurOffen;
+    fetchBillingHistory();
+}
+
 async function fetchBillingHistory() {
     try {
         const res = await fetch('/api/billing/reports');
@@ -7201,6 +7693,9 @@ async function fetchBillingHistory() {
         if (!container) return;
         
         container.innerHTML = '';
+        const filterKnopf = document.getElementById('historie-nur-offen');
+        filterKnopf?.classList.toggle('active', historieNurOffen);
+        filterKnopf?.setAttribute('aria-pressed', String(historieNurOffen));
         
         if (history.length === 0) {
             container.innerHTML = leerzustand({
@@ -7211,8 +7706,18 @@ async function fetchBillingHistory() {
             });
             return;
         }
+        const liste = historieNurOffen ? history.filter(r => Number(r.offen_betrag)) : history;
+        if (liste.length === 0) {
+            container.innerHTML = leerzustand({
+                icon: 'ph-check-circle',
+                titel: 'Keine Zahlung offen',
+                text: 'Jede Nachzahlung ist eingegangen und jedes Guthaben ausgezahlt.',
+                aktion: { label: 'Alle Abrechnungen zeigen', fn: 'historieFilterUmschalten()' },
+            });
+            return;
+        }
         
-        history.forEach(r => {
+        liste.forEach(r => {
             const card = document.createElement('div');
             // NK-159: auf schmalen Fenstern rutschen die Knöpfe unter den Text
             // (Fund des Rundgangs mit der Beispielabrechnung, 390 px).
@@ -7251,6 +7756,7 @@ async function fetchBillingHistory() {
                     <h3 style="margin:0; font-size: 18px;">${escapeHtml(r.tenant_name)} <span style="font-size: 13px; color: var(--text-muted); font-weight: normal;">(${escapeHtml(r.apartment_name)} - ${escapeHtml(r.property_name)})</span></h3>
                     <p style="margin: 8px 0 0 0; color: var(--text-muted);">
                         Zeitraum: ${startFmt} - ${endFmt} | Erstellt am: ${createdFmt}
+                        ${zahlungsstandPille(r)}
                     </p>
                     ${regelstandBlock}
                 </div>
@@ -7350,19 +7856,71 @@ function vorauszahlungsBlock(v, tenantId) {
             </p>${warnung}${knopf}`);
 }
 
-async function serienbuchungAnlegen(tenantId, betrag, ab, kuenftige) {
+async function serienbuchungAnlegen(tenantId, betrag, ab, kuenftige, art = 'Nebenkostenvorauszahlung') {
     "Öffnet den Zahlungsdialog vorbefüllt; gespeichert wird erst dort."
-    if (kuenftige > 0 && !await frage(`Ab diesem Datum sind schon ${kuenftige} Vorauszahlungen gebucht. Trotzdem eine weitere Serie anlegen?`,
-        'Trotzdem anlegen', false, 'Vorauszahlungen schon gebucht')) return;
+    const artLabel = art === 'Miete' ? 'Mietzahlungen' : 'Vorauszahlungen';
+    if (kuenftige > 0 && !await frage(`Ab diesem Datum sind schon ${kuenftige} ${artLabel} gebucht. Trotzdem eine weitere Serie anlegen?`,
+        'Trotzdem anlegen', false, `${artLabel} schon gebucht`)) return;
     document.getElementById('report-details-modal').classList.remove('active');
     openAddPaymentModal();
     document.getElementById('payment-tenant').value = String(tenantId);
     document.getElementById('payment-date').value = ab;
     document.getElementById('payment-amount').value = betrag;
-    document.getElementById('payment-type').value = 'Nebenkostenvorauszahlung';
+    document.getElementById('payment-type').value = art;
     document.getElementById('payment-recurring').checked = true;
     togglePaymentRecurring();
     toggleBillingReportField();
+}
+
+// --- Phase 47: Zahlungsstand je Abrechnung ---
+// Der Server leitet Stand und Rest aus Ergebnis und zugeordneten Zahlungen ab;
+// ein ausgezahltes Guthaben ist eine negative Nebenkostenzahlung.
+function zahlungsstandPille(r) {
+    const [text, art] = {
+        offen: ['offen', 'rot'], teilweise: ['teilweise beglichen', 'warn'],
+        beglichen: ['beglichen', 'ok'], ausgeglichen: ['ausgeglichen', 'ok'],
+        ueberzahlt: ['überzahlt', 'warn'],
+    }[r.zahlungsstand] || [];
+    return text ? `<span class="chip chip-${art}">${text}</span>` : '';
+}
+
+function zahlungsstandBlock(id, umschlag) {
+    "Was von Nachzahlung oder Guthaben noch offen ist, mit dem Weg zur Zahlung."
+    if (!umschlag.zahlungsstand) return '';
+    const rest = Number(umschlag.offen_betrag);
+    const satz = rest > 0 ? `Der Mieter schuldet noch ${euroText(rest)}.`
+        : rest < 0 ? `An den Mieter auszuzahlen: ${euroText(-rest)}.`
+        : 'Es ist nichts mehr offen.';
+    const knopf = rest
+        ? `<button class="btn-primary" onclick="zahlungZurAbrechnung(${id}, ${umschlag.tenant_id}, '${escapeHtml(umschlag.offen_betrag)}')">Zahlung erfassen</button>`
+        : '';
+    return `
+        <div class="dashboard-card glass-panel" style="margin-bottom: 24px; padding: 16px;">
+            <h4 style="margin: 0 0 8px 0; display: flex; align-items: center; gap: 8px;">
+                <i class="ph ph-wallet"></i> Zahlungsstand ${zahlungsstandPille(umschlag)}
+            </h4>
+            <p style="margin: 0 0 12px 0; color: var(--text-muted);">${satz}</p>
+            ${knopf}
+        </div>`;
+}
+
+async function zahlungZurAbrechnung(reportId, tenantId, betrag) {
+    "Öffnet den Zahlungsdialog mit Mieter, Abrechnung und Restbetrag; gespeichert wird erst dort."
+    document.getElementById('report-details-modal').classList.remove('active');
+    openAddPaymentModal();
+    document.getElementById('payment-tenant').value = String(tenantId);
+    document.getElementById('payment-type').value = 'Nebenkostenzahlung';
+    await toggleBillingReportField();
+    document.getElementById('payment-billing-report').value = String(reportId);
+    document.getElementById('payment-amount').value = betrag;
+    zahlungsBetragBeschriften(betrag);
+}
+
+function zahlungsBetragBeschriften(betrag) {
+    "Ein negativer Betrag ist ein ausgezahltes Guthaben; das Formular sagt es."
+    const guthaben = Number(betrag) < 0;
+    document.getElementById('label-payment-amount').textContent = guthaben ? 'Guthaben ausgezahlt (€)' : 'Betrag (€)';
+    document.getElementById('payment-hinweis').hidden = !guthaben;
 }
 
 // --- NK-124: Zustellung, Frist, Korrektur und Versionen im Detaildialog ---
@@ -7515,7 +8073,7 @@ async function korrekturErstellen(id) {
     }
 }
 
-// Eine Tabelle für „Abrechnungs-Details & Belege“ und die Vorschau.
+// eine Tabelle für „Abrechnungs-Details & Belege“ und die Vorschau.
 // Je Kostenart eine Zeile (Name, Zeitraum, Betrag, Beleg); die Aufschlüsselung
 // klappt per Klick auf. Stile stehen als abr-* in style.css.
 
@@ -7737,6 +8295,7 @@ async function openReportDetails(id) {
                     <i class="ph ph-file-csv"></i> Positionen als CSV herunterladen
                 </a>
             </div>
+            ${zahlungsstandBlock(id, umschlag)}
             ${zustellungsBlock}
             ${vorauszahlungsBlock(umschlag.vorauszahlung, umschlag.tenant_id)}
             ${versionenBlock}
@@ -8224,7 +8783,7 @@ async function fetchAnalytics() {
     const navContainer = document.getElementById('analytics-nav');
     navContainer.replaceChildren();
     
-    // Die Ansichtswahl sind Filterpillen; die gewählte trägt Tinte.
+    // die Ansichtswahl sind Filterpillen; die gewählte trägt Tinte.
     const pille = (ansicht, inhalt) => {
         const knopf = document.createElement('button');
         knopf.type = 'button';
@@ -9798,6 +10357,7 @@ function openAddPaymentModal() {
     
     document.getElementById('payment-date').value = new Date().toLocaleDateString('sv-SE');
     document.getElementById('payment-amount').value = '';
+    zahlungsBetragBeschriften('');
     document.getElementById('payment-type').value = 'Miete';
     
     document.getElementById('payment-recurring').checked = false;
@@ -9847,10 +10407,12 @@ async function toggleBillingReportField() {
                         try {
                             const detailsRes = await fetch(`/api/billing/reports/${selectedId}/details`);
                             const umschlag = await detailsRes.json();
-                            // Der Saldo steckt im Schnappschuss ("ergebnis") und ist Text.
-                            const saldo = Number((umschlag.ergebnis || umschlag).balance);
+                            // Phase 47: vorgeschlagen wird, was noch offen ist; beim
+                            // Altbestand ohne Stand der Saldo aus dem Schnappschuss (Text).
+                            const saldo = Number(umschlag.offen_betrag ?? (umschlag.ergebnis || umschlag).balance);
                             if (saldo) {
                                 document.getElementById('payment-amount').value = saldo.toFixed(2);
+                                zahlungsBetragBeschriften(saldo);
                             }
                         } catch(e) {
                             console.error('Failed to load balance', e);
@@ -9918,6 +10480,7 @@ async function savePayment() {
         closeAddPaymentModal();
         showSuccess('Zahlung erfolgreich erfasst.');
         fetchPayments();
+        fetchBillingHistory();
     } catch (e) {
         showError(meldungZu(e, 'Fehler beim Speichern der Zahlung.'));
     }
@@ -9934,6 +10497,7 @@ async function deletePayment(id) {
         payments = payments.filter(p => p.id !== id);
         renderPayments();
         updateDashboard();
+        fetchBillingHistory();
         
         // If details modal is open, re-render it
         if (paymentDetailsModal.classList.contains('active')) {

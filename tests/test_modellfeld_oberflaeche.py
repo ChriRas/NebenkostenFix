@@ -79,6 +79,12 @@ OBERFLAECHE = {
         'gueltig_ab': 'vz-gueltig-ab',
         'betrag': 'vz-betrag',
     },
+    'KaltmieteSoll': {
+        'tenant_id': '/kaltmiete_soll`',
+        'gueltig_ab': 'id="km-gueltig-ab"',
+        'betrag': 'id="km-betrag"',
+        'indexmiete': 'id="km-indexmiete"',
+    },
     'TenantCostProfile': {
         'tenant_id': '/profiles`',
         'category_id': 'profile-cat-',
@@ -137,6 +143,8 @@ OBERFLAECHE = {
         'ersetzt_id': 'id="wechsel-modal"',
         'geeicht_bis': 'id="meter-geeicht-bis"',
         'ort': 'id="meter-ort"',
+        # Phase 55: was der Zaehler misst. Leer heisst "wie die Kostenart".
+        'einheit': 'id="meter-einheit"',
     },
     'MeterReading': {
         'meter_id': 'id="reading-meter"',
@@ -243,6 +251,9 @@ AUSNAHMEN = {
         'id': 'Schlüssel.',
     },
     'VorauszahlungSoll': {
+        'id': 'Schlüssel.',
+    },
+    'KaltmieteSoll': {
         'id': 'Schlüssel.',
     },
     'TenantCostProfile': {

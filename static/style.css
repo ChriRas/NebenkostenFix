@@ -784,7 +784,7 @@ kbd {
     gap: var(--space-2);
 }
 
-/* Graue Platzhalter in Form der Liste, bis die Daten da sind. */
+/* graue Platzhalter in Form der Liste, bis die Daten da sind. */
 .skelett {
     grid-column: 1 / -1;
     display: flex;
@@ -994,7 +994,7 @@ kbd {
     color: var(--text-muted);
 }
 
-/* Auch die geöffnete Liste im Design, gebaut wie das Kontomenü.
+/* auch die geöffnete Liste im Design, gebaut wie das Kontomenü.
    Customizable Select gibt es ab Chromium 135 (Edge, WebView2); andere
    Browser zeigen weiter die Liste des Systems. Den Pfeil malt das Feld. */
 @supports (appearance: base-select) {
@@ -1754,7 +1754,7 @@ td.text-right {
     margin-top: var(--space-2);
 }
 
-/* Leerer Bereich in einer Karte, ein Satz plus der nächste Schritt. */
+/* leerer Bereich in einer Karte, ein Satz plus der nächste Schritt. */
 .leer-zeile {
     display: flex;
     flex-wrap: wrap;
@@ -2614,6 +2614,14 @@ a.btn-primary:hover {
     grid-template-columns: repeat(auto-fill, minmax(min(600px, 100%), 1fr));
 }
 
+/* Re-Review Phase 54: die Kostenarten-Gruppe hat genau eine Karte. Im
+   Raster mit auto-fill bliebe sie als 600-px-Spalte links stehen und die
+   Tabelle rollte darin quer, obwohl rechts Platz frei ist. Eine sichtbare
+   Einzelkarte nimmt die volle Breite. */
+.einstellungs-raster > .dashboard-card[data-gruppe="kostenarten"] {
+    grid-column: 1 / -1;
+}
+
 .math-icon-primaer {
     font-size: 1.1em;
     color: var(--primary-text);
@@ -3450,6 +3458,12 @@ td .btn-icon,
 .chip-rot {
     background: var(--danger-bg);
     color: var(--danger-color);
+}
+
+/* Phase 47: beglichen. */
+.chip-ok {
+    background: var(--success-bg);
+    color: var(--success-color);
 }
 
 .chip-ind {
@@ -4315,7 +4329,7 @@ html.einflug .app-container {
     }
 }
 
-/* Eine Abrechnungstabelle für „Details zur Abrechnung“ und die
+/* eine Abrechnungstabelle für „Details zur Abrechnung“ und die
    Vorschau (abrechnungsTabelle in app.js). Ergebnis zuerst, je Kostenart eine
    Zeile; die Aufschlüsselung klappt darunter über die volle Breite auf. */
 .abr-kopf {

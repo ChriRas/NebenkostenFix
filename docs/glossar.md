@@ -30,6 +30,9 @@ der Test bricht `make check` ab, wenn er zurückkehrt.
 | **Ablesung** | Ein erfasster Zählerstand zu einem Datum — der Vorgang und der Datensatz. | „Zählerstand“ als Name des Vorgangs oder Knopfs |
 | **Abrechnung** | Das Ergebnis für einen Mieter über einen Zeitraum: die Berechnung samt erzeugtem PDF. | „Report“, „Bericht“, „Abrechnungslauf“ |
 | **Zahlung** | Ein erfasster Betrag, den ein Mieter gezahlt hat (Miete, Vorauszahlung, Nachzahlung). | „Einnahme“ als Name des Vorgangs oder Knopfs |
+| **Zahlungsstand** | Wie weit das Ergebnis einer Abrechnung bezahlt ist: Nachzahlung oder Guthaben gegen die Nebenkostenzahlungen, die der Abrechnung zugeordnet sind. Ein ausgezahltes Guthaben ist eine negative Zahlung. Wird abgeleitet, nie gespeichert. | „Status“, „Zahlstatus“, „Saldo“ als Name des Stands |
+| **offen** | Zahlungsstand: zur Abrechnung ist noch nichts gezahlt oder ausgezahlt. Teilzahlungen heißen „teilweise beglichen“. | „unbezahlt“, „ausstehend“ |
+| **beglichen** | Zahlungsstand: Nachzahlung vollständig eingegangen oder Guthaben vollständig ausgezahlt. Ein Ergebnis von 0 € heißt „ausgeglichen“. | „bezahlt“, „erledigt“ |
 | **Einnahmen** | Kennzahl (Summe): die Zahlungen eines Zeitraums. Nur als Überschrift von Kennzahlen, nie als Knopf. | „Umsatz“, „YTD“, „Income“ |
 | **Vorauszahlung** | Die Abschläge des Mieters auf Betriebskosten während des Abrechnungsjahres. | „Abschlag“ in Knöpfen und Feldbeschriftungen |
 | **Kurzbrief** | Der Abrechnungslauf über weniger als ein Jahr (Einzug, Auszug, Eigentumswechsel). | — |
@@ -184,8 +187,12 @@ oder ein Pflichtbegriff in der Oberfläche kein „?“ hat.
 |---|---|---|
 | abrechnungsfrist | Abrechnungsfrist | Die Abrechnung muss dem Mieter spätestens zwölf Monate nach Ende des Abrechnungszeitraums zugehen; danach können Sie keine Nachzahlung mehr verlangen, ein Guthaben müssen Sie trotzdem auszahlen (§ 556 Abs. 3 BGB). |
 | abrechnungszeitraum | Abrechnungszeitraum | Die Zeit, über die abgerechnet wird: höchstens zwölf Monate, meist ein Kalenderjahr; bei Ein- oder Auszug zählen nur die Monate, in denen der Mieter dort gewohnt hat. |
+| eigene-kostenarten | Eigene Kostenarten | Ihre Abrechnung heißt die Kostenart anders als der Katalog? Legen Sie sie unter ihrem eigenen Namen an und wählen die Nummer aus § 2 BetrKV, zum Beispiel „Hauswart" unter Nr. 14. Die Nummer entscheidet, wie gerechnet wird. |
 | guthaben | Guthaben | Hat der Mieter mehr vorausgezahlt, als an Kosten angefallen ist, bekommt er den Unterschied zurück. |
 | hauptzaehler | Hauptzähler | Der Zähler des Versorgers für das ganze Haus; nach ihm stellt der Versorger seine Rechnung. |
+| hausgeldabrechnung | Hausgeldabrechnung | Die Abrechnung, die Sie als Eigentümer einer Wohnung von der Hausverwaltung bekommen. Daraus dürfen nur die Betriebskosten an den Mieter weiter; Verwaltung, Rücklage und Instandsetzung bleiben bei Ihnen (§ 1 Abs. 2 BetrKV). |
+| waermemengenzaehler | Wärmemengenzähler | Ein Zähler, der Kilowattstunden Wärme misst statt Kubikmeter. Bei einer Wärmepumpe darf damit auch das Warmwasser erfasst werden (§ 9 Abs. 2 Satz 1 HeizkostenV); tragen Sie beim Zähler dann „kWh“ als Maßeinheit ein. |
+| kaltmiete | Kaltmiete-Soll | Die vereinbarte Kaltmiete mit ihrem Stichtagsverlauf; das Modal stellt sie den erfassten Mietzahlungen je Monat gegenüber. Gezählt wird nur, was als Zahlung vom Typ „Miete" erfasst ist — kein Kontoabgleich. Künftige Stufen sind als geplant markiert. |
 | kostenprofil | Kostenprofil | Für jeden Mieter und jede Kostenart die Angabe, wie seine Wohnung beteiligt ist: nach Wohnfläche, nach Personen, nach eigenem Zähler oder gar nicht. |
 | leerstand | Leerstand | Zeiten, in denen eine Wohnung nicht vermietet war; ihren Anteil an den Kosten tragen Sie als Vermieter, nicht die übrigen Mieter. |
 | nachzahlung | Nachzahlung | Waren die Kosten höher als die Vorauszahlungen, zahlt der Mieter den Unterschied nach. |

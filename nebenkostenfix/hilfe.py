@@ -60,6 +60,17 @@ KURZANLEITUNG = [
         'Umlegen dürfen Sie nur Betriebskosten nach § 2 Betriebskostenverordnung. Reparaturen, '
         'Verwaltung und Rücklagen gehören nicht in die Abrechnung.',
     ]),
+    ('Eigene Kostenarten', [
+        'Ihre Hausverwaltung rechnet mit anderen Positionen ab, als die Liste anbietet? '
+        'Unter „Einstellungen“ → „Kostenarten“ legen Sie eigene an und benennen vorhandene um.',
+        'Jede Kostenart braucht eine Nummer aus § 2 Betriebskostenverordnung. Steht auf Ihrer '
+        'Hausgeldabrechnung etwa „Hauswart“, ist das Nr. 14. Die App schlägt die Nummer beim '
+        'Tippen vor, Sie können sie ändern.',
+        'Passt keine der Nummern, bleibt Nr. 17 „Sonstige Betriebskosten“. Die dürfen Sie nur '
+        'umlegen, wenn sie im Mietvertrag einzeln vereinbart sind — die App fragt deshalb nach.',
+        'Sobald eine Rechnung oder ein Zähler an einer Kostenart hängt, bleiben Nummer und '
+        'Zählerkennung gesperrt. Umbenennen können Sie jederzeit.',
+    ]),
     ('5. Zähler und Ablesungen', [
         'Nur nötig, wenn Kosten nach Verbrauch verteilt werden, etwa Wasser oder Heizung mit '
         'eigenen Zählern in den Wohnungen.',

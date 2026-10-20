@@ -1,6 +1,8 @@
 from flask_sqlalchemy import SQLAlchemy
 from datetime import date, datetime
 
+import sqlalchemy as sa
+
 from nebenkostenfix import zeit
 from nebenkostenfix.abrechnungsart import GUELTIG, VORGABE
 from nebenkostenfix.betrkv import NUMMERN as BETRKV_NUMMERN
@@ -108,6 +110,11 @@ class Tenant(db.Model):
     vorauszahlung_soll = db.relationship(
         'VorauszahlungSoll', backref='tenant', lazy=True,
         cascade="all, delete-orphan", order_by='VorauszahlungSoll.gueltig_ab')
+    # Phase 49: die vereinbarte Kaltmiete ab Stichtag, mit Erinnerung an
+    # die nächste Mieterhöhung im Fristenkalender.
+    kaltmiete_soll = db.relationship(
+        'KaltmieteSoll', backref='tenant', lazy=True,
+        cascade="all, delete-orphan", order_by='KaltmieteSoll.gueltig_ab')
 
     def personenanzahl_am(self, stichtag: date) -> int:
         """Wie viele Personen an diesem Tag in der Einheit wohnten.
@@ -179,6 +186,33 @@ class VorauszahlungSoll(db.Model):
         db.CheckConstraint('betrag >= 0', name='ck_vorauszahlung_soll_betrag'),
     )
 
+
+class KaltmieteSoll(db.Model):
+    """Die vereinbarte Kaltmiete je Monat ab einem Stichtag (Phase 49).
+
+    Nach dem Muster der Vorauszahlung: ein Eintrag gilt ab gueltig_ab bis
+    zum naechsten. Er traegt den Betrag, der nirgends mehr stand, und
+    speist die Erinnerung an die naechste Mieterhoehung im Fristenkalender
+    (§ 558: 15 Monate, Indexmiete § 557b: 12 Monate).
+    """
+
+    __tablename__ = 'kaltmiete_soll'
+    id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(db.Integer, db.ForeignKey('tenants.id'), nullable=False)
+    gueltig_ab = db.Column(db.Date, nullable=False)
+    betrag = db.Column(Geld, nullable=False)
+    # Eine Indexanpassung (§ 557b) ist die letzte Aenderung; ab ihr zaehlt
+    # der Kalender ein Jahr, sonst 15 Monate (§ 558). Der Server-Grundwert
+    # steht hier wie in der Migration, damit der Schema-Abgleich ruhig bleibt.
+    indexmiete = db.Column(db.Boolean, nullable=False, default=False,
+                           server_default=sa.false())
+
+    __table_args__ = (
+        db.UniqueConstraint('tenant_id', 'gueltig_ab',
+                            name='uq_kaltmiete_soll_tenant_gueltig_ab'),
+        db.CheckConstraint('betrag >= 0', name='ck_kaltmiete_soll_betrag'),
+    )
+
 class TenantCostProfile(db.Model):
     __tablename__ = 'tenant_cost_profiles'
     id = db.Column(db.Integer, primary_key=True)
@@ -206,7 +240,10 @@ class CostCategory(db.Model):
     # sieht der Vermieter doppelt in der Auswahlliste und kann nicht erkennen,
     # welche die Rechnungen traegt.
     name = db.Column(db.String(100), nullable=False, unique=True)
-    allocation_method = db.Column(db.String(50), nullable=False) # e.g. 'PER_SQM', 'PER_ACTIVE_HEAD', 'METER_READING'
+    # Keine Abrechnungsentscheidung: das Blatt liest das Kostenprofil des
+    # Mieters (rechenkern.abrechnungsart_von), diese Spalte trägt nur den
+    # Seed-Wert. Die Oberfläche zeigt und fragt sie nicht mehr.
+    allocation_method = db.Column(db.String(50), nullable=False)  # aus abrechnungsart.ARTEN: 'qm', 'personen', 'direkt', 'nur_allgemein', 'ignoriert'
     requires_meter = db.Column(db.Boolean, default=False, nullable=False)
     # Die Nummer aus § 2 BetrKV, seit NK-044 (Revision c9a5d3f81e47). Sie ist
     # Pflicht, weil die Abrechnung die Kostenart benennen muss (R-DOC-01) und
@@ -513,6 +550,13 @@ class Meter(db.Model):
     # Auskunft; die Berechnung haengt nicht daran.
     geeicht_bis = db.Column(db.Date, nullable=True)
     ort = db.Column(db.String(100), nullable=True)
+    # Phase 55: was dieser Zaehler misst -- 'm³' oder 'kWh'. Bisher leitete
+    # der Kern das aus der BetrKV-Nummer der Kostenart ab; ein Warmwasser-
+    # Waermemengenzaehler (§ 9 Abs. 2 Satz 1 HeizkostenV, bei Waermepumpen
+    # der uebliche Aufbau) hatte damit keinen Platz. Die Wanderung
+    # e8b4a7c25f91 hat fuer jeden Bestandszaehler genau die abgeleitete
+    # Einheit festgeschrieben: fuer den Bestand ist das Feld ein Nullwechsel.
+    einheit = db.Column(db.String(10), nullable=True)
 
     readings = db.relationship('MeterReading', backref='meter', lazy=True, cascade="all, delete-orphan")
 

@@ -10,6 +10,11 @@
   "satz": "Die Zeit, über die abgerechnet wird: höchstens zwölf Monate, meist ein Kalenderjahr; bei Ein- oder Auszug zählen nur die Monate, in denen der Mieter dort gewohnt hat."
  },
  {
+  "schluessel": "eigene-kostenarten",
+  "begriff": "Eigene Kostenarten",
+  "satz": "Ihre Abrechnung heißt die Kostenart anders als der Katalog? Legen Sie sie unter ihrem eigenen Namen an und wählen die Nummer aus § 2 BetrKV, zum Beispiel „Hauswart\" unter Nr. 14. Die Nummer entscheidet, wie gerechnet wird."
+ },
+ {
   "schluessel": "guthaben",
   "begriff": "Guthaben",
   "satz": "Hat der Mieter mehr vorausgezahlt, als an Kosten angefallen ist, bekommt er den Unterschied zurück."
@@ -18,6 +23,21 @@
   "schluessel": "hauptzaehler",
   "begriff": "Hauptzähler",
   "satz": "Der Zähler des Versorgers für das ganze Haus; nach ihm stellt der Versorger seine Rechnung."
+ },
+ {
+  "schluessel": "hausgeldabrechnung",
+  "begriff": "Hausgeldabrechnung",
+  "satz": "Die Abrechnung, die Sie als Eigentümer einer Wohnung von der Hausverwaltung bekommen. Daraus dürfen nur die Betriebskosten an den Mieter weiter; Verwaltung, Rücklage und Instandsetzung bleiben bei Ihnen (§ 1 Abs. 2 BetrKV)."
+ },
+ {
+  "schluessel": "waermemengenzaehler",
+  "begriff": "Wärmemengenzähler",
+  "satz": "Ein Zähler, der Kilowattstunden Wärme misst statt Kubikmeter. Bei einer Wärmepumpe darf damit auch das Warmwasser erfasst werden (§ 9 Abs. 2 Satz 1 HeizkostenV); tragen Sie beim Zähler dann „kWh“ als Maßeinheit ein."
+ },
+ {
+  "schluessel": "kaltmiete",
+  "begriff": "Kaltmiete-Soll",
+  "satz": "Die vereinbarte Kaltmiete mit ihrem Stichtagsverlauf; das Modal stellt sie den erfassten Mietzahlungen je Monat gegenüber. Gezählt wird nur, was als Zahlung vom Typ „Miete\" erfasst ist — kein Kontoabgleich. Künftige Stufen sind als geplant markiert."
  },
  {
   "schluessel": "kostenprofil",

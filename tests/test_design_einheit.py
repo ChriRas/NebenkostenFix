@@ -111,7 +111,7 @@ def test_globaler_kopf_traegt_nur_was_ueberall_gilt():
 
 
 def test_begruessung_ohne_zurueck_beim_ersten_besuch():
-    # Der Gruß steht als Untertitel im Kopf von „Heute“.
+    # der Gruß steht als Untertitel im Kopf von „Heute“.
     assert '<span id="begruessung">Willkommen bei NebenkostenFix!</span>' in SEITE
     assert "'Willkommen zurück!' : 'Willkommen bei NebenkostenFix!'" in SKRIPT
 
@@ -504,7 +504,7 @@ def test_tabellen_zeilen_hover_einheitlich():
 
 
 def test_seitenband_titel_und_unterzeile_auf_jeder_seite():
-    # Jedes Seitenband trägt Titel und eine Zeile, wozu die Seite da ist.
+    # jedes Seitenband trägt Titel und eine Zeile, wozu die Seite da ist.
     seite = _ohne_kommentare_html(SEITE)
     seiten = re.findall(r'<section[^>]*\bid="(tab-\w+)"', seite)
     assert len(seiten) == 10
@@ -715,7 +715,7 @@ def test_tabellen_sortieren_und_summieren_wie_excel():
 
 
 def test_enter_springt_in_der_ablese_runde_und_schrift_im_kontomenue():
-    enter = SKRIPT[SKRIPT.index('// In der Ablese-Runde springt Enter'):][:700]
+    enter = SKRIPT[SKRIPT.index('// in der Ablese-Runde springt Enter'):][:700]
     assert "feld.closest('#ablesen-liste')" in enter
     assert 'if (!naechstes) return;' in enter
     assert 'naechstes.focus();' in enter

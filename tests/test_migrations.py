@@ -43,7 +43,10 @@ BASISREVISION = "63738d5329b4"
 # NK-261: ``d9a3f2c6e1b4`` legt die Tabelle ``vorauszahlung_soll`` an (R-VZ-02).
 # NK-268: ``a8c4e2f61d93`` fuegt ``cost_invoices.art_35a`` und ``lohnanteil`` hinzu (R-35A-01).
 # ``b4e7c1d92a58`` benennt Kostenart Nr. 11 in „Allgemeinstrom“ um (nur Daten).
-KOPFREVISION = "b4e7c1d92a58"
+# Phase 49: ``f7c2e9a4b6d1`` legt die Tabelle ``kaltmiete_soll`` an (Kaltmiete + Mieterhöhung).
+# Re-Review: ``d5c9f3b7e2a8`` setzt die Katalog-Werte der Verteilung auf die
+# echten Kodes (PER_SQM -> qm, METER_READING -> direkt/qm, nur Daten).
+KOPFREVISION = "e8b4a7c25f91"
 
 
 def _umgebung(dbdatei: Path, tmp_path: Path) -> dict:
@@ -335,6 +338,68 @@ def test_app_py_legt_keine_tabellen_mehr_blind_an():
         and knoten.func.attr == "create_all"
     ]
     assert aufrufe == [], f"create_all() in app.py, Zeile {[k.lineno for k in aufrufe]}"
+
+
+# Der Import wandert bereits auf den Kopf und seedt die Katalog-Kategorien
+# (jetzt mit den echten Kodes). Zurück auf die Phase-49-Revision, dort den
+# Altbestand einer 0.15.0-Instanz nachlegen und weiterwandern -- genau der
+# Upgrade-Weg, den eine bestehende Installation beim nächsten Start nimmt.
+CODE_VERTEILUNG = """
+import json
+from sqlalchemy import text
+from flask_migrate import downgrade as zurueck, upgrade as wandere
+import app as anwendung
+from nebenkostenfix.models import db
+from nebenkostenfix.abrechnungsart import GUELTIG
+
+with anwendung.app.app_context():
+    zurueck(revision="f7c2e9a4b6d1")
+    for name, wert, zaehler, nr in [
+        ('Katalogart', 'PER_SQM', 0, 1),
+        ('Wasseralternative', 'METER_READING', 1, 2),
+        ('Entwaesserungsalternative', 'METER_READING', 0, 3),
+        ('Eigenart', 'qm', 0, 17),
+        ('Fremdart', 'PER_ACTIVE_HEAD', 0, 16),
+    ]:
+        db.session.execute(text(
+            "INSERT INTO cost_categories (name, allocation_method, requires_meter, betrkv_nr) "
+            "VALUES (:n, :w, :z, :b)"), {"n": name, "w": wert, "z": zaehler, "b": nr})
+    db.session.commit()
+    wandere(revision="head")
+    zeilen = dict(db.session.execute(
+        text("SELECT name, allocation_method FROM cost_categories")).all())
+    katalog = {n: zeilen.pop(n)
+               for n in ('Katalogart', 'Wasseralternative',
+                         'Entwaesserungsalternative', 'Eigenart', 'Fremdart')}
+    print(json.dumps({
+        "katalog": katalog,
+        "seed_zeilen": len(zeilen),
+        # Im ganzen Bestand bleibt kein Katalog-Fremdwert übrig.
+        "fremde": {n: w for n, w in zeilen.items() if w not in GUELTIG},
+    }))
+"""
+
+
+def test_die_verteilungswanderung_setzt_die_katalogwerte_auf_die_kodes(tmp_path):
+    """Re-Review: der Seed schrieb seit je ``PER_SQM``/``METER_READING`` --
+    Werte, die keine der fuenf Abrechnungsarten kennt. Ein Upgrade von
+    0.15.0 auf die neue Version setzt sie auf die echten Kodes, ohne einen
+    fremden Bestandswert anzutasten."""
+    stand = _lauf(CODE_VERTEILUNG, tmp_path / "verteilung.db", tmp_path)
+
+    assert stand["katalog"] == {
+        # PER_SQM -> qm
+        'Katalogart': 'qm',
+        # METER_READING mit eigenem Zaehler -> direkt
+        'Wasseralternative': 'direkt',
+        # METER_READING ohne Zaehler -> qm (wie bisher gerechnet)
+        'Entwaesserungsalternative': 'qm',
+        # eigene Werte bleiben, wie sie sind
+        'Eigenart': 'qm',
+        'Fremdart': 'PER_ACTIVE_HEAD',
+    }
+    assert stand["seed_zeilen"] == 18
+    assert stand["fremde"] == {}
 
 
 def test_die_basisrevision_wird_nicht_veraendert():
@@ -1089,7 +1154,7 @@ print(json.dumps({"zeilen": zeilen}))
 
     assert stand["zeilen"] == [
         ["Abwasser", 3, stand["zeilen"][0][2]],
-        ["Niederschlagswasser", 3, "PER_SQM"],
+        ["Niederschlagswasser", 3, "qm"],
     ]
 
 
@@ -2722,7 +2787,7 @@ print(json.dumps(ergebnis))
 
 
 def test_die_allgemeinstromwanderung_benennt_nur_den_standardnamen_um(tmp_path):
-    """Im Bestand steht noch "Beleuchtung (Allgemeinstrom)", weil das
+    """im Bestand steht noch "Beleuchtung (Allgemeinstrom)", weil das
     Seed ueber die Nummer abgleicht und nie umbenennt. Die Wanderung zieht den
     Standardnamen nach; selbst vergebene Namen und ein schon vorhandenes
     "Allgemeinstrom" fasst sie nicht an."""

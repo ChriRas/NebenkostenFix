@@ -18,7 +18,7 @@
     <link rel="stylesheet" href="/static/vendor/fonts/geist-mono/geist-mono.css">
     <link rel="stylesheet" href="/static/vendor/phosphor/regular/style.css">
     <link rel="stylesheet" href="/static/vendor/phosphor/fill/style.css">
-    <link rel="stylesheet" href="/static/style.css?v=13">
+    <link rel="stylesheet" href="/static/style.css?v=14">
     <!-- Einflug: kommt die Seite frisch von der Anmeldung
          (formular.js, höchstens 15 s alt), zieht style.css die Indigo-Fläche weg. -->
     <script>try { if (Date.now() - Number(sessionStorage.getItem('nk-einflug')) < 15000) document.documentElement.classList.add('einflug'); sessionStorage.removeItem('nk-einflug'); } catch (e) { /* ohne Speicher kein Einflug */ }</script>
@@ -220,7 +220,7 @@
                         <!-- Kopfzahl: Summe und Zahl der Rechnungen, per JS (zeigeKopfzahl). -->
                         <p class="section-untertitel" id="kosten-kopfzahl">Belege hochladen und als Rechnung übernehmen</p>
                     </div>
-                    <!-- Drei Ansichten einer Seite. Eingang und „Alle Rechnungen“
+                    <!-- drei Ansichten einer Seite. Eingang und „Alle Rechnungen“
                          zeigen links die Liste, in der Mitte den Beleg, rechts das Formular. -->
                     <div class="zeile-eng knopf-zeile" role="group" aria-label="Ansicht">
                         <button class="filter-pill" id="pill-eingang"
@@ -392,6 +392,9 @@
                         <h2>Historie</h2>
                         <p class="section-untertitel">Bereits erstellte Abrechnungen</p>
                     </div>
+                    <!-- Phase 47: nur Abrechnungen, deren Nachzahlung oder Guthaben offen ist. -->
+                    <button type="button" class="filter-pill" id="historie-nur-offen" aria-pressed="false"
+                        onclick="historieFilterUmschalten()">Nur offene Zahlungen</button>
                 </div>
                 <div class="properties-grid raster-einspaltig" id="billing-history-container">
                     <div class="skelett" role="status" aria-label="Wird geladen"><span></span><span></span><span></span></div>
@@ -403,8 +406,8 @@
                 <div class="section-header">
                     <div>
                         <h2>Einstellungen</h2>
-                        <p class="section-untertitel">Vermieter und Anbieter, Datensicherung, Konto,
-                            Updates und Datenschutz</p>
+                        <p class="section-untertitel">Vermieter und Anbieter, Kostenarten, Datensicherung,
+                            Konto, Updates und Datenschutz</p>
                     </div>
                 </div>
 
@@ -414,6 +417,8 @@
                 <div class="einstellungs-gruppen" role="tablist" aria-label="Bereiche der Einstellungen">
                     <button type="button" class="filter-pill" role="tab" data-gruppe="vermieter"
                         onclick="zeigeEinstellungsgruppe('vermieter')"><i class="ph ph-identification-card" aria-hidden="true"></i> Vermieter &amp; Anbieter</button>
+                    <button type="button" class="filter-pill" role="tab" data-gruppe="kostenarten"
+                        onclick="zeigeEinstellungsgruppe('kostenarten')"><i class="ph ph-list-numbers" aria-hidden="true"></i> Kostenarten</button>
                     <button type="button" class="filter-pill" role="tab" data-gruppe="sicherung"
                         onclick="zeigeEinstellungsgruppe('sicherung')"><i class="ph ph-hard-drives" aria-hidden="true"></i> Datensicherung</button>
                     <button type="button" class="filter-pill" role="tab" data-gruppe="konto"
@@ -469,6 +474,40 @@
                             <small class="feld-hilfe">PNG oder JPEG, höchstens 2 MB. Es steht oben rechts auf dem Deckblatt jeder Abrechnung.</small>
                         </div>
                         <button class="btn-primary" id="btn-vermieter-speichern" onclick="saveVermieterdaten()">Speichern</button>
+                    </div>
+
+                    <!-- Phase 54 (Issue #30): Eigene Kostenarten. Der Katalog ist
+                         ein Nummernkatalog: der Vermieter nennt seine Kostenart,
+                         wie sie auf der Abrechnung der Verwaltung steht, und wählt
+                         die Nummer aus § 2 BetrKV. Heizung und Warmwasser (Nr. 4-6)
+                         laufen über die Heizungsanlage. -->
+                    <div data-gruppe="kostenarten" class="dashboard-card glass-panel">
+                        <div class="karten-kopf">
+                            <h3>Kostenarten</h3>
+                        </div>
+                        <p class="karten-text">
+                            Sie bekommen Abrechnungen, deren Kostenarten anders heißen als
+                            der Katalog. Legen Sie sie hier unter ihrem eigenen Namen an —
+                            die Nummer aus § 2 BetrKV entscheidet, wie gerechnet wird.
+                            Umbenennen geht jederzeit; Nummer, Umlage und Zähler frieren
+                            ein, sobald eine Rechnung oder ein Zähler daran hängt.
+                        </p>
+                        <button class="btn-primary" onclick="openKategorieModal()"><i class="ph ph-plus" aria-hidden="true"></i> Kostenart anlegen</button>
+                        <button class="btn-secondary" onclick="openHausgeldModal()"><i class="ph ph-calculator" aria-hidden="true"></i> Hausgeldabrechnung prüfen</button>
+                        <div class="tabellen-rolle">
+                            <table class="tabelle tabelle-kompakt abstand-oben-klein">
+                                <thead>
+                                    <tr>
+                                        <th>Name</th>
+                                        <th>Nummer</th>
+                                        <th>Zähler</th>
+                                        <th class="text-right">Rechnungen</th>
+                                        <th class="spalte-knopf"></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="kategorien-liste"></tbody>
+                            </table>
+                        </div>
                     </div>
 
                     <!-- NK-127 (E-1): Kontoverwaltung in der Oberfläche. Ein
@@ -1666,7 +1705,7 @@
             <div class="modal-body">
                 <div class="form-group">
                     <label for="payment-tenant">Mieter</label>
-                    <select id="payment-tenant">
+                    <select id="payment-tenant" onchange="toggleBillingReportField()">
                         <option value="">Lade Mieter...</option>
                     </select>
                 </div>
@@ -1702,8 +1741,9 @@
                     </div>
                 </div>
                 <div class="form-group abstand-oben">
-                    <label for="payment-amount">Betrag (€)</label>
-                    <input type="number" id="payment-amount" step="0.01">
+                    <label for="payment-amount" id="label-payment-amount">Betrag (€)</label>
+                    <input type="number" id="payment-amount" step="0.01" oninput="zahlungsBetragBeschriften(this.value)">
+                    <small class="feld-hilfe" id="payment-hinweis" hidden>Ein Guthaben wird als negative Nebenkostenzahlung gebucht.</small>
                 </div>
             </div>
             <div class="modal-footer">
@@ -1900,6 +1940,184 @@
         </div>
     </div>
 
+    <!-- Phase 54: Kostenart anlegen und bearbeiten. -->
+    <div class="modal-overlay" id="kategorie-modal">
+        <div class="modal glass-panel">
+            <div class="modal-header">
+                <h2><span id="kategorie-modal-titel">Kostenart anlegen</span> <button type="button" class="begriff-hilfe" aria-label="Begriff erklären" data-begriff="eigene-kostenarten"><i class="ph ph-question" aria-hidden="true"></i></button></h2>
+                <button class="btn-icon" aria-label="Schließen" onclick="closeKategorieModal()"><i class="ph ph-x"></i></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="kategorie-id">
+                <div class="form-group">
+                    <label for="kategorie-name">Name</label>
+                    <input type="text" id="kategorie-name" maxlength="100"
+                        placeholder="So steht sie auf der Rechnung, z. B. Quartierservice">
+                </div>
+                <div class="form-group">
+                    <label for="kategorie-nr">Nummer aus § 2 BetrKV</label>
+                    <select id="kategorie-nr"></select>
+                    <small class="feld-hilfe">Passt keine Nummer? Dann Nr. 17 <em>Sonstige Betriebskosten</em>. Das gilt nur, wenn sie im Mietvertrag einzeln vereinbart ist. Verwaltung, Instandhaltung und Rücklagen dürfen nie umgelegt werden.</small>
+                </div>
+                <div class="form-group">
+                    <label><input type="checkbox" id="kategorie-zaehler"> Eigener Zähler (Umlage nach Verbrauch)</label>
+                </div>
+                <p id="kategorie-sperre" class="text-muted" hidden></p>
+                <div class="modal-footer">
+                    <button class="btn-secondary" onclick="closeKategorieModal()">Abbrechen</button>
+                    <button class="btn-primary" onclick="saveKategorie()">Speichern</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Phase 50: die Hausgeld-Einzelabrechnung nachrechnen und trennen -->
+    <div class="modal-overlay" id="hausgeld-modal">
+        <div class="modal glass-panel dialog-breit">
+            <div class="modal-header">
+                <h2>Hausgeldabrechnung prüfen</h2>
+                <button class="btn-icon" aria-label="Schließen" onclick="closeHausgeldModal()"><i class="ph ph-x"></i></button>
+            </div>
+            <div class="modal-body">
+                <p class="karten-text">
+                    Sie vermieten eine Eigentumswohnung und haben die Einzelabrechnung
+                    Ihrer Hausverwaltung vor sich. Tragen Sie die Positionen hier ein:
+                    Die App rechnet nach, ob Ihr Anteil stimmt, und sagt Ihnen zu jeder
+                    Position, ob Sie sie an Ihren Mieter weitergeben dürfen. Verwaltung,
+                    Rücklage und Instandsetzung gehören nach § 1 Abs. 2 BetrKV nicht dazu.
+                    Hier wird nur gerechnet — übernommen wird nichts.
+                </p>
+                    <div class="form-group">
+                        <label for="hg-eigener-anteil">Ihr Anteil</label>
+                        <input type="number" id="hg-eigener-anteil" step="0.001" min="0"
+                            placeholder="z. B. 125">
+                        <small class="feld-hilfe">Miteigentumsanteile, Quadratmeter oder Einheiten — wie in der Abrechnung.</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="hg-gesamtanteile">Gesamtanteile</label>
+                        <input type="number" id="hg-gesamtanteile" step="0.001" min="0"
+                            placeholder="z. B. 1000">
+                    </div>
+                    <div class="form-group">
+                        <label for="hg-abrechnungssumme">Endsumme der Abrechnung (optional)</label>
+                        <input type="number" id="hg-abrechnungssumme" step="0.01"
+                            placeholder="z. B. 5560,00">
+                        <small class="feld-hilfe">Damit prüft die App, ob keine Zeile fehlt.</small>
+                    </div>
+                <div class="tabellen-rolle">
+                    <table class="tabelle tabelle-kompakt">
+                        <thead>
+                            <tr>
+                                <th>Position</th>
+                                <th class="text-right">Gesamtbetrag</th>
+                                <th class="text-right">Ihr Betrag</th>
+                                <th class="spalte-knopf"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="hg-zeilen"></tbody>
+                    </table>
+                </div>
+                <button class="btn-secondary abstand-oben" onclick="hausgeldZeile()"><i class="ph ph-plus" aria-hidden="true"></i> Position erfassen</button>
+                <p id="hg-fehler" class="karten-text text-muted" hidden></p>
+                <div id="hg-ergebnis" hidden>
+                    <h3 class="abstand-oben">Ergebnis</h3>
+                    <p id="hg-summen" class="karten-text"></p>
+                    <p id="hg-summenprobe" class="karten-text"></p>
+                    <div class="tabellen-rolle">
+                        <table class="tabelle tabelle-kompakt">
+                            <thead>
+                                <tr>
+                                    <th>Position</th>
+                                    <th>Weitergeben?</th>
+                                    <th class="text-right">Ihr Betrag</th>
+                                    <th class="text-right">Erwartet</th>
+                                    <th>Anmerkung</th>
+                                </tr>
+                            </thead>
+                            <tbody id="hg-bericht"></tbody>
+                        </table>
+                    </div>
+                    <p id="hg-heizkosten" class="karten-text"></p>
+                    <p id="hg-zeitraum" class="karten-text text-muted"></p>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn-secondary" onclick="closeHausgeldModal()">Schließen</button>
+                    <button class="btn-primary" onclick="hausgeldPruefen()">Abrechnung prüfen</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Phase 49: Kaltmiete-Soll mit Erinnerung an die Mieterhöhung -->
+    <div class="modal-overlay" id="kaltmiete-modal">
+        <div class="modal glass-panel dialog-vorauszahlung">
+            <div class="modal-header">
+                <h2>Kaltmiete <button type="button" class="begriff-hilfe" aria-label="Begriff erklären" data-begriff="kaltmiete"><i class="ph ph-question" aria-hidden="true"></i></button>: <span id="km-tenant-name"></span></h2>
+                <button class="btn-icon" aria-label="Schließen" onclick="closeKaltmieteModal()"><i class="ph ph-x"></i></button>
+            </div>
+            <div class="modal-body">
+                <p class="karten-text">
+                    Die vereinbarte Kaltmiete gilt ab ihrem Stichtag bis zum nächsten.
+                    An der letzten Erhöhung misst der Fristenkalender, wann die nächste
+                    verlangt werden darf: 15 Monate nach § 558 BGB, bei der Indexmiete
+                    (§ 557b BGB) 12 Monate. Den VPI tragen Sie von Hand ein.
+                    Gezählt wird nur, was Sie hier als Zahlung vom Typ „Miete" erfassen
+                    haben — das ist kein Kontoabgleich.
+                </p>
+                <input type="hidden" id="km-tenant-id">
+                <table class="tabelle tabelle-luftig abstand-unten-klein">
+                    <thead>
+                        <tr>
+                            <th>Gültig ab</th>
+                            <th class="text-right">Kaltmiete je Monat</th>
+                            <th class="spalte-knopf"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="km-soll-liste"></tbody>
+                </table>
+                <p id="km-saldo" class="karten-text"></p>
+                <div class="tabellen-rolle">
+                    <table class="tabelle tabelle-kompakt">
+                        <thead>
+                            <tr>
+                                <th>Monat</th>
+                                <th class="text-right">Soll</th>
+                                <th class="text-right">Ist</th>
+                                <th class="text-right">Differenz</th>
+                                <th>Stand</th>
+                            </tr>
+                        </thead>
+                        <tbody id="km-monate"></tbody>
+                    </table>
+                </div>
+                <div id="km-erinnerung-block" hidden>
+                    <h3 class="zwischentitel">Zahlungserinnerung</h3>
+                    <label for="km-erinnerung" class="karten-text">Vorlage zum Anpassen; zum Übernehmen in Ihr Schreiben markieren und kopieren (Strg+A, Strg+C)</label>
+                    <textarea id="km-erinnerung" rows="12" class="breite-voll"></textarea>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="km-gueltig-ab">Gültig ab</label>
+                        <input type="date" id="km-gueltig-ab">
+                    </div>
+                    <div class="form-group">
+                        <label for="km-betrag">Kaltmiete je Monat (€)</label>
+                        <input type="number" id="km-betrag" step="0.01" min="0">
+                    </div>
+                    <div class="form-group">
+                        <label for="km-indexmiete">
+                            <input type="checkbox" id="km-indexmiete"> Indexmiete (§ 557b)
+                        </label>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-secondary" onclick="closeKaltmieteModal()">Schließen</button>
+                <button type="button" class="btn-primary" onclick="saveKaltmieteSoll()">Soll speichern</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Add Meter Modal -->
     <div class="modal-overlay" id="meter-modal">
         <div class="modal glass-panel">
@@ -1960,6 +2178,14 @@
                     <select id="meter-heizungsanlage">
                         <option value="">— keine (misst keine Wärme) —</option>
                         <!-- Anlagen der gewählten Immobilie -->
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Maßeinheit <i class="ph ph-question feld-hilfe" title="Was dieser Zähler misst. Leer lassen nimmt, was die Kostenart vorgibt. Ein Wärmemengenzähler für Warmwasser misst Kilowattstunden, auch wenn die Kostenart Kubikmeter vorgibt (§ 9 Abs. 2 Satz 1 HeizkostenV)."></i></label>
+                    <select id="meter-einheit">
+                        <option value="">— aus der Kostenart —</option>
+                        <option value="m³">m³ (Wasserzähler)</option>
+                        <option value="kWh">kWh (Wärmemengenzähler)</option>
                     </select>
                 </div>
                 <div class="form-group checkbox-group" style="margin-top: 8px;">
@@ -2320,7 +2546,7 @@
                     <div class="felder-nebeneinander">
                         <div class="form-group feld-breit">
                             <label>Heizungsanlage</label>
-                            <select id="invoice-heizungsanlage">
+                            <select id="invoice-heizungsanlage" onchange="toggleInvoiceHeizkosten()">
                                 <option value="">— keine Heizkostenrechnung —</option>
                                 <!-- Anlagen der gewählten Immobilie -->
                             </select>
@@ -2333,6 +2559,7 @@
                             </select>
                         </div>
                     </div>
+                    <small class="feld-hilfe" id="hilfe-heizkostenart">Der Posten nach § 7 Abs. 2 öffnet sich, sobald eine Heizungsanlage gewählt ist.</small>
                     <div id="gruppe-invoice-co2" style="display: none;">
                         <div class="felder-nebeneinander">
                             <div class="form-group feld-breit">
@@ -2608,7 +2835,7 @@
                 <div id="heizung-verbunden-block" style="display: none; border-top: 1px solid var(--border-color); padding-top: 16px;">
                     <div class="form-group">
                         <label for="heizung-ww-weg">Weg zur Wärmemenge des Warmwassers (§ 9 Abs. 2)</label>
-                        <select id="heizung-ww-weg">
+                        <select id="heizung-ww-weg" onchange="toggleWwWeg()">
                             <option value="zaehler">Gemessen mit Wärmemengenzähler</option>
                             <option value="formel">Berechnet nach der Formel des § 9 Abs. 2 Satz 4</option>
                             <option value="ersatz">Ersatzmaßstab (§ 9 Abs. 2 Satz 5)</option>
@@ -2740,7 +2967,7 @@
         <button type="button" class="btn-secondary" onclick="entwurfVerwerfen()">Entwurf löschen</button>
     </div>
 
-    <!-- Die Einführung als Sprechblasen-Tour. Der Ring hebt die
+    <!-- die Einführung als Sprechblasen-Tour. Der Ring hebt die
          Stelle hervor, auf die die Blase zeigt; gezeichnet von tourZeigen(). -->
     <div id="tour-ring" class="tour-ring" hidden></div>
     <div id="tour" class="tour-blase" role="dialog" aria-modal="false"
@@ -2767,7 +2994,7 @@
     </div>
     <script src="/static/formular.js?v=2"></script>
     <script src="/static/umzug.js?v=1"></script>
-    <script src="/static/app.js?v=29"></script>
+    <script src="/static/app.js?v=39"></script>
 </body>
 
 </html>

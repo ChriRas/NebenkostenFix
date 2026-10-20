@@ -36,6 +36,10 @@ AUSNAHMEN = {
     'vorauszahlungsBlock(umschlag.vorauszahlung, umschlag.tenant_': 'Block aus maskierten Teilen (NK-226)',
     'marke': 'Symbol aus Code-Konstanten',
     'hinweis': 'feste Zeichenkette',
+    'zahlungsstandPille(r)': 'Pille aus Code-Konstanten (Phase 47)',
+    'zahlungsstandPille(umschlag)': 'Pille aus Code-Konstanten (Phase 47)',
+    'satz': 'feste Saetze mit euroText einer Zahl (Phase 47)',
+    'zahlungsstandBlock(id, umschlag)': 'Block aus maskierten Teilen (Phase 47)',
     'weitere': 'Zahl aus der Laenge der Liste (D-116)',
     "zeilen.slice(3).join('')": 'Zeilen, deren Texte einzeln maskiert werden (D-116)',
     'iconImKnopf': 'Symbolklasse aus Code-Konstanten',
@@ -43,7 +47,7 @@ AUSNAHMEN = {
     'getIcon(group.category)': 'liefert ein Emoji aus einer festen Tabelle',
     'valStr': 'Wert-HTML aus Zahlformat und maskierter Einheit',
     'ttStr': 'Tooltip aus Datum, Zahl und maskierter Einheit',
-    # Gemeinsame Abrechnungstabelle, jeder Baustein maskiert seine Teile selbst
+    # gemeinsame Abrechnungstabelle, jeder Baustein maskiert seine Teile selbst
     'interpolationsTooltip(infoObj)': 'Tooltip aus Datum, Zahl und maskierter Einheit',
     'abrechnungsDetailZeilen(item)': 'Unterzeilen, Texte und Betraege einzeln maskiert',
     'abrechnungsErgebnis(data)': 'Ergebnisfelder, Betraege per escapeHtml(euroText())',
@@ -106,7 +110,7 @@ AUSNAHMEN = {
     'stueck': 'escapeHtml(text.slice(...)) in befehlMarkiert',
     'befehlMarkiert(e.titel, woerter)': 'setzt nur maskierte Stuecke zusammen',
     'befehlMarkiert(e.info, woerter)': 'setzt nur maskierte Stuecke zusammen',
-    # Sortierbare Tabellenkoepfe, Titel und Art nur als Konstanten im Code
+    # sortierbare Tabellenkoepfe, Titel und Art nur als Konstanten im Code
     'art': "Sortierart 'text' oder 'zahl' aus sortierKopf-Aufrufen",
     "sortierKopf('Von', 'text')": 'Kopfzelle aus Konstanten',
     "sortierKopf('Bis', 'text')": 'Kopfzelle aus Konstanten',
@@ -116,6 +120,11 @@ AUSNAHMEN = {
     # Adressen, gebaut mit dateiUrl()
     'imgUrl': 'dateiAdresse(art, Zahl) (NK-129)',
     'docUrl': 'dateiAdresse(art, Zahl) (NK-129)',
+    # Phase 53: Kaltmiete-Soll
+    'pill': 'statische Pille „geplant", ohne Mieter-Daten',
+    'serie': 'Serienknopf aus Number(tenantId), escapeHtml(s.betrag), escapeHtml(s.gueltig_ab)',
+    # Phase 54: eigene Kostenarten
+    'nummer': 'Nummernzelle aus Number(k.betrkv_nr) und escapeHtml(k.betrkv_bezeichnung)',
 }
 
 

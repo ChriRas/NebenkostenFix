@@ -195,13 +195,13 @@ def test_missing_profile_defaults_to_qm(app_ctx):
 
 
 def test_allocation_method_on_category_is_ignored(app_ctx):
-    """Wasserversorgung is seeded METER_READING; profile qm still splits by sqm."""
+    """Wasserversorgung is seeded 'direkt'; profile qm still splits by sqm."""
     prop = house()
     a = apt(prop, "A", 50)
     apt(prop, "B", 100)
     t = tenant(a, "Mieter A")
     cat = category("Wasserversorgung")
-    assert cat.allocation_method == "METER_READING"
+    assert cat.allocation_method == "direkt"
     profile(t, cat, "qm")
     invoice(prop, cat, 1200.0)
 

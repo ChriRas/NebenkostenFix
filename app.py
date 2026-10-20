@@ -42,6 +42,7 @@ Oberflaeche und Betrieb
   GET         /api/belege/export                           -> belege_exportieren
   GET         /api/haftung                                 -> haftung_anzeigen
   POST        /api/haftung                                 -> haftung_bestaetigen
+  POST        /api/hausgeld/pruefen                        -> hausgeld_pruefen
   GET         /api/ueber                                   -> ueber_anzeigen
   GET         /api/drittlizenzen                           -> drittlizenzen_anzeigen
   GET         /api/aktualisierung/einstellung              -> update_einstellung_anzeigen
@@ -152,12 +153,20 @@ Stammdaten -- Immobilie, Wohnung, Mieter, Anbieter, Kostenart
   GET         /api/tenants/<int:tenant_id>/vorauszahlungen -> get_vorauszahlungen
   POST        /api/tenants/<int:tenant_id>/vorauszahlung_soll -> save_vorauszahlung_soll
   DELETE      /api/vorauszahlung_soll/<int:id>             -> delete_vorauszahlung_soll
+  GET         /api/tenants/<int:tenant_id>/kaltmiete       -> get_kaltmiete
+  GET         /api/tenants/<int:tenant_id>/miete           -> get_miete
+  POST        /api/tenants/<int:tenant_id>/kaltmiete_soll  -> save_kaltmiete_soll
+  DELETE      /api/kaltmiete_soll/<int:id>                 -> delete_kaltmiete_soll
   GET         /api/fristen                                 -> get_fristen
   GET         /api/fristen.ics                             -> get_fristen_ics
   GET         /api/providers                               -> get_providers
   POST        /api/providers                               -> create_provider
   DELETE      /api/providers/<int:id>                      -> delete_provider
   GET         /api/categories                              -> get_categories
+  POST        /api/categories                              -> create_category
+  PUT         /api/categories/<int:id>                     -> update_category
+  DELETE      /api/categories/<int:id>                     -> delete_category
+  GET         /api/categories-vorschlaege                  -> get_nummernvorschlaege
 
   Vier Wege tragen ``DELETE`` und ``PUT`` auf derselben Adresse
   (``update_delete_*``). Das ist gewachsen, nicht entworfen: die Funktion
@@ -272,7 +281,10 @@ from flask.json.provider import DefaultJSONProvider
 from dotenv import load_dotenv
 from nebenkostenfix.geld import NULL, runde
 from nebenkostenfix import betrkv
+from nebenkostenfix import abrechnungsart
 from nebenkostenfix.rechenkern import einheit_fuer
+from nebenkostenfix.betrkv import EINHEITEN_ZAEHLER
+from nebenkostenfix import hausgeld
 from nebenkostenfix import mieter_daten
 from nebenkostenfix import beispielimmobilie
 from nebenkostenfix import zeitleiste
@@ -284,19 +296,20 @@ from nebenkostenfix.heizung import (
     HeizungsFehler, pruefe_anteil, pruefe_kostenart, pruefe_versorgungsart,
     pruefe_warmwasserweg,
 )
-from nebenkostenfix.models import db, User, Property, Apartment, Tenant, Haushaltsgroesse, CostCategory, CostInvoice, Meter, MeterReading, TenantCostProfile, InvoiceDocument, Provider, TenantBillingReport, BillingReportCategory, BillingReportVersion, AnschreibenVorlage, Vermieterdaten, Heizungsanlage, Payment, VorauszahlungSoll
+from nebenkostenfix.models import db, User, Property, Apartment, Tenant, Haushaltsgroesse, CostCategory, CostInvoice, Meter, MeterReading, TenantCostProfile, InvoiceDocument, Provider, TenantBillingReport, BillingReportCategory, BillingReportVersion, AnschreibenVorlage, Vermieterdaten, Heizungsanlage, Payment, VorauszahlungSoll, KaltmieteSoll
 from nebenkostenfix.girocode_generator import iban_pruefen, iban_saeubern, vermieter_art, vermieter_ausweis
 from nebenkostenfix.abrechnung_version import schnappschuss, json_sicher, SOFTWARE_VERSION, REGEL_VERSION, aenderungen_seit, gleich_gerechnet, mit_heutigen_namen
 from nebenkostenfix.anschreiben import ARTEN, PLATZHALTER, text_fuer, vorgabe
 from nebenkostenfix.lohnausweis import ARTEN as ARTEN_35A
 from nebenkostenfix.anschreiben import anrede as anschreiben_anrede, saetze as anschreiben_saetze
 from nebenkostenfix import vorauszahlung as vz
+from nebenkostenfix.zahlungsstand import zahlungsstand
 from nebenkostenfix import fristenkalender
 from nebenkostenfix.ablage import Ablage
 from nebenkostenfix.auth import init_auth
 from nebenkostenfix.backup import init_backup
 from nebenkostenfix.umzug import init_umzug
-from nebenkostenfix.tabellenimport import init_tabellenimport
+from nebenkostenfix.tabellenimport import ZAHLUNGSARTEN, init_tabellenimport
 from nebenkostenfix.hilfe import init_hilfe
 from nebenkostenfix.jahresabrechnung import init_jahresabrechnung
 from nebenkostenfix.kategorien import init_kategorien
@@ -1339,6 +1352,27 @@ def get_vorauszahlungen(tenant_id):
     return jsonify(ergebnis), 200
 
 
+@app.route('/api/tenants/<int:tenant_id>/miete', methods=['GET'])
+def get_miete(tenant_id):
+    """Soll und Ist der Kaltmiete (Phase 53) -- getrennt von den Vorauszahlungen."""
+    tenant = Tenant.query.get_or_404(tenant_id)
+    heute = zeit.als_ortsdatum(zeit.jetzt_utc())
+    zahlungen = Payment.query.filter_by(tenant_id=tenant.id, type='Miete').all()
+    ergebnis = vz.soll_ist(
+        [(s.gueltig_ab, s.betrag) for s in tenant.kaltmiete_soll],
+        [(p.payment_date, p.amount) for p in zahlungen],
+        tenant.move_in_date, tenant.move_out_date, heute)
+    ergebnis['soll'] = [
+        {'id': s.id, 'gueltig_ab': s.gueltig_ab.isoformat(), 'betrag': f'{s.betrag:.2f}',
+         'geplant': s.gueltig_ab > heute}
+        for s in tenant.kaltmiete_soll]
+    ergebnis['erinnerung'] = vz.erinnerung(
+        ergebnis, anschreiben_anrede(tenant.name, tenant.anrede),
+        tenant.apartment.name, anschreiben_saetze(vermieter_art())['bekanntes_konto'],
+        vermieter_ausweis()[0], art='Mietzahlungen')
+    return jsonify(ergebnis), 200
+
+
 @app.route('/api/tenants/<int:tenant_id>/vorauszahlung_soll', methods=['POST'])
 def save_vorauszahlung_soll(tenant_id):
     """Wie bei der Haushaltsgroesse: derselbe Stichtag berichtigt."""
@@ -1369,6 +1403,62 @@ def delete_vorauszahlung_soll(id):
     return jsonify({'message': 'Soll gelöscht'}), 200
 
 
+# --- Phase 49: die vereinbarte Kaltmiete ab Stichtag ---
+def _kaltmiete_setzen(tenant, gueltig_ab, betrag, indexmiete):
+    """Wie beim Vorauszahlungs-Soll: derselbe Stichtag berichtigt."""
+    vorhanden = next(
+        (s for s in tenant.kaltmiete_soll if s.gueltig_ab == gueltig_ab), None)
+    if vorhanden:
+        vorhanden.betrag = betrag
+        vorhanden.indexmiete = indexmiete
+        return vorhanden, False
+    eintrag = KaltmieteSoll(tenant_id=tenant.id, gueltig_ab=gueltig_ab,
+                            betrag=betrag, indexmiete=indexmiete)
+    db.session.add(eintrag)
+    return eintrag, True
+
+
+@app.route('/api/tenants/<int:tenant_id>/kaltmiete', methods=['GET'])
+def get_kaltmiete(tenant_id):
+    """Der Stichtagsverlauf der Kaltmiete; der Soll/Ist-Abgleich folgt in Phase 53."""
+    tenant = Tenant.query.get_or_404(tenant_id)
+    return jsonify({'soll': [
+        {'id': s.id, 'gueltig_ab': s.gueltig_ab.isoformat(),
+         'betrag': f'{s.betrag:.2f}', 'indexmiete': s.indexmiete}
+        for s in tenant.kaltmiete_soll]}), 200
+
+
+@app.route('/api/tenants/<int:tenant_id>/kaltmiete_soll', methods=['POST'])
+def save_kaltmiete_soll(tenant_id):
+    """Wie bei der Vorauszahlung: derselbe Stichtag berichtigt."""
+    tenant = Tenant.query.get_or_404(tenant_id)
+    eingabe = Eingabe.aus_request()
+    gueltig_ab = eingabe.datum('gueltig_ab', pflicht=True)
+    betrag = eingabe.geldbetrag('betrag', pflicht=True, min_wert=0)
+    indexmiete = eingabe.wahrheit('indexmiete')
+    if gueltig_ab < tenant.move_in_date:
+        raise EingabeFehler(
+            f'Der Stichtag {gueltig_ab.isoformat()} liegt vor dem Einzug am '
+            f'{tenant.move_in_date.isoformat()}.', 'gueltig_ab')
+    if tenant.move_out_date and gueltig_ab > tenant.move_out_date:
+        raise EingabeFehler(
+            f'Der Stichtag {gueltig_ab.isoformat()} liegt nach dem Auszug am '
+            f'{tenant.move_out_date.isoformat()}.', 'gueltig_ab')
+    eintrag, neu = _kaltmiete_setzen(tenant, gueltig_ab, betrag, indexmiete)
+    db.session.commit()
+    if neu:
+        return jsonify({'message': 'Soll angelegt', 'id': eintrag.id}), 201
+    return jsonify({'message': 'Soll aktualisiert', 'id': eintrag.id}), 200
+
+
+@app.route('/api/kaltmiete_soll/<int:id>', methods=['DELETE'])
+def delete_kaltmiete_soll(id):
+    eintrag = KaltmieteSoll.query.get_or_404(id)
+    db.session.delete(eintrag)
+    db.session.commit()
+    return jsonify({'message': 'Soll gelöscht'}), 200
+
+
 # --- Fristenkalender (NK-262, R-FRIST-05) ---
 def _fristen(heute):
     """Alle Termine ab heute, ueber alle Immobilien; gesperrte Mieter fehlen."""
@@ -1392,13 +1482,28 @@ def _fristen(heute):
     zaehler = [(m.id, f'{m.category.name} {m.meter_number} ({m.property.name})', m.geeicht_bis)
                for m in Meter.query.filter(Meter.geeicht_bis.isnot(None))
                if m.id not in abgeloest]
+    # Phase 49: je Mieter nur der jüngste Stichtag -- er ist die letzte
+    # Erhöhung, von der die Frist zählt. Der jüngste ist der mit dem späteren
+    # gültig_ab, nicht der später angelegte: eine nachgetragene, rückdatierte
+    # Erhöhung trägt die jüngere ID und würde die Frist sonst um Jahre
+    # verschieben. Nach dem Sortieren überschreibt der jüngere Stichtag den
+    # früheren; Einträge nach dem Auszug fallen als Anker weg.
+    kaltmiete_je_mieter = {}
+    for s in KaltmieteSoll.query.order_by(KaltmieteSoll.gueltig_ab).all():
+        if s.tenant.gesperrt_bis is not None:
+            continue
+        if s.tenant.move_out_date and s.gueltig_ab > s.tenant.move_out_date:
+            continue
+        kaltmiete_je_mieter[s.tenant_id] = s
     return fristenkalender.termine(
         [(r.id, r.tenant.name, r.frist_ende, r.zugestellt_am) for r in berichte],
         list(letzte.values()),
         [(s.id, s.tenant.name, s.gueltig_ab, s.betrag) for s in VorauszahlungSoll.query.all()
          if s.tenant.gesperrt_bis is None
          and not (s.tenant.move_out_date and s.gueltig_ab > s.tenant.move_out_date)],
-        zaehler, heute)
+        zaehler, heute,
+        [(s.id, s.tenant.name, s.gueltig_ab, s.indexmiete)
+         for s in kaltmiete_je_mieter.values()])
 
 
 @app.route('/api/fristen', methods=['GET'])
@@ -1452,11 +1557,218 @@ def get_categories():
             # Die Nummer und ihre amtliche Bezeichnung (NK-044). Der Vermieter
             # nennt seine Kostenart, wie er will; auf der Abrechnung muss aber
             # nachvollziehbar sein, welche Position aus § 2 BetrKV gemeint ist
-            # (R-DOC-01). Beides geht deshalb mit ueber die Grenze.
+            # (R-DOC-01). Beides geht mit ueber die Grenze.
             'betrkv_nr': c.betrkv_nr,
             'betrkv_bezeichnung': betrkv.bezeichnung(c.betrkv_nr),
+            # Phase 54: die Liste sagt dem Formular, was noch aenderbar ist,
+            # und zeigt, wie viel an der Kostenart haengt.
+            'rechnungen': CostInvoice.query.filter_by(category_id=c.id).count(),
+            'zaehler_anzahl': Meter.query.filter_by(category_id=c.id).count(),
         })
     return jsonify(result), 200
+
+
+# --- Eigene Kostenarten (Phase 54, Issue #30) --------------------------------
+
+#: Die Entwässerung ist die Nummer mit der Namensfalle: der Rechenkern erkennt
+#: das Niederschlagswasser am Namen (betrkv.ist_niederschlag), und der Seed
+#: zählt Kostenarten über Nummer plus Niederschlagsbedeutung zusammen (D-72).
+NR_ENTWAESSERUNG = 3
+
+
+def _kostenart_ablehnen(meldung: str):
+    """Eine 409-Antwort mit Grund; der Nutzer soll verstehen, warum nicht."""
+    return jsonify({'error': meldung}), 409
+
+
+def _nr3_schluessel_pruefen(name: str | None, nr: int | None,
+                            eigene_id: int | None = None):
+    """Warnfalle der Entwässerung: Nr. 3 nicht zweimal belegen (D-72).
+
+    ``eigene_id`` nimmt eine bestehende Kostenart aus der Belegungsprüfung
+    heraus -- das Umbenennen läuft über dieselbe Warnfalle wie das Anlegen
+    und zählt sich nicht selbst als Belegung.
+    """
+    if nr != NR_ENTWAESSERUNG:
+        return None
+    if betrkv.ist_niederschlag(name):
+        return _kostenart_ablehnen(
+            'Das Niederschlagswasser erkennt die App am Namen. Unter Nr. 3 '
+            'ist diese Bedeutung durch „Niederschlagswasser“ belegt -- bitte '
+            'einen Namen ohne Regen oder Niederschlag wählen.')
+    belegt = CostCategory.query.filter(
+        CostCategory.betrkv_nr == NR_ENTWAESSERUNG,
+        CostCategory.name != name,
+        CostCategory.id != (eigene_id or 0)).all()
+    for kat in belegt:
+        if not betrkv.ist_niederschlag(kat.name):
+            return _kostenart_ablehnen(
+                f'Unter Nr. 3 (Entwässerung) gibt es bereits „{kat.name}“. '
+                'Die App erkennt das Niederschlagswasser dort am Namen, '
+                'daneben bleibt Platz für genau eine Kostenart. Benennen '
+                f'Sie „{kat.name}“ in den Namen Ihrer Abrechnung um, statt '
+                'eine zweite anzulegen.')
+    return None
+
+
+def _eindeutiger_name(name: str | None, eigene_id: int | None = None):
+    doppelt = CostCategory.query.filter(
+        CostCategory.name == name, CostCategory.id != (eigene_id or 0)).first()
+    if doppelt:
+        return _kostenart_ablehnen(
+            f'Eine Kostenart mit dem Namen „{name}“ gibt es bereits. '
+            'Namen müssen unterscheidbar bleiben.')
+    return None
+
+
+@app.route('/api/categories', methods=['POST'])
+def create_category():
+    """Eigene Kostenart anlegen: eigener Name unter Pflicht-Nummer (R-KAT-01).
+
+    Der Katalog ist kein Namens-, sondern ein Nummernkatalog: mehrere
+    Kostenarten teilen sich eine Nummer, so wie Abwasser und Regenwasser
+    beide unter Nr. 3 stehen (D-72). Nummern, die zur Heizung gehören, sind
+    gesperrt (betrkv.GESPERRT).
+    """
+    eingabe = Eingabe.aus_request()
+    name = eingabe.text('name', pflicht=True, maxlaenge=100)
+    nr = eingabe.ganzzahl('betrkv_nr', pflicht=True, min_wert=1)
+    # Die Umlage ist kein Formularfeld mehr: das Abrechnungsblatt liest das
+    # Kostenprofil des Mieters (rechenkern.abrechnungsart_von), nicht die
+    # Spalte der Kostenart. Die VORGABE bleibt der Seed-Wert; ein API-Client,
+    # der sie noch schickt, wird weiterhin geprüft.
+    verteilung = eingabe.text('allocation_method', standard=abrechnungsart.VORGABE)
+    zaehler = eingabe.wahrheit('requires_meter')
+    if not betrkv.ist_gueltig(nr):
+        raise EingabeFehler(
+            f'Die Nummer {nr} gibt es in § 2 BetrKV nicht. Wählen Sie eine '
+            'Nummer von 1 bis 17.', 'betrkv_nr')
+    if nr in betrkv.GESPERRT:
+        raise EingabeFehler(
+            'Die Nummern 4, 5 und 6 (Heizung und Warmwasser) sind gesperrt: '
+            'Diese Kosten laufen über die Heizungsanlage und HeizkostenV.',
+            'betrkv_nr')
+    if verteilung not in abrechnungsart.GUELTIG:
+        raise EingabeFehler(
+            f'„{verteilung}“ ist keine Umlageart. Erlaubt sind: '
+            f'{abrechnungsart.aufzaehlung()}.', 'allocation_method')
+    doppelt = _eindeutiger_name(name)
+    if doppelt:
+        return doppelt
+    konflikt = _nr3_schluessel_pruefen(name, nr)
+    if konflikt:
+        return konflikt
+    kat = CostCategory(name=name, betrkv_nr=nr,
+                       allocation_method=verteilung, requires_meter=zaehler)
+    db.session.add(kat)
+    db.session.commit()
+    return jsonify({'message': 'Kostenart angelegt', 'id': kat.id}), 201
+
+
+@app.route('/api/categories/<int:id>', methods=['PUT'])
+def update_category(id):
+    """Umbenennen geht immer; das Weitere nur ohne Rechnung und Zähler.
+
+    Ein offener Entwurf würde sonst still verschieben, wenn die Nummer oder
+    die Umlageart wechselt, anhand derer seine Posten gerechnet wurden.
+    Festgesetzte Versionen bleiben so eingefroren: Sie speichern ihre
+    Eingangsdaten als Schnappschuss (models.py) und die Route ändert nichts
+    an dem, woraus sie gerechnet wurden.
+    """
+    kat = CostCategory.query.get_or_404(id)
+    eingabe = Eingabe.aus_request()
+    hat_rechnung = CostInvoice.query.filter_by(category_id=kat.id).first() is not None
+    hat_zaehler = Meter.query.filter_by(category_id=kat.id).first() is not None
+    eingefroren = hat_rechnung or hat_zaehler
+
+    if eingabe.vorhanden('name'):
+        neuer_name = eingabe.text('name', pflicht=True, maxlaenge=100)
+        if neuer_name != kat.name:
+            doppelt = _eindeutiger_name(neuer_name, kat.id)
+            if doppelt:
+                return doppelt
+            # Umbenennen darf die Warnfalle nicht umgehen: der Name entscheidet
+            # unter Nr. 3, was als Niederschlagswasser gilt (D-72).
+            konflikt = _nr3_schluessel_pruefen(neuer_name, kat.betrkv_nr,
+                                               eigene_id=kat.id)
+            if konflikt:
+                return konflikt
+            kat.name = neuer_name
+
+    neuer_nr = eingabe.ganzzahl('betrkv_nr', standard=kat.betrkv_nr)
+    neue_verteilung = eingabe.text(
+        'allocation_method', standard=kat.allocation_method)
+    neuer_zaehler = eingabe.wahrheit('requires_meter',
+                                     standard=kat.requires_meter)
+    aenderung = (neuer_nr != kat.betrkv_nr
+                 or neue_verteilung != kat.allocation_method
+                 or neuer_zaehler != kat.requires_meter)
+    if aenderung and eingefroren:
+        grund = 'an dieser Kostenart hängt eine Rechnung' if hat_rechnung \
+            else 'an dieser Kostenart hängt ein Zähler'
+        return _kostenart_ablehnen(
+            'Nummer und Zählerkennung bleiben unveränderlich, weil '
+            f'{grund}. Nur der Name ist noch änderbar.')
+    if aenderung:
+        if not betrkv.ist_gueltig(neuer_nr):
+            raise EingabeFehler(
+                f'Die Nummer {neuer_nr} gibt es in § 2 BetrKV nicht. Wählen '
+                'Sie eine Nummer von 1 bis 17.', 'betrkv_nr')
+        if neuer_nr in betrkv.GESPERRT:
+            raise EingabeFehler(
+                'Die Nummern 4, 5 und 6 (Heizung und Warmwasser) sind '
+                'gesperrt: Diese Kosten laufen über die Heizungsanlage und '
+                'HeizkostenV.', 'betrkv_nr')
+        if neue_verteilung not in abrechnungsart.GUELTIG:
+            raise EingabeFehler(
+                f'„{neue_verteilung}“ ist keine Umlageart. Erlaubt sind: '
+                f'{abrechnungsart.aufzaehlung()}.', 'allocation_method')
+        konflikt = _nr3_schluessel_pruefen(kat.name, neuer_nr, eigene_id=kat.id)
+        if konflikt:
+            return konflikt
+        kat.betrkv_nr = neuer_nr
+        kat.allocation_method = neue_verteilung
+        kat.requires_meter = neuer_zaehler
+    db.session.commit()
+    return jsonify({'message': 'Kostenart aktualisiert', 'id': kat.id}), 200
+
+
+@app.route('/api/categories/<int:id>', methods=['DELETE'])
+def delete_category(id):
+    """Nur Unbenutztes geht weg; Katalogeintraege kommen wieder (Phase 54)."""
+    kat = CostCategory.query.get_or_404(id)
+    if CostInvoice.query.filter_by(category_id=kat.id).first():
+        return _kostenart_ablehnen(
+            'An dieser Kostenart hängen Rechnungen. Löschen Sie erst die '
+            'Rechnungen oder wenden Sie sich an den Support.')
+    if Meter.query.filter_by(category_id=kat.id).first():
+        return _kostenart_ablehnen(
+            'An dieser Kostenart hängt ein Zähler. Zähler gehören zu einer '
+            'Kostenart und können nicht mitgelöscht werden.')
+    if any(e['name'] == kat.name for e in betrkv.KATALOG):
+        return _kostenart_ablehnen(
+            '„%s“ gehört zum Katalog aus § 2 BetrKV und bleibt erhalten. '
+            'Sie können den Namen ändern.' % kat.name)
+    TenantCostProfile.query.filter_by(category_id=kat.id).delete()
+    db.session.delete(kat)
+    db.session.commit()
+    return jsonify({'message': 'Kostenart gelöscht'}), 200
+
+
+@app.route('/api/categories-vorschlaege', methods=['GET'])
+def get_nummernvorschlaege():
+    """Die Stichwortliste für den Nummernvorschlag (Phase 54).
+
+    Sie liegt an einem Ort (betrkv) und kommt als JSON in die Oberfläche,
+    damit das Formular beim Tippen nichts nachfragen muss. Die Nummernliste
+    füllt das Nummernmenü mit den amtlichen Bezeichnungen.
+    """
+    return jsonify({
+        'vorschlaege': list(betrkv._STICHWOERTER),
+        'heizstichwoerter': list(betrkv._HEIZSTICHWOERTER),
+        'nummern': [[nr, betrkv.bezeichnung(nr)] for nr in sorted(betrkv.BEZEICHNUNGEN)],
+    }), 200
+
 
 # --- Meters ---
 @app.route('/api/meters', methods=['GET'])
@@ -1471,8 +1783,8 @@ def get_meters():
             'id': m.id,
             'category_id': m.category_id,
             'category_name': m.category.name,
-            # NK-220: dieselbe Einheit, mit der die Abrechnung rechnet
-            'einheit': einheit_fuer(m.category.name, m.category.betrkv_nr),
+            # NK-220 (V3): dieselbe Einheit, mit der die Abrechnung rechnet.
+            'einheit': _einheit_am_zaehler(m),
             'property_id': m.property_id,
             'property_name': m.property.name,
             'apartment_id': m.apartment_id,
@@ -1502,6 +1814,40 @@ def _anlage_pruefen(heizungsanlage_id, property_id):
             'Der Zähler kann nur eine Anlage derselben Immobilie messen.',
             'heizungsanlage_id')
 
+def _einheit_am_zaehler(zaehler):
+    """Die Masseinheit, die dieser Zaehler anzeigt (Phase 55).
+
+    Sie steht seit der Wanderung e8b4a7c25f91 am Zaehler. Der Rueckfall auf
+    die Ableitung aus der Kostenart bleibt fuer Objekte ohne das Feld -- nach
+    der Wanderung ist das derselbe Wert. Jeder Weg, der eine Einheit zu einem
+    Zaehler nennt, geht hierdurch: sonst zeigt ein Warmwasser-Waermemengen-
+    zaehler (Issue #32) an einer Stelle kWh und an der naechsten m3.
+    """
+    return zaehler.einheit or einheit_fuer(
+        zaehler.category.name, zaehler.category.betrkv_nr)
+
+
+def _zaehlereinheit(eingabe, kategorie_id):
+    """Die Einheit des Zaehlers -- gewaehlt oder aus der Kostenart.
+
+    Leer heisst "wie bisher": dann gilt die Einheit der BetrKV-Nummer, und
+    fuer jeden Bestandszaehler steht genau die schon in der Spalte (Wanderung
+    e8b4a7c25f91). Wer eine waehlt, uebergeht die Ableitung -- der Fall des
+    Warmwasser-Waermemengenzaehlers (§ 9 Abs. 2 Satz 1 HeizkostenV).
+    """
+    gewaehlt = eingabe.text('einheit', maxlaenge=10)
+    if gewaehlt:
+        if gewaehlt not in EINHEITEN_ZAEHLER:
+            raise EingabeFehler(
+                f'Die Einheit "{gewaehlt}" gibt es nicht. Erlaubt sind: '
+                f'{", ".join(EINHEITEN_ZAEHLER)}.', 'einheit')
+        return gewaehlt
+    kategorie = db.session.get(CostCategory, kategorie_id)
+    if kategorie is None:
+        return None
+    return einheit_fuer(kategorie.name, kategorie.betrkv_nr)
+
+
 @app.route('/api/meters', methods=['POST'])
 def create_meter():
     eingabe = Eingabe.aus_request()
@@ -1518,6 +1864,8 @@ def create_meter():
         heizungsanlage_id=eingabe.ganzzahl('heizungsanlage_id'),
         ort=eingabe.text('ort', maxlaenge=100),
         geeicht_bis=eingabe.datum('geeicht_bis'),
+        einheit=_zaehlereinheit(
+            eingabe, eingabe.ganzzahl('category_id', pflicht=True)),
     )
     _anlage_pruefen(new_meter.heizungsanlage_id, new_meter.property_id)
     db.session.add(new_meter)
@@ -1554,6 +1902,8 @@ def update_meter(id):
         m.category_id = kategorie
     if eingabe.vorhanden('heizungsanlage_id'):
         m.heizungsanlage_id = eingabe.ganzzahl('heizungsanlage_id')
+    if eingabe.vorhanden('einheit'):
+        m.einheit = _zaehlereinheit(eingabe, m.category_id)
         _anlage_pruefen(m.heizungsanlage_id, m.property_id)
     db.session.commit()
     return jsonify({'id': m.id}), 200
@@ -1646,7 +1996,7 @@ def get_readings():
             'meter_id': r.meter_id,
             'meter_number': r.meter.meter_number,
             'category_name': r.meter.category.name,
-            'einheit': einheit_fuer(r.meter.category.name, r.meter.category.betrkv_nr),
+            'einheit': _einheit_am_zaehler(r.meter),
             'property_name': r.meter.property.name,
             'apartment_name': r.meter.apartment.name if r.meter.apartment else None,
             'reading_date': r.reading_date.isoformat(),
@@ -1686,7 +2036,7 @@ def _stand_text(wert: float) -> str:
 
 
 def _ablesung_pruefen(meter_id: int, datum: date, wert: float, wert_nt, eigene_id=None):
-    """NK-216: was nie stimmen kann, ist ein Fehler; was selten stimmt, eine Frage.
+    """NK-216 (F1): was nie stimmen kann, ist ein Fehler; was selten stimmt, eine Frage.
 
     Negative Staende und Ablesungen in der Zukunft gibt es nicht (400). Ein
     Stand unter dem vorigen oder ueber dem folgenden und ein zweiter Stand
@@ -2963,6 +3313,69 @@ def haftung_bestaetigen():
     return jsonify(haftung.stand())
 
 
+def _hausgeld_position(posten: dict) -> dict:
+    """Eine Zeile des Berichts, wie die Oberflaeche sie braucht."""
+    return {
+        'name': posten.name,
+        'gesamtbetrag': str(posten.gesamtbetrag),
+        'eigener_betrag': str(posten.eigener_betrag),
+        'umlagefaehig': posten.rat.umlagefaehig,
+        'betrkv_nr': posten.rat.betrkv_nr,
+        'begruendung': posten.rat.begruendung,
+        'erwartet': str(posten.probe.erwartet),
+        'abweichung': str(posten.probe.abweichung),
+        'stimmt': posten.probe.stimmt,
+        'hinweis': posten.probe.hinweis,
+    }
+
+
+def _hausgeld_probe(probe):
+    if probe is None:
+        return None
+    return {'erwartet': str(probe.erwartet), 'angesetzt': str(probe.angesetzt),
+            'abweichung': str(probe.abweichung), 'stimmt': probe.stimmt,
+            'hinweis': probe.hinweis}
+
+
+@app.route('/api/hausgeld/pruefen', methods=['POST'])
+def hausgeld_pruefen():
+    """Rechnet eine Hausgeld-Einzelabrechnung nach (Phase 50, Issue #30).
+
+    Rechnet nur und speichert nichts: der Vermieter sieht erst, was die App
+    vorschlaegt, und uebernimmt dann von Hand, was er bestaetigt. Deshalb
+    POST und nicht GET -- die Positionen gehoeren in den Rumpf, nicht in
+    die Adresszeile -- aber ohne jede Aenderung am Bestand.
+    """
+    daten = request.get_json(silent=True) or {}
+    positionen = daten.get('positionen')
+    if not isinstance(positionen, list):
+        return jsonify({'error': 'Es fehlen die Positionen der Abrechnung.',
+                        'feld': 'positionen'}), 400
+    try:
+        bericht = hausgeld.uebernahme(
+            [p for p in positionen if isinstance(p, dict)],
+            eigener_anteil=daten.get('eigener_anteil'),
+            gesamtanteile=daten.get('gesamtanteile'),
+            abrechnungssumme=daten.get('abrechnungssumme'))
+    except hausgeld.HausgeldFehler as fehler:
+        return jsonify({'error': str(fehler)}), 400
+
+    return jsonify({
+        'positionen': [_hausgeld_position(p) for p in bericht.positionen],
+        'summe_umlagefaehig': str(bericht.summe_umlagefaehig),
+        'summe_eigentuemer': str(bericht.summe_eigentuemer),
+        'summe_offen': str(bericht.summe_offen),
+        'anzahl_umlagefaehig': len(bericht.umlagefaehig),
+        'anzahl_eigentuemer': len(bericht.beim_eigentuemer),
+        'anzahl_offen': len(bericht.offen),
+        'summenprobe': _hausgeld_probe(bericht.summenprobe),
+        # Der Hinweis zum Zeitraum steht hier und nicht in der Oberflaeche,
+        # damit er mit der Rechtslage wandert (BGH VIII ZR 27/07).
+        'zeitraum_hinweis': hausgeld.ZEITRAUM_HINWEIS,
+        'heizkosten_hinweis': hausgeld.HEIZKOSTEN_HINWEIS,
+    })
+
+
 @app.route('/api/ueber', methods=['GET'])
 def ueber_anzeigen():
     """„Über NebenkostenFix“ im Hilfe-Tab (NK-179): Stand, feste Adressen,
@@ -3200,6 +3613,8 @@ def get_all_billing_reports():
             'document_path_detailed': r.document_path_detailed,
             'veraltet': _regelstand_veraltet(r),
             'regelstand_aenderungen': _regelstand_aenderungen(r),
+            'zugestellt_am': r.zugestellt_am.isoformat() if r.zugestellt_am else None,
+            **_zahlungsstand(r),
         })
     return jsonify(res)
 
@@ -3394,6 +3809,7 @@ def get_billing_report_details(id):
             'veraltet': _regelstand_veraltet(report),
             'regelstand_aenderungen': _regelstand_aenderungen(report),
             'ergebnis': version.ergebnis,
+            **_zahlungsstand(report),
             # NK-124: die Umschlagdaten und die Versionen, damit die
             # Oberflaeche Zustellung, Frist und Korrektur an diesem Ort
             # zeigen kann, statt nur die Zahlen.
@@ -3649,8 +4065,21 @@ def get_billing_report_csv(id):
                      download_name=dateiname(report))
 
 
+def _zahlungsstand(report) -> dict:
+    """Phase 47: Stand und Rest aus dem Ergebnis der gültigen Version.
+
+    Altbestand ohne Version hat kein festgehaltenes Ergebnis, also keinen Stand.
+    """
+    version = report.aktuelle_version
+    if version is None:
+        return {'zahlungsstand': None, 'offen_betrag': None}
+    stand, rest = zahlungsstand(version.ergebnis['balance'],
+                                [p.amount for p in report.payments])
+    return {'zahlungsstand': stand, 'offen_betrag': f'{rest:.2f}'}
+
+
 def _regelstand_veraltet(report) -> bool:
-    """NK-217: die gueltige Version stammt von einem aelteren Regelstand.
+    """NK-217 (F2): die gueltige Version stammt von einem aelteren Regelstand.
 
     Die Abrechnung bleibt, wie sie zugegangen ist (R-DOC-02); der Vermieter
     soll nur sehen, dass eine Korrektur heute anders rechnen kann. Altbestand
@@ -3713,7 +4142,7 @@ def _je_kostenart(ergebnis) -> dict:
 
 @app.route('/api/billing/reports/<int:id>/korrektur/vorschau', methods=['GET'])
 def korrektur_vorschau(id):
-    """NK-217: was eine Korrektur aendern wuerde, ohne sie anzulegen.
+    """NK-217 (F2): was eine Korrektur aendern wuerde, ohne sie anzulegen.
 
     Rechnet wie die Korrektur, speichert nichts und stellt je Kostenart und
     fuer Summe, Vorauszahlungen und Saldo den alten Wert (Schnappschuss der
@@ -3918,11 +4347,29 @@ def add_payment():
     eingabe = Eingabe.aus_request()
     tenant_id = eingabe.ganzzahl('tenant_id', pflicht=True)
     amount = eingabe.geldbetrag('amount', pflicht=True)
-    type_ = eingabe.text('type', pflicht=True, maxlaenge=100)
+    # Die Art steuert die Rechnung: /api/tenants/<id>/miete zaehlt nur
+    # 'Miete', der Zahlungsstand (Phase 47) nur 'Nebenkostenzahlung', die
+    # Vorauszahlung nur 'Nebenkostenvorauszahlung'. Eine Art daneben waere
+    # deshalb kein Schoenheitsfehler, sondern eine Zahlung, die in der Liste
+    # steht und in keinem Soll/Ist zaehlt -- ein Rueckstand, den es nicht
+    # gibt. Die Liste ist dieselbe, die der Tabellenimport annimmt, damit
+    # beide Wege nicht auseinanderlaufen. Die Laenge folgt der Spalte
+    # (models.py: String(50)); 100 liessen SQLite still ueberlaufen.
+    type_ = eingabe.text('type', pflicht=True, maxlaenge=50)
+    if type_ not in ZAHLUNGSARTEN:
+        raise EingabeFehler(
+            f'Die Zahlungsart "{type_}" gibt es nicht. Erlaubt sind: '
+            f'{", ".join(ZAHLUNGSARTEN)}.', 'type')
     start_date = eingabe.datum('payment_date', pflicht=True)
     is_recurring = eingabe.wahrheit('is_recurring')
     billing_report_id = eingabe.ganzzahl('billing_report_id')
     end_date = eingabe.datum('end_date')
+    if billing_report_id is not None and type_ == 'Nebenkostenzahlung':
+        # Phase 47: die Zahlung zählt im Zahlungsstand dieser Abrechnung.
+        bericht = db.session.get(TenantBillingReport, billing_report_id)
+        if bericht is None or bericht.tenant_id != tenant_id:
+            raise EingabeFehler('Die Abrechnung gehört nicht zu diesem Mieter.',
+                                'billing_report_id')
 
     # Das umschliessende try ist weg (NK-030). Es machte aus jedem Fehler eine
     # 400 mit englischem Wortlaut -- auch aus einem Datenbankausfall, der
@@ -4209,7 +4656,7 @@ def analytics_building(property_id):
         db.or_(Tenant.move_out_date == None, Tenant.move_out_date >= today)
     ).all()
     
-    # NK-211: wer ausgezogen ist, braucht eine Endabrechnung bis zum
+    # NK-211 (B4): wer ausgezogen ist, braucht eine Endabrechnung bis zum
     # Auszug. Zwei Jahre nach dem Auszug ist auch die Frist des Zeitraums
     # vorbei, in dem er liegt (§ 556 Abs. 3 BGB: zwölf Monate nach dessen
     # Ende) -- aelterer Bestand zaehlt nicht mehr als Aufgabe.
@@ -4449,7 +4896,7 @@ def analytics_apartment(apartment_id):
                     'period': period_str,
                     'category': cat_name,
                     'value': round(diff, 2),
-                    'unit': _get_unit(cat_name)
+                    'unit': _einheit_am_zaehler(m)
                 })
     tenants = Tenant.query.filter_by(apartment_id=apartment_id).all()
     tenant_ids = [t.id for t in tenants]

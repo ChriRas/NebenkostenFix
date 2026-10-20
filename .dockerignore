@@ -64,6 +64,7 @@ scripts/einzelschwelle.py
 scripts/ui_beschriftungen.py
 scripts/html_maskierung.py
 scripts/probe_ersteinrichtung.py
+scripts/probe54_seed.py
 scripts/rauchtest_design.js
 # NK-080: Lizenzen und Manifeste stellt nur der Herausgeber aus.
 scripts/update_signieren.py

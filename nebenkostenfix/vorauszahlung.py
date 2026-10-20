@@ -171,11 +171,13 @@ def _euro(betrag) -> str:
 
 
 def erinnerung(ergebnis: dict, anrede: str, wohnung: str, konto: str,
-               vermieter: str | None) -> str | None:
+               vermieter: str | None,
+               art: str = 'Nebenkostenvorauszahlungen') -> str | None:
     """Die Vorlage „Zahlungserinnerung“ als Text, oder None ohne Rückstand.
 
     Ein Vorschlag zum Kopieren: der Vermieter liest und ändert ihn, bevor er
-    ihn verschickt. Überzahlte Monate werden gegengerechnet.
+    ihn verschickt. Überzahlte Monate werden gegengerechnet. ``art`` benennt
+    die Zahlungsart im Satz, zum Beispiel „Mietzahlungen“ (Phase 53).
     """
     saldo = Decimal(ergebnis['saldo'])
     if saldo <= 0:
@@ -191,7 +193,7 @@ def erinnerung(ergebnis: dict, anrede: str, wohnung: str, konto: str,
         '\n\nMit freundlichen Grüßen'
     return (
         f'{anrede}\n\n'
-        f'für die Wohnung {wohnung} sind folgende Nebenkostenvorauszahlungen '
+        f'für die Wohnung {wohnung} sind folgende {art} '
         f'noch nicht vollständig eingegangen:\n\n'
         + '\n'.join(zeilen) +
         f'\n\nOffen sind insgesamt {_euro(saldo)}. Bitte überweisen Sie den '

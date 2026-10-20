@@ -116,7 +116,7 @@ body.anmeldung {
     padding: 0 11px;
 }
 
-/* Die geöffnete Kontoliste wie in der Anwendung (Chromium ab 135). */
+/* die geöffnete Kontoliste wie in der Anwendung (Chromium ab 135). */
 @supports (appearance: base-select) {
     .anmelde-karte select,
     ::picker(select) {

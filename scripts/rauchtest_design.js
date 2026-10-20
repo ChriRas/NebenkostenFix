@@ -340,10 +340,11 @@ pruefe('Gefahrenzone traegt die Klasse statt Inline-Farben',
     html.includes('dashboard-card glass-panel gefahrenzone'));
 pruefe('Datenbank-Knopf ist .btn-gefahr', html.includes('class="btn-gefahr"'));
 pruefe('Detailliertes PDF ist .btn-tint', html.includes('btn-secondary btn-tint'));
-// Fünfzehn Pillen: Rechnungen (Eingang/Alle/Nach Kostenart, Liste/Zeitleiste), Einstellungen
-// (fünf Gruppen), Statistik (fünf Filter); dieselbe Zahl sichert test_ui_konsistenz.py.
-pruefe('Fünfzehn Auswahlpillen, keine mit Inline-Stil',
-    (html.match(/class="filter-pill/g) || []).length === 15
+// Siebzehn Pillen: Rechnungen (Eingang/Alle/Nach Kostenart, Liste/Zeitleiste), Einstellungen
+// (sechs Gruppen, Phase 54 ergänzt Kostenarten), Statistik (fünf Filter), Historie
+// (Nur offene Zahlungen, Phase 47); dieselbe Zahl sichert test_ui_konsistenz.py.
+pruefe('Siebzehn Auswahlpillen, keine mit Inline-Stil',
+    (html.match(/class="filter-pill/g) || []).length === 17
     && !/class="filter-pill[^"]*"[^>]*style=/.test(html));
 pruefe('Cache-Buster erhoeht (style.css)', /style\.css\?v=\d+/.test(html));
 pruefe('Cache-Buster erhoeht (app.js)', /app\.js\?v=\d+/.test(html));
@@ -548,11 +549,11 @@ async function haushaltPruefen() {
 // schickt Stichtag und Betrag und lädt neu.
 async function vorauszahlungPruefen() {
     const funktion = name => {
-        const m = appQuelle.match(new RegExp(`async function ${name}\\([^)]*\\) \\{[\\s\\S]*?\\n\\}`));
+        const m = appQuelle.match(new RegExp(`(async )?function ${name}\\([^)]*\\) \\{[\\s\\S]*?\\n\\}`));
         if (!m) throw new Error(`${name} nicht gefunden`);
         return m[0];
     };
-    const quelltext = funktion('ladeVorauszahlungen') + funktion('saveVorauszahlungSoll');
+    const quelltext = funktion('monatsZeilen') + funktion('ladeVorauszahlungen') + funktion('saveVorauszahlungSoll');
     const lauf = (felder, antworten) => {
         const aufrufe = [];
         const meldungen = [];
@@ -624,7 +625,320 @@ async function vorauszahlungPruefen() {
         && html.includes('id="vorauszahlung-modal"'));
 }
 
-// --- NK-262: Fristenkalender in der Datenqualität ----------------------------
+// --- Phase 49: Kaltmiete-Soll und Erinnerung an die Mieterhöhung -------------
+// Wie beim VZ-Soll: Laden mit gestubbtem fetch, Speichern schickt Stichtag,
+// Betrag und Indexmiete-Flag und lädt neu.
+async function kaltmietePruefen() {
+    const funktion = name => {
+        const m = appQuelle.match(new RegExp(`(async )?function ${name}\\([^)]*\\) \\{[\\s\\S]*?\\n\\}`));
+        if (!m) throw new Error(`${name} nicht gefunden`);
+        return m[0];
+    };
+    const quelltext = funktion('monatsZeilen') + funktion('ladeKaltmiete') + funktion('saveKaltmieteSoll');
+    const lauf = (felder, antworten) => {
+        const aufrufe = [];
+        const meldungen = [];
+        const dokument = {
+            getElementById(id) {
+                if (!(id in felder)) felder[id] = { value: '', innerHTML: '', textContent: '', hidden: false, checked: false };
+                return felder[id];
+            },
+        };
+        const holen = (url, opt = {}) => {
+            aufrufe.push({ url, methode: opt.method || 'GET', koerper: opt.body });
+            const daten = antworten.shift() ?? {};
+            return Promise.resolve({ ok: true, json: () => Promise.resolve(daten) });
+        };
+        const fns = new Function('document', 'fetch', 'showError', 'serverFehler', 'meldungZu',
+            'escapeHtml', 'datumText', 'euroText',
+            quelltext + '; return { ladeKaltmiete, saveKaltmieteSoll };')(
+            dokument, holen, m => meldungen.push(m), async () => new Error('Server'),
+            (e, ersatz) => ersatz, t => String(t).replace(/</g, '&lt;'), iso => 'D' + iso,
+            v => Number(v).toFixed(2) + ' €');
+        return { fns, aufrufe, meldungen, felder };
+    };
+
+    const leer = lauf({}, [{ soll: [], monate: [], saldo: '0.00', erinnerung: null }]);
+    await leer.fns.ladeKaltmiete(7);
+    pruefe('Phase 49/53: ohne Kaltmiete ein Hinweis statt einer leeren Liste',
+        leer.aufrufe[0].url === '/api/tenants/7/miete'
+        && /Noch keine Kaltmiete hinterlegt/.test(leer.felder['km-soll-liste'].innerHTML)
+        && leer.felder['km-saldo'].textContent === 'Kein Rückstand.'
+        && leer.felder['km-erinnerung-block'].hidden === true);
+
+    const voll = lauf({}, [{ soll: [
+        { id: 9, gueltig_ab: '2026-10-01', betrag: '700.00', indexmiete: false, geplant: false },
+        { id: 12, gueltig_ab: '2027-01-01', betrag: '800.00', indexmiete: true, geplant: true },
+    ], monate: [
+        { monat: '2026-09', soll: '700.00', ist: '700.00', differenz: '0.00', rueckstand: false, laufend: false },
+        { monat: '2026-10', soll: '700.00', ist: '0.00', differenz: '-700.00', rueckstand: false, laufend: true },
+    ], saldo: '0.00', erinnerung: 'Guten Tag A, ...' }]);
+    await voll.fns.ladeKaltmiete(7);
+    pruefe('Phase 49/53: Stichtage mit Betrag, geplante Stufe gekennzeichnet, Indexmiete erläutert',
+        /D2026-10-01/.test(voll.felder['km-soll-liste'].innerHTML)
+        && /Indexmiete \(§ 557b\)/.test(voll.felder['km-soll-liste'].innerHTML)
+        && /geplant<\/span>/.test(voll.felder['km-soll-liste'].innerHTML)
+        && voll.felder['km-soll-liste'].innerHTML.includes("serienbuchungAnlegen(7, '800.00', '2027-01-01', 0, 'Miete')")
+        && voll.felder['km-soll-liste'].innerHTML.includes('loescheKaltmieteSoll(9, 7)'));
+
+    pruefe('Phase 53: Monattabelle geteilt gebaut, Saldo und Erinnerung gesetzt',
+        /09\/2026/.test(voll.felder['km-monate'].innerHTML)
+        && /bezahlt/.test(voll.felder['km-monate'].innerHTML)
+        && /laufend/.test(voll.felder['km-monate'].innerHTML)
+        && /Offen sind insgesamt|Kein Rückstand/.test(voll.felder['km-saldo'].textContent)
+        && voll.felder['km-erinnerung'].value === 'Guten Tag A, ...'
+        && voll.felder['km-erinnerung-block'].hidden === false);
+
+    const ohneTag = lauf({ 'km-tenant-id': { value: '7' }, 'km-betrag': { value: '750' } }, []);
+    await ohneTag.fns.saveKaltmieteSoll();
+    pruefe('Phase 49: ohne Stichtag geht nichts hinaus',
+        ohneTag.aufrufe.length === 0 && ohneTag.meldungen.length === 1);
+
+    const gut = lauf({
+        'km-tenant-id': { value: '7' },
+        'km-gueltig-ab': { value: '2025-08-01' },
+        'km-betrag': { value: '750' },
+        'km-indexmiete': { checked: true },
+    }, [{ id: 12 }, { soll: [], monate: [], saldo: '0.00', erinnerung: null }]);
+    await gut.fns.saveKaltmieteSoll();
+    const post = gut.aufrufe[0] || {};
+    pruefe('Phase 49: Speichern schickt POST mit Stichtag, Betrag und Indexmiete, lädt dann neu',
+        post.methode === 'POST' && post.url === '/api/tenants/7/kaltmiete_soll'
+        && post.koerper === JSON.stringify({ gueltig_ab: '2025-08-01', betrag: '750', indexmiete: true })
+        && gut.aufrufe.length === 2 && gut.aufrufe[1].url === '/api/tenants/7/miete'
+        && gut.meldungen.length === 0);
+
+    pruefe('Phase 49: Mieterzeile hat den Knopf, die Seite den Dialog',
+        appQuelle.includes('kmBtn.onclick = () => openKaltmieteModal(t);')
+        && html.includes('id="kaltmiete-modal"'));
+}
+
+// Phase 50 (Issue #30): die Hausgeld-Einzelabrechnung prüfen — was der
+// Dialog sammelt und was er an den Server schickt, vom Quelltext her.
+async function hausgeldPruefungPruefen() {
+    const funktion = name => {
+        const m = appQuelle.match(new RegExp(`(async )?function ${name}\\([^)]*\\) \\{[\\s\\S]*?\\n\\}`));
+        if (!m) throw new Error(`${name} nicht gefunden`);
+        return m[0];
+    };
+    const quelltext =
+        "const HG_URTEIL = { true: ['Ja', 'chip-ok'], false: ['Nein', 'chip-rot'], null: ['Offen', 'chip-warn'] };"
+        + funktion('geldText') + funktion('hausgeldPositionen') + funktion('hausgeldPruefen');
+
+    // Jede Zeile ist ein Tripel [Name, Gesamtbetrag, eigener Betrag].
+    const lauf = (zeilen, felder, antwort) => {
+        const aufrufe = [];
+        const meldungen = [];
+        const zellen = klasse => zeilen.map(z => ({
+            value: { '.hg-name': z[0], '.hg-gesamt': z[1], '.hg-mein': z[2] }[klasse],
+        }));
+        const dokument = {
+            getElementById(id) {
+                if (!(id in felder)) felder[id] = { value: '', innerHTML: '', textContent: '', hidden: false, className: '' };
+                return felder[id];
+            },
+            querySelectorAll: () => zeilen.map((_, i) => ({
+                querySelector: klasse => zellen(klasse)[i],
+            })),
+        };
+        const holen = (url, opt = {}) => {
+            aufrufe.push({ url, methode: opt.method || 'GET', koerper: opt.body });
+            return Promise.resolve({ ok: true, json: () => Promise.resolve(antwort) });
+        };
+        const fns = new Function('document', 'fetch', 'showError', 'serverFehler', 'meldungZu',
+            'escapeHtml',
+            quelltext + '; return { hausgeldPositionen, hausgeldPruefen };')(
+            dokument, holen, m => meldungen.push(m), async () => new Error('Server'),
+            (e, ersatz) => ersatz,
+            t => String(t).replace(/</g, '&lt;').replace(/>/g, '&gt;'));
+        return { fns, aufrufe, meldungen, felder };
+    };
+
+    const BERICHT = {
+        positionen: [
+            { name: 'Müllentsorgung', umlagefaehig: true, betrkv_nr: 8, begruendung: 'Nr. 8',
+              eigener_betrag: '300.00', erwartet: '300.00', abweichung: '0.00', stimmt: true, hinweis: null },
+            { name: 'Verwaltervergütung', umlagefaehig: false, betrkv_nr: null,
+              begruendung: 'Verwaltungskosten … § 1 Abs. 2 BetrKV …',
+              eigener_betrag: '750.00', erwartet: '750.00', abweichung: '0.00', stimmt: true, hinweis: null },
+        ],
+        summe_umlagefaehig: '300.00', summe_eigentuemer: '750.00', summe_offen: '0.00',
+        anzahl_umlagefaehig: 1, anzahl_eigentuemer: 1, anzahl_offen: 0,
+        summenprobe: { erwartet: '1050.00', angesetzt: '1050.00', abweichung: '0.00', stimmt: true, hinweis: null },
+        zeitraum_hinweis: 'Abflussprinzip … BGH … VIII ZR 27/07 …',
+        heizkosten_hinweis: 'Die Heizkosten … ordnen Sie diese Rechnung der Wohnung zu … nach Wohnfläche …',
+    };
+
+    // Leere Zeilen zählen nicht mit: der Dialog startet mit dreien.
+    const leer = lauf([['', '', ''], ['Müll', '2400.00', '300.00'], ['', '', '']], {}, BERICHT);
+    pruefe('Phase 50: leere Zeilen gehen nicht mit hinaus',
+        leer.fns.hausgeldPositionen().length === 1);
+
+    const ohne = lauf([['', '', '']], {}, BERICHT);
+    await ohne.fns.hausgeldPruefen();
+    pruefe('Phase 50: ohne Position geht nichts hinaus',
+        ohne.aufrufe.length === 0 && ohne.meldungen.length === 1);
+
+    const felder = {
+        'hg-eigener-anteil': { value: '125' },
+        'hg-gesamtanteile': { value: '1000' },
+        'hg-abrechnungssumme': { value: '1050.00' },
+    };
+    const voll = lauf([['Müllentsorgung', '2400.00', '300.00'],
+                       ['Verwaltervergütung', '6000.00', '750.00']], felder, BERICHT);
+    await voll.fns.hausgeldPruefen();
+    const koerper = voll.aufrufe.length === 1 ? JSON.parse(voll.aufrufe[0].koerper) : {};
+    pruefe('Phase 50: die Positionen gehen als POST an /api/hausgeld/pruefen',
+        voll.aufrufe.length === 1 && voll.aufrufe[0].url === '/api/hausgeld/pruefen'
+        && voll.aufrufe[0].methode === 'POST'
+        && koerper.positionen.length === 2
+        && koerper.positionen[0].name === 'Müllentsorgung'
+        && koerper.eigener_anteil === '125' && koerper.gesamtanteile === '1000'
+        && koerper.abrechnungssumme === '1050.00');
+
+    pruefe('Phase 50: das Ergebnis trennt umlagefähig von dem, was beim Eigentümer bleibt',
+        voll.felder['hg-ergebnis'].hidden === false
+        && voll.felder['hg-summen'].innerHTML.includes('300,00')
+        && voll.felder['hg-summen'].innerHTML.includes('750,00'));
+
+    pruefe('Phase 50: jede Zeile trägt die Begründung des Servers, nicht einen eigenen Text',
+        voll.felder['hg-bericht'].innerHTML.includes('§ 1 Abs. 2 BetrKV')
+        && voll.felder['hg-bericht'].innerHTML.includes('chip-rot')
+        && voll.felder['hg-bericht'].innerHTML.includes('chip-ok'));
+
+    pruefe('Phase 50: der Zeitraum-Hinweis (BGH VIII ZR 27/07) steht dabei',
+        voll.felder['hg-zeitraum'].textContent.includes('VIII ZR 27/07'));
+
+    // Der Weg fuer die Heizkosten ist der, den der Vermieter sonst nicht
+    // findet: eine Rechnung, die der Wohnung zugeordnet ist. Ohne die
+    // Zuordnung verteilt der Kern sie nach Flaeche auf alle Wohnungen --
+    // rechnerisch sauber, fachlich falsch, ohne Fehlermeldung.
+    pruefe('Phase 50: der Dialog sagt, wohin die Heizkosten des Messdienstes gehören',
+        voll.felder['hg-heizkosten'].textContent.includes('ordnen Sie')
+        && voll.felder['hg-heizkosten'].textContent.includes('Wohnfläche'));
+
+    // Ohne Endsumme entfällt die Summenprobe, statt eine leere Zeile zu zeigen.
+    const ohneSumme = lauf([['Müll', '2400.00', '300.00']],
+        { 'hg-eigener-anteil': { value: '125' }, 'hg-gesamtanteile': { value: '1000' },
+          'hg-abrechnungssumme': { value: '' } },
+        { ...BERICHT, summenprobe: null });
+    await ohneSumme.fns.hausgeldPruefen();
+    const leerKoerper = JSON.parse(ohneSumme.aufrufe[0].koerper);
+    pruefe('Phase 50: ohne Endsumme entfällt die Summenprobe',
+        leerKoerper.abrechnungssumme === null
+        && ohneSumme.felder['hg-summenprobe'].hidden === true);
+}
+
+// Phase 54 (Issue #30): eigene Kostenarten — Tabelle, Nummernvorschlag,
+// Nummernmenü und die Nr.-17-Bestätigung, vom Quelltext her geprüft.
+async function kategorienPruefen() {
+    const funktion = name => {
+        const m = appQuelle.match(new RegExp(`(async )?function ${name}\\([^)]*\\) \\{[\\s\\S]*?\\n\\}`));
+        if (!m) throw new Error(`${name} nicht gefunden`);
+        return m[0];
+    };
+    const quelltext =
+        'const KATEGORIE_VERTEILUNGEN = [["qm","Umlage nach Wohnfläche"],["personen","Umlage nach Personen"],["direkt","Nach Verbrauch (eigener Zähler)"],["nur_allgemein","Nur Anteil am Allgemeinverbrauch"],["ignoriert","Wird diesem Mieter nicht berechnet"]];'
+        + 'let katalogHilfe = null; let letzteKategorien = [];'
+        + funktion('ladeKatalogHilfe') + funktion('nummernVorschlag')
+        + funktion('ladeKostenarten') + funktion('kategorieZeile')
+        + funktion('openKategorieModal') + funktion('closeKategorieModal') + funktion('saveKategorie');
+    const lauf = (felder, antworten) => {
+        const aufrufe = [];
+        const meldungen = [];
+        const dokument = {
+            getElementById(id) {
+                if (!(id in felder)) felder[id] = { value: '', innerHTML: '', textContent: '', hidden: false, checked: false, dataset: {}, classList: { add() {}, remove() {} } };
+                if (!felder[id].dataset) felder[id].dataset = {};
+                if (!felder[id].classList) felder[id].classList = { add() {}, remove() {} };
+                return felder[id];
+            },
+        };
+        const holen = (url, opt = {}) => {
+            aufrufe.push({ url, methode: opt.method || 'GET', koerper: opt.body });
+            const daten = antworten.shift() ?? {};
+            return Promise.resolve({ ok: true, json: () => Promise.resolve(daten) });
+        };
+        const fns = new Function('document', 'fetch', 'showError', 'serverFehler', 'meldungZu',
+            'escapeHtml', 'frage',
+            quelltext + '; return { ladeKostenarten, nummernVorschlag, openKategorieModal, saveKategorie };')(
+            dokument, holen, m => meldungen.push(m), async () => new Error('Server'),
+            (e, ersatz) => ersatz, t => String(t).replace(/</g, '&lt;').replace(/>/g, '&gt;'),
+            async () => true);
+        return { fns, aufrufe, meldungen, felder };
+    };
+
+    const hilfe = {
+        vorschlaege: [['hauswart', 14], ['aufzug', 7], ['muell', 8], ['warmwasser', 5]],
+        heizstichwoerter: ['warmwasser', 'heiz'],
+        nummern: [[1, 'Grundsteuer'], [4, 'Heizung'], [14, 'Kosten für den Hauswart'], [17, 'sonstige Betriebskosten']],
+    };
+
+    const vorschlag = lauf({}, []);
+    pruefe('Phase 54: der Nummernvorschlag schlägt vor, ohne zu überschreiben — und versagt bei Heiz-Namen',
+        vorschlag.fns.nummernVorschlag('Hauswart', hilfe) === 14
+        && vorschlag.fns.nummernVorschlag('Aufzugswartung', hilfe) === 7
+        && vorschlag.fns.nummernVorschlag('Müllabfuhr', hilfe) === 8
+        && vorschlag.fns.nummernVorschlag('Heizkosten', hilfe) === null
+        && vorschlag.fns.nummernVorschlag('Eigenbrötlerei', hilfe) === null
+        && vorschlag.fns.nummernVorschlag('', hilfe) === null);
+
+    const leer = lauf({}, [[]]);
+    await leer.fns.ladeKostenarten();
+    pruefe('Phase 54: ohne eigene Kostenart ein Hinweis statt einer leeren Tabelle',
+        leer.aufrufe[0].url === '/api/categories'
+        && /Noch keine eigene Kostenart/.test(leer.felder['kategorien-liste'].innerHTML));
+
+    const liste = lauf({}, [[{ id: 3, name: 'Hauswart <b>x</b>', betrkv_nr: 14, betrkv_bezeichnung: 'Kosten für den Hauswart', allocation_method: 'qm', requires_meter: true, rechnungen: 2, zaehler_anzahl: 1 }]]);
+    await liste.fns.ladeKostenarten();
+    pruefe('Phase 54: die Tabelle zeigt Nummer, amtliche Bezeichnung und Zähler — und maskiert den Namen',
+        liste.felder['kategorien-liste'].innerHTML.includes('&lt;b&gt;x&lt;/b&gt;')
+        && /Nr\. 14 · Kosten für den Hauswart/.test(liste.felder['kategorien-liste'].innerHTML)
+        && !/Umlage nach Wohnfläche/.test(liste.felder['kategorien-liste'].innerHTML)
+        && /Zähler \(1\)/.test(liste.felder['kategorien-liste'].innerHTML)
+        && liste.felder['kategorien-liste'].innerHTML.includes('openKategorieModal(3)')
+        && liste.felder['kategorien-liste'].innerHTML.includes('loescheKategorie(3)'));
+
+    const modal = lauf({}, [hilfe]);
+    await modal.fns.openKategorieModal(null);
+    modal.felder['kategorie-name'].oninput({ target: { value: 'Müllabfuhr' } });
+    const vorschlagen = modal.felder['kategorie-nr'].value;
+    modal.felder['kategorie-name'].oninput({ target: { value: 'Heizkosten' } });
+    const keinHeizVorschlag = modal.felder['kategorie-nr'].value;
+    modal.felder['kategorie-nr'].value = '8';
+    modal.felder['kategorie-nr'].dataset.gewaehlt = '1';
+    modal.felder['kategorie-name'].oninput({ target: { value: 'Gartenpflege' } });
+    pruefe('Phase 54: das Nummernmenü kommt aus betrkv, gesperrte Nummern sind disabled, der Vorschlag überschreibt keine gewählte Nummer',
+        vorschlagen === '8'
+        && keinHeizVorschlag === ''
+        && modal.felder['kategorie-nr'].value === '8'
+        && modal.felder['kategorie-nr'].innerHTML.includes('Nr. 14 · Kosten für den Hauswart')
+        && /value="4" disabled>Nr\. 4 · Heizung \(gesperrt\)/.test(modal.felder['kategorie-nr'].innerHTML));
+
+    const leerName = lauf({ 'kategorie-name': { value: '  ' } }, []);
+    await leerName.fns.saveKategorie();
+    const ohneNummer = lauf({ 'kategorie-name': { value: 'Gartenpflege' }, 'kategorie-nr': { value: '' } }, []);
+    await ohneNummer.fns.saveKategorie();
+    pruefe('Phase 54: ohne Name und ohne Nummer geht nichts hinaus',
+        leerName.aufrufe.length === 0 && leerName.meldungen.length === 1
+        && ohneNummer.aufrufe.length === 0 && ohneNummer.meldungen.length === 1);
+
+    const sonstige = lauf({ 'kategorie-name': { value: 'Eigenbrötlerei' }, 'kategorie-nr': { value: '17' }, 'kategorie-zaehler': { checked: false } }, [{}, []]);
+    await sonstige.fns.saveKategorie();
+    const koerper = sonstige.aufrufe.length === 2 ? JSON.parse(sonstige.aufrufe[0].koerper) : {};
+    pruefe('Phase 54: Nr. 17 geht nur mit Bestätigung (R-KAT-02) hinaus',
+        sonstige.aufrufe.length === 2 && sonstige.aufrufe[0].url === '/api/categories'
+        && sonstige.aufrufe[0].methode === 'POST' && koerper.betrkv_nr === 17
+        && koerper.name === 'Eigenbrötlerei' && koerper.allocation_method === undefined);
+
+    const aenderung = lauf({ 'kategorie-id': { value: '4' }, 'kategorie-name': { value: 'Quartierservice' }, 'kategorie-nr': { value: '14' }, 'kategorie-zaehler': { checked: false } }, [{}, []]);
+    await aenderung.fns.saveKategorie();
+    pruefe('Phase 54: das Bearbeiten geht als PUT mit der Nummer hinaus',
+        aenderung.aufrufe.length === 2 && aenderung.aufrufe[0].url === '/api/categories/4'
+        && aenderung.aufrufe[0].methode === 'PUT'
+        && JSON.parse(aenderung.aufrufe[0].koerper).name === 'Quartierservice');
+}
+
 async function fristenPruefen() {
     const m = appQuelle.match(/async function ladeFristen\(\) \{[\s\S]*?\n\}/);
     if (!m) throw new Error('ladeFristen nicht gefunden');
@@ -1085,7 +1399,7 @@ pruefe('NK-224: der Gruß steht im Kopf von „Heute“ und nirgends sonst',
         reiter[3].klick(); stand.push(aktiv(), String(unter.hidden));
         leiste[1].klick();
     }
-    pruefe('Der Reiter „Mieter“ macht „Haus“ in der Leiste aktiv, „Rechnungen“ dann „Kosten“',
+    pruefe('der Reiter „Mieter“ macht „Haus“ in der Leiste aktiv, „Rechnungen“ dann „Kosten“',
         stand.join('|') === 'haus|false|kosten|true');
     pruefe('„Haus“ in der Leiste öffnet die zuletzt gezeigte Seite (Mieter)',
         gewechselt.join() === 'tenants' && leiste[1].attr['aria-current'] === undefined);
@@ -1112,7 +1426,7 @@ pruefe('NK-224: der Gruß steht im Kopf von „Heute“ und nirgends sonst',
         /getElementById\('tab-hilfe'\)\.classList\.contains\('active'\)\) return;/.test(versuch));
 }
 
-// Die Befehlspalette markiert jedes Suchwort und maskiert den Rest.
+// die Befehlspalette markiert jedes Suchwort und maskiert den Rest.
 {
     const funktion = name => (appQuelle.match(new RegExp('function ' + name + '\\([\\s\\S]*?\\n\\}')) || [''])[0];
     const quelle = funktion('escapeHtml') + funktion('befehlMarkiert');
@@ -1123,13 +1437,15 @@ pruefe('NK-224: der Gruß steht im Kopf von „Heute“ und nirgends sonst',
 }
 
 // „Heute“ nennt Zähler ohne Stand im laufenden Jahr, Belege ohne
-// Rechnung und fällige Abrechnungen; Beispieldaten erzeugen keine Aufgabe.
+// Rechnung, fällige Abrechnungen und offene Zahlungen zugestellter Abrechnungen
+// (Phase 47); Beispieldaten erzeugen keine Aufgabe.
 {
     const quelle = (appQuelle.match(/function heuteAufgaben\(\)[\s\S]*?\n\}/) || [''])[0];
     const jahr = String(new Date().getFullYear());
     const gruppen = quelle && new Function('echterBestand', 'tenants', 'abrechnungsVorschlaege',
         'zaehlerArtName', 'datumText', 'openAddReadingModal', 'openBillingSelectionModal',
         'currentDocuments', 'belegOffen', 'wechsleZuTab', 'zeigeKostenAnsicht',
+        'abrechnungsHistorie', 'euroText', 'zahlungZurAbrechnung',
         quelle + '; return heuteAufgaben();')(
         () => ({ properties: [{ id: 1 }], meters: [{ id: 1, category_name: 'Strom', meter_number: 'A1', property_name: 'Haus' },
             { id: 2, category_name: 'Strom', meter_number: 'B2', property_name: 'Haus' }],
@@ -1140,10 +1456,13 @@ pruefe('NK-224: der Gruß steht im Kopf von „Heute“ und nirgends sonst',
         [{ id: 5, property_id: 1, description: 'Stadtwerke', property_name: 'Haus', upload_date: '2026-02-01T10:00:00' },
             { id: 6, property_id: 1, description: 'Erledigt', property_name: 'Haus', upload_date: '2026-02-01T10:00:00' },
             { id: 7, property_id: 9, description: 'Beispiel', property_name: 'Beispielhaus', upload_date: '2026-02-01T10:00:00' }],
-        d => d.id !== 6, () => {}, () => {});
+        d => d.id !== 6, () => {}, () => {},
+        [{ id: 3, tenant_id: 8, tenant_name: 'Echt', apartment_name: 'EG', zugestellt_am: '2026-02-01', offen_betrag: '12.00' },
+            { id: 4, tenant_id: 8, tenant_name: 'Bezahlt', apartment_name: 'EG', zugestellt_am: '2026-02-01', offen_betrag: '0.00' }],
+        b => b + ' €', () => {});
     const stand = (gruppen || []).map(g => g.name + ':' + g.aufgaben.map(a => a.titel + '/' + a.chip).join(',')).join('|');
-    pruefe('Heute zeigt nur Zähler ohne Stand, offene Belege und echte fällige Abrechnungen',
-        stand === 'Erfassen:Strom B2/fehlt|Belege:Stadtwerke/offen|Abrechnen:Echt (EG)/fällig');
+    pruefe('Heute zeigt nur Zähler ohne Stand, offene Belege, echte fällige Abrechnungen und offene Zahlungen',
+        stand === 'Erfassen:Strom B2/fehlt|Belege:Stadtwerke/offen|Abrechnen:Echt (EG)/fällig|Zahlungen:Echt (EG)/offen');
 }
 
 // --- Immobilienfilter im Kopf ----------------------------------------------
@@ -1193,7 +1512,7 @@ pruefe('NK-224: der Gruß steht im Kopf von „Heute“ und nirgends sonst',
         && /id="erste-schritte-beispiel"[^>]*>Die Beispielimmobilie zählt nicht mit\.</.test(html));
     pruefe('NK-225: ohne Beispielhaus kein Hinweis',
         !!ohne['erste-schritte-beispiel'] && ohne['erste-schritte-beispiel'].hidden === true);
-    pruefe('Die Einführung startet von selbst nur in der leeren App, nicht neben dem Beispielhaus',
+    pruefe('die Einführung startet von selbst nur in der leeren App, nicht neben dem Beispielhaus',
         ohne.tourGestartet === true && !mit.tourGestartet);
 }
 
@@ -1740,32 +2059,35 @@ async function zaehlerPflegePruefen() {
     pruefe('NK-258: keine Fehlermeldung im glatten Lauf', meldungen.length === 0);
 }
 
-warnLeistePruefen()
-    .catch(e => pruefe('NK-201: Warnleisten-Prüfung lief durch — ' + e.message, false))
-    .then(() => ausschalterPruefen()
-        .catch(e => pruefe('NK-204: Ausschalter-Prüfung lief durch — ' + e.message, false))
-        .then(() => haushaltPruefen()
-            .catch(e => pruefe('NK-118: Haushaltsprüfung lief durch — ' + e.message, false))
-            .then(() => nachfragePruefen()
-                .catch(e => pruefe('NK-216: Nachfrage-Prüfung lief durch — ' + e.message, false))
-                .then(() => korrekturPruefen()
-                    .catch(e => pruefe('NK-217: Korrektur-Prüfung lief durch — ' + e.message, false))
-                    .then(() => serienPruefen()
-                        .catch(e => pruefe('NK-226: Serienbuchung-Prüfung lief durch — ' + e.message, false))
-                        .then(() => ablesenPruefen()
-                            .catch(e => pruefe('NK-227: Ablesen-Prüfung lief durch — ' + e.message, false))
-                            .then(() => vorjahrPruefen()
-                                .catch(e => pruefe('NK-230: Vorjahr-Prüfung lief durch — ' + e.message, false))
-                                .then(() => zaehlerPflegePruefen()
-                                    .catch(e => pruefe('NK-258: Zählerpflege-Prüfung lief durch — ' + e.message, false))
-                                    .then(() => vorauszahlungPruefen()
-                                        .catch(e => pruefe('NK-261: Vorauszahlung-Prüfung lief durch — ' + e.message, false))
-                                        .then(() => fristenPruefen()
-                                            .catch(e => pruefe('NK-262: Fristen-Prüfung lief durch — ' + e.message, false))
-                                            .then(() => mehrjahresblickPruefen()
-                                                .catch(e => pruefe('NK-263: Mehrjahresblick-Prüfung lief durch — ' + e.message, false))
-                                                .then(() => jahreswechselPruefen()
-                                                    .catch(e => pruefe('NK-267: Jahreswechsel-Prüfung lief durch — ' + e.message, false))
-                                                    .then(() => pruefstandPruefen()
-                                                        .catch(e => pruefe('NK-265: Prüfstand-Prüfung lief durch — ' + e.message, false))
-                                                        .then(() => process.exit(fehler ? 1 : 0)))))))))))))));
+(async () => {
+    // NK-201/NK-204/NK-118/NK-216/NK-217/NK-226/NK-227/NK-230/NK-258/NK-261/
+    // NK-262/NK-263/NK-267/NK-265 und Phase 54 (eigene Kostenarten): jede
+    // Prüfung läuft, eine fehlgeschlagene bricht den Lauf nicht ab.
+    const schritte = [
+        ['warnLeistePruefen', 'NK-201: Warnleisten-Prüfung'],
+        ['ausschalterPruefen', 'NK-204: Ausschalter-Prüfung'],
+        ['haushaltPruefen', 'NK-118: Haushaltsprüfung'],
+        ['nachfragePruefen', 'NK-216: Nachfrage-Prüfung'],
+        ['korrekturPruefen', 'NK-217: Korrektur-Prüfung'],
+        ['serienPruefen', 'NK-226: Serienbuchung-Prüfung'],
+        ['ablesenPruefen', 'NK-227: Ablesen-Prüfung'],
+        ['vorjahrPruefen', 'NK-230: Vorjahr-Prüfung'],
+        ['zaehlerPflegePruefen', 'NK-258: Zählerpflege-Prüfung'],
+        ['vorauszahlungPruefen', 'NK-261: Vorauszahlung-Prüfung'],
+        ['kaltmietePruefen', 'Phase 49: Kaltmiete-Prüfung'],
+        ['fristenPruefen', 'NK-262: Fristen-Prüfung'],
+        ['mehrjahresblickPruefen', 'NK-263: Mehrjahresblick-Prüfung'],
+        ['jahreswechselPruefen', 'NK-267: Jahreswechsel-Prüfung'],
+        ['pruefstandPruefen', 'NK-265: Prüfstand-Prüfung'],
+        ['kategorienPruefen', 'Phase 54: Kostenarten-Prüfung'],
+        ['hausgeldPruefungPruefen', 'Phase 50: Hausgeld-Prüfung'],
+    ];
+    for (const [name, label] of schritte) {
+        try {
+            await eval(name)();
+        } catch (e) {
+            pruefe(label + ' lief durch — ' + e.message, false);
+        }
+    }
+    process.exit(fehler ? 1 : 0);
+})();

@@ -46,6 +46,8 @@ __all__ = [
     'NR_ALLGEMEINSTROM',
     'FRUEHERE_NAMEN',
     'EINHEITEN',
+    'EINHEITEN_ZAEHLER',
+    'NUMMERN_WARMWASSER',
     'RUBRIKEN',
     'BEREICHE',
     'BetrKVFehler',
@@ -56,6 +58,8 @@ __all__ = [
     'pruefe',
     'ist_sonstige',
     'zuordnung',
+    'nummernvorschlag',
+    'GESPERRT',
     'ist_niederschlag',
     'katalogeintrag',
     'einheit',
@@ -122,24 +126,24 @@ SONSTIGE = 17
 #: HeizkostenV -- das baut NK-049, und bis dahin waere ein Pflichtzaehler eine
 #: Behauptung, die die Anwendung nicht einloesen kann.
 KATALOG = (
-    {'nr': 1, 'name': 'Grundsteuer', 'verteilung': 'PER_SQM', 'zaehler': False},
-    {'nr': 2, 'name': 'Wasserversorgung', 'verteilung': 'METER_READING', 'zaehler': True},
-    {'nr': 3, 'name': 'Entwässerung', 'verteilung': 'METER_READING', 'zaehler': False},
-    {'nr': 3, 'name': 'Niederschlagswasser', 'verteilung': 'PER_SQM', 'zaehler': False},
-    {'nr': 4, 'name': 'Heizung', 'verteilung': 'METER_READING', 'zaehler': False},
-    {'nr': 5, 'name': 'Warmwasser', 'verteilung': 'METER_READING', 'zaehler': False},
-    {'nr': 6, 'name': 'Heizung und Warmwasser (verbundene Anlage)', 'verteilung': 'METER_READING', 'zaehler': False},
-    {'nr': 7, 'name': 'Aufzug', 'verteilung': 'PER_SQM', 'zaehler': False},
-    {'nr': 8, 'name': 'Straßenreinigung und Müllbeseitigung', 'verteilung': 'PER_SQM', 'zaehler': False},
-    {'nr': 9, 'name': 'Gebäudereinigung und Ungezieferbekämpfung', 'verteilung': 'PER_SQM', 'zaehler': False},
-    {'nr': 10, 'name': 'Gartenpflege', 'verteilung': 'PER_SQM', 'zaehler': False},
-    {'nr': 11, 'name': 'Allgemeinstrom', 'verteilung': 'PER_SQM', 'zaehler': False},
-    {'nr': 12, 'name': 'Schornsteinreinigung', 'verteilung': 'PER_SQM', 'zaehler': False},
-    {'nr': 13, 'name': 'Sach- und Haftpflichtversicherung', 'verteilung': 'PER_SQM', 'zaehler': False},
-    {'nr': 14, 'name': 'Hauswart', 'verteilung': 'PER_SQM', 'zaehler': False},
-    {'nr': 15, 'name': 'Antenne, Breitband oder Glasfaser', 'verteilung': 'PER_SQM', 'zaehler': False},
-    {'nr': 16, 'name': 'Wäschepflege', 'verteilung': 'PER_SQM', 'zaehler': False},
-    {'nr': 17, 'name': 'Sonstige Betriebskosten', 'verteilung': 'PER_SQM', 'zaehler': False},
+    {'nr': 1, 'name': 'Grundsteuer', 'verteilung': 'qm', 'zaehler': False},
+    {'nr': 2, 'name': 'Wasserversorgung', 'verteilung': 'direkt', 'zaehler': True},
+    {'nr': 3, 'name': 'Entwässerung', 'verteilung': 'qm', 'zaehler': False},
+    {'nr': 3, 'name': 'Niederschlagswasser', 'verteilung': 'qm', 'zaehler': False},
+    {'nr': 4, 'name': 'Heizung', 'verteilung': 'qm', 'zaehler': False},
+    {'nr': 5, 'name': 'Warmwasser', 'verteilung': 'qm', 'zaehler': False},
+    {'nr': 6, 'name': 'Heizung und Warmwasser (verbundene Anlage)', 'verteilung': 'qm', 'zaehler': False},
+    {'nr': 7, 'name': 'Aufzug', 'verteilung': 'qm', 'zaehler': False},
+    {'nr': 8, 'name': 'Straßenreinigung und Müllbeseitigung', 'verteilung': 'qm', 'zaehler': False},
+    {'nr': 9, 'name': 'Gebäudereinigung und Ungezieferbekämpfung', 'verteilung': 'qm', 'zaehler': False},
+    {'nr': 10, 'name': 'Gartenpflege', 'verteilung': 'qm', 'zaehler': False},
+    {'nr': 11, 'name': 'Allgemeinstrom', 'verteilung': 'qm', 'zaehler': False},
+    {'nr': 12, 'name': 'Schornsteinreinigung', 'verteilung': 'qm', 'zaehler': False},
+    {'nr': 13, 'name': 'Sach- und Haftpflichtversicherung', 'verteilung': 'qm', 'zaehler': False},
+    {'nr': 14, 'name': 'Hauswart', 'verteilung': 'qm', 'zaehler': False},
+    {'nr': 15, 'name': 'Antenne, Breitband oder Glasfaser', 'verteilung': 'qm', 'zaehler': False},
+    {'nr': 16, 'name': 'Wäschepflege', 'verteilung': 'qm', 'zaehler': False},
+    {'nr': 17, 'name': 'Sonstige Betriebskosten', 'verteilung': 'qm', 'zaehler': False},
 )
 
 
@@ -287,6 +291,73 @@ def _vergleichsform(name: str) -> str:
     return ''.join(z for z in klein if z.isalpha())
 
 
+#: Die Nummern, die die Oberfläche für eigene Kostenarten sperrt (Phase 54):
+#: Heizung, Warmwasser und verbundene Anlagen laufen über die Heizungsanlage
+#: und HeizkostenV. Eine zweite Kostenart unter diesen Nummern würde den
+#: Heizkern umgehen.
+GESPERRT = frozenset((NR_HEIZUNG, NR_WARMWASSER, NR_VERBUNDENE_ANLAGE))
+
+#: Stichwörter für den Nummernvorschlag im Formular (Phase 54). Die Liste
+#: liegt an diesem einen Ort neben dem Katalog und schlägt nur vor: sie
+#: überschreibt nie eine Nummer, die der Nutzer schon gewählt hat, und sie
+#: schlägt keine gesperrte Nummer vor.
+_STICHWOERTER = (
+    ('grundsteuer', 1),
+    # Das Genauere zuerst (wie in _SCHLUESSELWOERTER): "Niederschlagswasser"
+    # enthaelt das Teilwort "wasser" -- steht das vorn, schlaegt der Vorschlag
+    # Nr. 2 vor, wo der Katalog den Eintrag selbst unter Nr. 3 fuehrt.
+    ('niederschlag', 3), ('regen', 3), ('schmutzwasser', 3),
+    ('abwasser', 3), ('entwaesserung', 3), ('kanal', 3),
+    ('wasser', 2),
+    ('aufzug', 7), ('lift', 7),
+    ('strassenreinigung', 8), ('muell', 8), ('abfall', 8), ('winterdienst', 8),
+    # Hausmeister vor "reinigung": "Hausmeister/-reinigung" ist Hauswart (Nr. 14),
+    # nicht Gebaeudereinigung (Nr. 9).
+    ('hausmeister', 14), ('concierge', 14),
+    ('reinigung', 9), ('ungeziefer', 9),
+    ('gartenpflege', 10), ('aussenanlage', 10), ('aussenflaeche', 10),
+    ('garten', 10),
+    # "Hausstrom" und "Treppenhausstrom" raten zu Nr. 11, nicht zu gar nichts.
+    ('allgemeinstrom', 11), ('strom', 11), ('beleuchtung', 11),
+    ('schornstein', 12), ('kamin', 12),
+    ('versicherung', 13),
+    ('hauswart', 14),
+    ('antenne', 15), ('kabel', 15), ('breitband', 15), ('glasfaser', 15),
+    ('waeschepflege', 16), ('waschmaschine', 16), ('trockner', 16), ('waesche', 16),
+)
+
+#: Namen, die eindeutig zur Heizung oder zum Warmwasser gehören, bekommen
+#: keinen Vorschlag: Für sie ist die Nummer nicht die Frage, sondern die
+#: Heizungsanlage (Nr. 4-6 sind gesperrt).
+_HEIZSTICHWOERTER = ('warmwasser', 'heiz', 'brennstoff', 'waerme')
+
+
+def nummernvorschlag(name: str | None) -> int | None:
+    """Welche Nummer das Formular zu einem Namen raten darf (Phase 54).
+
+    Eine Vermutung wie ``zuordnung``, aber für das Tippen: „Hauswart“ →
+    Nr. 14, „Aufzug“ → Nr. 7. Unbekannte Namen bekommen keinen Vorschlag,
+    gesperrte Nummern (Nr. 4-6) werden nie geraten -- wer Heizkosten meint,
+    legt sie ohnehin an der Heizungsanlage an.
+
+        >>> nummernvorschlag('Hauswart'), nummernvorschlag('Aufzugswartung')
+        (14, 7)
+        >>> nummernvorschlag('Eigenbrötlerei') is None
+        True
+    """
+    form = _vergleichsform(name or '')
+    if not form:
+        return None
+    if any(stichwort in form for stichwort in _HEIZSTICHWOERTER):
+        return None
+    for stichwort, nr in _STICHWOERTER:
+        if nr in GESPERRT:
+            continue
+        if stichwort in form:
+            return nr
+    return None
+
+
 def zuordnung(name) -> int:
     """Welche Katalognummer zu einem frei benannten Altbestand passt.
 
@@ -372,6 +443,26 @@ def katalogeintrag(name) -> dict:
 #: Posten. Alles andere umlagt ohne Zähler und trägt die neutrale Einheit.
 #: Das ist der eine Ort hinter ``einheit_fuer`` und der Analytics-Einheit
 #: (F-32/F-51, NK-121).
+#: Die Einheiten, die ein Zaehler erfassen kann (Phase 55). Bisher kam die
+#: Einheit allein aus der Nummer der Kostenart; ein Warmwasser-Waerme-
+#: mengenzaehler (§ 9 Abs. 2 Satz 1 HeizkostenV, bei Waermepumpen der
+#: uebliche Aufbau) hatte damit keinen Platz. Jetzt steht sie am Zaehler,
+#: und diese Liste ist die Autoritaet dafuer.
+EINHEITEN_ZAEHLER = ('m³', 'kWh')
+
+#: Die Kostenarten, deren Zaehler das **Warmwasser** erfassen und damit
+#: nach § 8 HeizkostenV verteilt werden -- Nr. 2 Wasserversorgung, Nr. 3
+#: Entwaesserung, Nr. 5 Warmwasser. Alles andere an einer Heizungsanlage
+#: zaehlt die Waerme (§ 7); namentlich die Nr. 6 der verbundenen Anlage,
+#: die "Warmwasser" heisst und trotzdem Kilowattstunden misst.
+#:
+#: Das ist eine Aussage ueber den **Zweck**, nicht ueber die Masseinheit.
+#: Bis Phase 55 entschied sie dieselben Faelle mittelbar -- genau diese
+#: drei Nummern sind die Kubikmeter-Nummern in ``EINHEITEN`` --, aber seit
+#: der Zaehler seine Einheit selbst tragen kann, faellt das auseinander:
+#: ein Warmwasser-Waermemengenzaehler (Nr. 5, kWh) bleibt § 8.
+NUMMERN_WARMWASSER = (2, 3, 5)
+
 EINHEITEN = {
     1: 'Einheiten',
     2: 'm³', 3: 'm³',
