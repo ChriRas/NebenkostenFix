@@ -8983,7 +8983,7 @@ function renderConsumptionTrend(timeseries_data) {
     
     const categoryConfig = {
         'Strom': { icon: 'ph-lightning', color: DIAGRAMM_FARBE.gelb, label: 'Strom' },
-        'Gas': { icon: 'ph-flame', color: DIAGRAMM_FARBE.rot, label: 'Gas' },
+        'Wärme': { icon: 'ph-thermometer-simple', color: DIAGRAMM_FARBE.rot, label: 'Wärme' },
         'Wasser': { icon: 'ph-drop', color: DIAGRAMM_FARBE.blau, label: 'Wasser' },
     };
     
@@ -9034,7 +9034,7 @@ function renderConsumptionTrend(timeseries_data) {
     const metricsGrid = document.createElement('div');
     metricsGrid.style.cssText = 'display: flex; flex-direction: column; gap: 12px;';
     
-    ['Strom', 'Gas', 'Wasser'].forEach(cat => {
+    ['Strom', 'Wärme', 'Wasser'].forEach(cat => {
         const cfg = categoryConfig[cat];
         const catData = data[cat];
         
@@ -9330,7 +9330,7 @@ function renderDataQuality(data) {
     const categoryIcons = {
         'Strom': 'ph-lightning',
         'Wasser': 'ph-drop',
-        'Gas': 'ph-flame',
+        'Wärme': 'ph-thermometer-simple',
         'Abwasser': 'ph-pipe',
     };
     
@@ -9661,7 +9661,7 @@ function drawTimeseriesChart(filter) {
     
     const bucketColors = {
         'Strom': DIAGRAMM_FARBE.gelb,
-        'Gas': DIAGRAMM_FARBE.rot,
+        'Wärme': DIAGRAMM_FARBE.rot,
         'Wasser': DIAGRAMM_FARBE.blau,
         'Sonstige Kosten': DIAGRAMM_FARBE.lila
     };
@@ -9785,7 +9785,7 @@ function renderBuildingComparison(apartment_comparison) {
     
     const bucketColors = {
         'Strom': DIAGRAMM_FARBE.gelb,
-        'Gas': DIAGRAMM_FARBE.rot,
+        'Wärme': DIAGRAMM_FARBE.rot,
         'Wasser': DIAGRAMM_FARBE.blau,
         'Sonstige Kosten': DIAGRAMM_FARBE.lila
     };

@@ -483,14 +483,22 @@ RUBRIKEN = {
     4: 'Energie', 5: 'Energie', 6: 'Energie',
 }
 
-#: Der Bereich der Zeitreihe (Analytics). Strom ist allein die Nr. 11;
-#: alles, was brennt, fällt unter „Gas“ -- auch das Warmwasser der Nr. 5,
-#: das ein Brennstoffposten ist, kein Wasserposten (F-32: die alte
-#: Stichwortliste räumte es in die Wasser-Spalte). Wasserversorgung und
-#: Entwässerung sind Wasser; der Rest ist Sonstige Kosten.
+#: Der Bereich der Zeitreihe (Analytics). Strom ist allein die Nr. 11; die
+#: Nummern 4, 5 und 6 sind **Wärme** -- auch das Warmwasser der Nr. 5, das
+#: ein Energieposten ist, kein Wasserposten (F-32: die alte Stichwortliste
+#: räumte es in die Wasser-Spalte). Wasserversorgung und Entwässerung sind
+#: Wasser; der Rest ist Sonstige Kosten.
+#:
+#: Der Bereich hiess bis 0.16.0 „Gas“, und der Kommentar hier begründete
+#: das mit „alles, was brennt“. Eine Wärmepumpe brennt nicht, eine
+#: Fernwärmeübergabe auch nicht -- der Melder von Issue #35 sah „Gas“ an
+#: seiner Wärmepumpe und meldete es zu Recht. Die Nummer der BetrKV sagt,
+#: **wofür** die Kosten anfallen, nicht **womit** geheizt wird; den
+#: Energieträger kennt die Anwendung nirgends. „Wärme“ ist deshalb nicht
+#: nur freundlicher, sondern das, was die Daten hergeben.
 BEREICHE = {
     2: 'Wasser', 3: 'Wasser',
-    4: 'Gas', 5: 'Gas', 6: 'Gas',
+    4: 'Wärme', 5: 'Wärme', 6: 'Wärme',
     11: 'Strom',
 }
 
@@ -523,6 +531,6 @@ def bereich(nr) -> str:
     """Der Bereich der Zeitreihe, in den diese Nummer gehört.
 
         >>> bereich(5), bereich(11), bereich(9)
-        ('Gas', 'Strom', 'Sonstige Kosten')
+        ('Wärme', 'Strom', 'Sonstige Kosten')
     """
     return BEREICHE.get(pruefe(nr), 'Sonstige Kosten')

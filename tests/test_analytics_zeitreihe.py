@@ -73,4 +73,4 @@ def test_zwei_bereiche_eines_jahres_bleiben_getrennt(auth_client):
 
     jahr = [z for z in zeiten if z["year"] == VORJAHR]
     stehende = {z["category"]: z["cost"] for z in jahr}
-    assert stehende == {"Sonstige Kosten": 150.0, "Gas": 90.0}
+    assert stehende == {"Sonstige Kosten": 150.0, "Wärme": 90.0}

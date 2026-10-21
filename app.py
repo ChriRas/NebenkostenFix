@@ -4450,12 +4450,13 @@ def _get_unit(cat_name):
 
 
 def _map_to_bucket(cat_name):
-    # Auch hier der Katalog (NK-121): Strom ist allein die Nr. 11, alles
-    # Brennende (Nr. 4, 5, 6) faellt unter "Gas" -- auch das Warmwasser,
-    # das ein Brennstoffposten ist. Die Stichwortliste hatte es in die
-    # Wasser-Spalte geräumt, waehrend _map_category dasselbe Wort nach
-    # Energie schob. Sie stand in analytics_building und war deshalb
-    # untestbar; jetzt liegt sie neben die anderen beiden.
+    # Auch hier der Katalog (NK-121): Strom ist allein die Nr. 11, die
+    # Nummern 4, 5 und 6 sind "Waerme" -- auch das Warmwasser, das ein
+    # Energieposten ist. Die Stichwortliste hatte es in die Wasser-Spalte
+    # geräumt, waehrend _map_category dasselbe Wort nach Energie schob.
+    # Sie stand in analytics_building und war deshalb untestbar; jetzt
+    # liegt sie neben die anderen beiden. Der Bereich hiess bis 0.16.0
+    # "Gas" (Issue #35): den Energietraeger kennt die Anwendung nicht.
     return betrkv.bereich(betrkv.zuordnung(cat_name))
 
 
