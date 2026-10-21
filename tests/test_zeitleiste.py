@@ -8,6 +8,8 @@ eigene Gruppe am Ende -- aus einem NULL wird nichts geraten (D-57).
 
 from __future__ import annotations
 
+import re
+
 from datetime import date
 from decimal import Decimal
 
@@ -134,8 +136,18 @@ def test_umschalter_und_container_sind_verdrahtet():
     assert 'id="pills-invoice-zeitleiste"' in seite
     assert 'zeigeInvoiceZeitleiste()' in seite
     assert 'id="invoices-zeitleiste"' in seite
-    assert 'style.css?v=14' in seite
-    assert 'app.js?v=39' in seite
+    # Der Cache-Buster muss da sein und darf nicht zurueckfallen -- aber
+    # nicht auf einer festen Nummer stehen. Vorher stand hier `?v=14`
+    # woertlich; damit fiel dieser Test bei jeder spaeteren Stilaenderung,
+    # obwohl mit der Zeitleiste nichts geschehen war. Ein Test, den man
+    # durch Hochzaehlen einer Zahl gruen macht, erzieht zum Hochzaehlen.
+    stil = re.search(r'style\.css\?v=(\d+)', seite)
+    skript_version = re.search(r'app\.js\?v=(\d+)', seite)
+    assert stil and int(stil.group(1)) >= 14, (
+        'style.css hat keinen Cache-Buster oder faellt hinter v14 zurueck '
+        '(den Stand, mit dem die Zeitleiste kam).')
+    assert skript_version and int(skript_version.group(1)) >= 39, (
+        'app.js hat keinen Cache-Buster oder faellt hinter v39 zurueck.')
     with open('static/app.js', encoding='utf-8') as datei:
         skript = datei.read()
     assert "fetch('/api/invoices/zeitleiste')" in skript

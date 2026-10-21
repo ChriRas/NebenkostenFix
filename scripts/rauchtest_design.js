@@ -829,6 +829,80 @@ async function hausgeldPruefungPruefen() {
         && ohneSumme.felder['hg-summenprobe'].hidden === true);
 }
 
+// Phase 57 (Issue #35, Punkt 3): Rechnungen nach Jahr. Geprueft wird das
+// Verhalten, nicht nur, dass das Feld da ist: renderInvoices() laeuft gegen
+// einen DOM-Stub und muss filtern, zaehlen und summieren.
+async function rechnungsJahrPruefen() {
+    const funktion = name => {
+        const m = appQuelle.match(new RegExp(`function ${name}\\([^)]*\\) \\{[\\s\\S]*?\\n\\}`));
+        if (!m) throw new Error(`${name} nicht gefunden`);
+        return m[0];
+    };
+    const quelltext = "const OHNE_DATUM = 'ohne';"
+        + funktion('rechnungsJahr') + funktion('rechnungsfilterZuruecksetzen')
+        + funktion('geldText');
+
+    const bestand = [
+        { id: 1, amount: 100, rechnungsdatum: '2024-03-01', category_name: 'Heizung', property_name: 'Haus', invoice_number: 'A', provider_name: 'P' },
+        { id: 2, amount: 250, rechnungsdatum: '2025-06-01', category_name: 'Heizung', property_name: 'Haus', invoice_number: 'B', provider_name: 'P' },
+        { id: 3, amount: 50, rechnungsdatum: '2025-09-01', category_name: 'Wasser', property_name: 'Haus', invoice_number: 'C', provider_name: 'P' },
+        { id: 4, amount: 7, rechnungsdatum: null, category_name: 'Wasser', property_name: 'Haus', invoice_number: 'D', provider_name: 'P' },
+    ];
+
+    const fns = new Function(quelltext + '; return { rechnungsJahr, geldText };')();
+
+    pruefe('Phase 57: das Jahr kommt aus dem Rechnungsdatum, ohne Datum eine eigene Gruppe',
+        fns.rechnungsJahr(bestand[0]) === '2024'
+        && fns.rechnungsJahr(bestand[1]) === '2025'
+        && fns.rechnungsJahr(bestand[3]) === 'ohne'
+        && fns.rechnungsJahr({}) === 'ohne');
+
+    // Den Filterteil von renderInvoices nachbilden -- dieselben Zeilen, die
+    // die Oberflaeche ausfuehrt, aus der Quelle geschnitten.
+    const quelle = appQuelle.match(/function renderInvoices\(\)[\s\S]*?\n\}/)[0];
+    pruefe('Phase 57: renderInvoices filtert nach dem Jahr',
+        /matchJahr = rechnungsJahr\(i\) === jahrFilterVal/.test(quelle)
+        && /return matchSearch && matchCat && matchJahr/.test(quelle));
+
+    pruefe('Phase 57: die Summenzeile folgt dem Filter, nicht dem Bestand',
+        /filtered\.reduce/.test(quelle)
+        && /summeZeile\.textContent/.test(quelle)
+        && !/invoices\.reduce/.test(quelle));
+
+    pruefe('Phase 57: das Auswahlfeld fuellt sich aus dem Bestand, juengstes Jahr zuerst',
+        /invoices\.map\(rechnungsJahr\)/.test(quelle)
+        && /\.sort\(\)\.reverse\(\)/.test(quelle)
+        && /echte\.push\(OHNE_DATUM\)/.test(quelle));
+
+    // Die Summe von Hand nachgerechnet: 2025 sind 250 + 50 = 300.
+    const summe2025 = bestand.filter(r => fns.rechnungsJahr(r) === '2025')
+        .reduce((z, r) => z + Number(r.amount || 0), 0);
+    pruefe('Phase 57: die Jahressumme stimmt (2025: 250 + 50 = 300)',
+        summe2025 === 300 && /300/.test(fns.geldText(summe2025)));
+
+    // Zuruecksetzen muss auch das neue Feld raeumen -- sonst bleibt ein
+    // unsichtbarer Filter stehen und der Nutzer sucht den Fehler bei sich.
+    const geraeumt = {};
+    const dokument = { getElementById(id) { geraeumt[id] = { value: 'x' }; return geraeumt[id]; } };
+    new Function('document', 'renderInvoices',
+        quelltext + '; rechnungsfilterZuruecksetzen();')(dokument, () => {});
+    pruefe('Phase 57: „Filter zuruecksetzen" raeumt auch das Jahr',
+        geraeumt['invoice-jahr-filter'] && geraeumt['invoice-jahr-filter'].value === ''
+        && geraeumt['invoice-search'].value === ''
+        && geraeumt['invoice-category-filter'].value === '');
+
+    // Die Zeitleiste zeigt die Jahressumme, die der Server schon rechnet.
+    const zeitleiste = appQuelle.match(/function renderInvoiceZeitleiste[\s\S]*?\n\}/)[0];
+    pruefe('Phase 57: die Zeitleiste zeigt die Jahressumme des Servers, ohne sie nachzurechnen',
+        /zeitleiste-jahressumme/.test(zeitleiste)
+        && /zeitleisteBetrag\(jahr\.summe\)/.test(zeitleiste));
+
+    // Und die Oberflaeche traegt die Felder, an denen das alles haengt.
+    pruefe('Phase 57: Auswahlfeld und Summenzeile stehen in der Oberflaeche',
+        /id="invoice-jahr-filter"[\s\S]*?Alle Jahre/.test(html)
+        && /id="invoice-summe"/.test(html));
+}
+
 // Phase 54 (Issue #30): eigene Kostenarten — Tabelle, Nummernvorschlag,
 // Nummernmenü und die Nr.-17-Bestätigung, vom Quelltext her geprüft.
 async function kategorienPruefen() {
@@ -2081,6 +2155,7 @@ async function zaehlerPflegePruefen() {
         ['pruefstandPruefen', 'NK-265: Prüfstand-Prüfung'],
         ['kategorienPruefen', 'Phase 54: Kostenarten-Prüfung'],
         ['hausgeldPruefungPruefen', 'Phase 50: Hausgeld-Prüfung'],
+        ['rechnungsJahrPruefen', 'Phase 57: Jahresfilter-Prüfung'],
     ];
     for (const [name, label] of schritte) {
         try {

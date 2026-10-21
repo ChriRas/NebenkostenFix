@@ -3163,7 +3163,10 @@ function zeitleisteKarte(titel, summe, rechnungen) {
 function renderInvoiceZeitleiste(daten, ziel) {
     const teile = [];
     for (const jahr of daten.jahre || []) {
-        teile.push(`<h2 class="zeitleiste-jahr">${jahr.jahr}</h2>`);
+        // Phase 57: die Jahressumme kommt aus zeitleiste.erstellen() und
+        // wurde bisher nur nicht gezeigt -- nicht hier nachgerechnet.
+        teile.push(`<h2 class="zeitleiste-jahr">${jahr.jahr}` +
+            `<span class="zeitleiste-jahressumme">${zeitleisteBetrag(jahr.summe)}</span></h2>`);
         for (const monat of jahr.monate || []) {
             teile.push(zeitleisteKarte(
                 `${monat.label} ${jahr.jahr}`, monat.summe, monat.rechnungen));
@@ -3583,11 +3586,25 @@ function getCategoryIcon(catName) {
 }
 
 // NK-156: der Leerzustand „Keine Treffer“ führt zurück zur ganzen Liste.
+// Phase 57 (Issue #35): das Jahr einer Rechnung ist das Jahr ihres
+// Ausstellungsdatums (D-57) -- nicht des Tages, an dem sie erfasst wurde,
+// und nicht des Abrechnungszeitraums. Eine Rechnung ohne Datum hat kein
+// Jahr; sie bekommt eine eigene Gruppe, statt stillschweigend in einem
+// beliebigen zu landen.
+const OHNE_DATUM = 'ohne';
+
+function rechnungsJahr(rechnung) {
+    const datum = rechnung.rechnungsdatum || '';
+    return datum.length >= 4 ? datum.slice(0, 4) : OHNE_DATUM;
+}
+
 function rechnungsfilterZuruecksetzen() {
     const suche = document.getElementById('invoice-search');
     const kategorie = document.getElementById('invoice-category-filter');
+    const jahr = document.getElementById('invoice-jahr-filter');
     if (suche) suche.value = '';
     if (kategorie) kategorie.value = '';
+    if (jahr) jahr.value = '';
     renderInvoices();
 }
 window.rechnungsfilterZuruecksetzen = rechnungsfilterZuruecksetzen;
@@ -3644,10 +3661,26 @@ function renderInvoices() {
         });
     }
     
+    // Phase 57: die Jahre aus dem Bestand, das juengste zuerst; der
+    // Altbestand ohne Datum steht am Ende, wie in der Zeitleiste.
+    const jahrSelect = document.getElementById('invoice-jahr-filter');
+    if (jahrSelect && jahrSelect.options.length <= 1) {
+        const jahre = [...new Set(invoices.map(rechnungsJahr))];
+        const echte = jahre.filter(j => j !== OHNE_DATUM).sort().reverse();
+        if (jahre.includes(OHNE_DATUM)) echte.push(OHNE_DATUM);
+        echte.forEach(j => {
+            const opt = document.createElement('option');
+            opt.value = j;
+            opt.textContent = j === OHNE_DATUM ? 'Ohne Rechnungsdatum' : j;
+            jahrSelect.appendChild(opt);
+        });
+    }
+
     // Read filters
     const searchInput = document.getElementById('invoice-search');
     const searchVal = searchInput ? searchInput.value.toLowerCase() : '';
     const catFilterVal = catSelect ? catSelect.value : '';
+    const jahrFilterVal = jahrSelect ? jahrSelect.value : '';
     
     // Filter invoices
     let filtered = invoices.filter(i => {
@@ -3661,14 +3694,21 @@ function renderInvoices() {
         if (catFilterVal) {
             matchCat = i.category_name === catFilterVal;
         }
-        return matchSearch && matchCat;
+        let matchJahr = true;
+        if (jahrFilterVal) {
+            matchJahr = rechnungsJahr(i) === jahrFilterVal;
+        }
+        return matchSearch && matchCat && matchJahr;
     });
     
+    const summeZeile = document.getElementById('invoice-summe');
+
     if (filtered.length === 0) {
         // K4: zu leerem Bestand gehört keine Filterleiste; bei „Keine
         // Treffer" bleibt sie stehen.
         const leiste = document.getElementById('invoice-filter');
         if (leiste) leiste.hidden = invoices.length === 0;
+        if (summeZeile) summeZeile.hidden = true;
         if (invoices.length === 0) {
             container.innerHTML = leerzustand({
                 icon: 'ph-receipt',
@@ -3688,6 +3728,16 @@ function renderInvoices() {
     }
     const leiste = document.getElementById('invoice-filter');
     if (leiste) leiste.hidden = false;
+
+    // Phase 57 (Issue #35): die Summe folgt dem Filter, nicht dem Bestand.
+    // Eine Zeile, die immer die Gesamtsumme nennt, waere schlimmer als
+    // keine -- sie sieht aus wie eine Antwort auf die gestellte Frage.
+    if (summeZeile) {
+        const summe = filtered.reduce((zwischen, r) => zwischen + Number(r.amount || 0), 0);
+        const wieviele = filtered.length === 1 ? '1 Rechnung' : `${filtered.length} Rechnungen`;
+        summeZeile.textContent = `${wieviele}, zusammen ${geldText(summe)}`;
+        summeZeile.hidden = false;
+    }
 
     // Group by property
     const groupedByProp = {};

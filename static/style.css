@@ -2301,12 +2301,34 @@ i.feld-hilfe:hover {
 /* Zeitleiste der Rechnungen (NK-144): chronologisch nach Ausstellungsdatum.
    Gruppenkarte je Monat, Eintragszeilen im Raster, Summe am Gruppenkopf. */
 .zeitleiste-jahr {
+    align-items: baseline;
+    display: flex;
+    gap: var(--space-4);
+    justify-content: space-between;
     margin: var(--space-6) 0 var(--space-4);
     font-size: 13px;
     font-weight: 600;
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--text-muted);
+}
+
+/* Phase 57 (Issue #35): die Summe des Jahres neben seiner Ueberschrift.
+   Ziffern mit fester Breite, damit die Jahre untereinander fluchten. */
+.zeitleiste-jahressumme {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: normal;
+    text-transform: none;
+    white-space: nowrap;
+}
+
+/* Phase 57: die Summe ueber der Rechnungsliste folgt dem Filter. */
+.rechnungen-summe {
+    color: var(--text-muted);
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+    margin: 0 0 var(--space-3);
 }
 
 .zeitleiste-jahr:first-child {

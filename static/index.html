@@ -18,7 +18,7 @@
     <link rel="stylesheet" href="/static/vendor/fonts/geist-mono/geist-mono.css">
     <link rel="stylesheet" href="/static/vendor/phosphor/regular/style.css">
     <link rel="stylesheet" href="/static/vendor/phosphor/fill/style.css">
-    <link rel="stylesheet" href="/static/style.css?v=14">
+    <link rel="stylesheet" href="/static/style.css?v=15">
     <!-- Einflug: kommt die Seite frisch von der Anmeldung
          (formular.js, höchstens 15 s alt), zieht style.css die Indigo-Fläche weg. -->
     <script>try { if (Date.now() - Number(sessionStorage.getItem('nk-einflug')) < 15000) document.documentElement.classList.add('einflug'); sessionStorage.removeItem('nk-einflug'); } catch (e) { /* ohne Speicher kein Einflug */ }</script>
@@ -283,7 +283,17 @@
                             <!-- populated dynamically in js -->
                         </select>
                     </div>
+                    <!-- Phase 57 (Issue #35): die Jahre kommen aus dem Bestand,
+                         nach dem Rechnungsdatum (D-57), nicht nach dem Tag der
+                         Erfassung. -->
+                    <div class="form-group">
+                        <select id="invoice-jahr-filter" onchange="renderInvoices()">
+                            <option value="">Alle Jahre</option>
+                            <!-- populated dynamically in js -->
+                        </select>
+                    </div>
                 </div>
+                <p class="rechnungen-summe" id="invoice-summe" hidden></p>
                 <div class="spalte" id="invoices-container">
                     <div class="skelett" role="status" aria-label="Wird geladen"><span></span><span></span><span></span></div>
                 </div>
@@ -2994,7 +3004,7 @@
     </div>
     <script src="/static/formular.js?v=2"></script>
     <script src="/static/umzug.js?v=1"></script>
-    <script src="/static/app.js?v=39"></script>
+    <script src="/static/app.js?v=40"></script>
 </body>
 
 </html>
