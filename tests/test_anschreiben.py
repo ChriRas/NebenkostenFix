@@ -121,16 +121,37 @@ def test_die_aufforderung_steht_nur_bei_nachzahlung():
         vorauszahlungen=Decimal('300.00'))
     nachzahlung = text_fuer(VORGABE, saldo=Decimal('900.00'), **kwargs)
     assert 'Bitte gleichen Sie den ausstehenden Betrag in Höhe von 900,00 € aus.' in nachzahlung
-    assert 'Nachzahlung' in nachzahlung
 
     guthaben = text_fuer(VORGABE, saldo=Decimal('-150.00'), **kwargs)
     assert 'Bitte gleichen' not in guthaben
-    assert 'Guthaben' in guthaben
-    assert '150,00 €' in guthaben
 
     ausgeglichen = text_fuer(VORGABE, saldo=Decimal('0.00'), **kwargs)
     assert 'Bitte gleichen' not in ausgeglichen
-    assert 'Ausgleich' in ausgeglichen
+
+
+def test_saldo_art_und_betrag_stehen_jedem_zur_verfuegung():
+    """Die Platzhalter bleiben -- auch wenn die Vorgabe sie nicht mehr setzt.
+
+    Phase 60: Der Vorgabetext nennt die drei Zahlen nicht mehr; der Block
+    „Ihr Anteil an den Nebenkosten" auf demselben Blatt tut es, einmal und
+    untereinander. Wer sie in einer **eigenen** Vorlage im Flusstext haben
+    will, kann das weiter -- und genau das wird hier geprüft, damit das
+    Streichen aus der Vorgabe die Platzhalter nicht stillschweigend
+    mitnimmt.
+    """
+    eigene = '{saldo_art}: {saldo_betrag} von {gesamtsumme} minus {vorauszahlungen}'
+    kwargs = dict(
+        mieter_name='Anna', wohnung_name='EG links', objekt_name='Haus',
+        zeitraum='2025', gesamtsumme=Decimal('1200.00'),
+        vorauszahlungen=Decimal('300.00'))
+
+    assert (text_fuer(eigene, saldo=Decimal('900.00'), **kwargs)
+            == 'Nachzahlung: 900,00 € von 1.200,00 € minus 300,00 €')
+    # Der Platzhalter traegt das Vorzeichen: ein Guthaben ist negativ.
+    assert text_fuer(eigene, saldo=Decimal('-150.00'), **kwargs).startswith(
+        'Guthaben: -150,00 €')
+    assert text_fuer(eigene, saldo=Decimal('0.00'), **kwargs).startswith(
+        'Ausgleich: 0,00 €')
 
 
 def test_die_vorgabe_benutzt_nur_bekannte_platzhalter():
@@ -267,19 +288,30 @@ def test_die_vorlage_spricht_auf_dem_deckblatt(unkomprimiert):
     blatt = _deckblatt(unkomprimiert, anschreiben)
 
     assert 'GutenTagAnnaMieterin,' in blatt and 'geehrte' not in blatt
-    assert 'DieAbrechnungergibtbeiGesamtkostenvon1200,00€' in blatt
+    assert 'fürdieWohnungEGlinksfürdenZeitraum01.01.2025bis31.12.2025' in blatt
     assert 'BittegleichenSiedenausstehendenBetraginHöhevon900,00€aus.' in blatt
-    # Der feste Gruß der Software ist verdrängt.
-    assert 'ImFolgenden' not in blatt
-    # NK-249: das Ergebnis steht einmal, nicht noch ein zweites Mal im Kasten.
-    assert blatt.count('IhreNachzahlung') == 1
+    # Phase 60: Die drei Zahlen stehen im Block, nicht noch einmal im Satz
+    # darüber. „Zweimal dasselbe hintereinander" (Durchsicht, 2026-10-21).
+    assert 'DieAbrechnungergibtbeiGesamtkosten' not in blatt
+    assert 'IhreNebenkosten:1.200,00€' in blatt
+    assert 'IhreVorauszahlungen:-300,00€' in blatt
+    # Der feste Gruß der Software ist verdrängt. Phase 60: Er lautet jetzt
+    # „Die Einzelheiten entnehmen Sie bitte den folgenden Seiten" (Wortlaut
+    # der Vorlage aus Issue #35); geprüft ist weiter, dass er schweigt,
+    # wenn der Vermieter selbst schreibt.
+    assert 'Einzelheiten' not in blatt
+    # NK-249: das Ergebnis steht einmal. Phase 60: Der Block der Vorlage
+    # beschriftet es „Nachzahlung:" (vorher „Ihre Nachzahlung"). Dass das
+    # Anschreiben des Vermieters das Wort in seinem eigenen Satz nochmal
+    # verwendet, ist seine Sache -- gezählt wird **unser** Block.
+    assert blatt.count('Nachzahlung:') == 1
 
 
 def test_ohne_vorlage_bleibt_es_beim_festen_gruß(unkomprimiert):
     """Kein Anschreiben hinterlegt: der Deckblatt-Gruß wie bisher."""
     blatt = _deckblatt(unkomprimiert)
     assert 'GutenTagAnnaMieterin,' in blatt and 'geehrte' not in blatt
-    assert 'ImFolgenden' in blatt
+    assert 'Einzelheiten' in blatt
 
 
 # --- Die Welt: vom Vermieter bis zum Blatt des Mieters ------------------------
@@ -352,7 +384,13 @@ def test_die_festsetzung_druckt_das_anschreiben_des_objekts(
 
 
 def test_ohne_eigene_vorlage_druckt_die_vorgabe(auth_client, app_ctx, unkomprimiert):
-    """Ohne PUT spricht der Vorgabetext -- mit Gesamtsumme, Vorauszahlung, Saldo."""
+    """Ohne PUT spricht der Vorgabetext -- und die Zahlen stehen einmal.
+
+    Phase 60: Vorher nannte der Vorgabetext Gesamtkosten, Vorauszahlungen
+    und Saldo im Flusstext, und der Block „Ihr Anteil an den Nebenkosten"
+    direkt darunter dieselben drei noch einmal. Jetzt steht jede Zahl
+    genau einmal -- im Block, beschriftet und untereinander.
+    """
     mieter_id, _, _ = _welt(app_ctx)
     report = _finalisiere(auth_client, mieter_id)
 
@@ -360,10 +398,13 @@ def test_ohne_eigene_vorlage_druckt_die_vorgabe(auth_client, app_ctx, unkomprimi
     blatt = _geklebt(pdf)
     assert 'GutenTagAnnaMieterin,' in blatt and 'geehrte' not in blatt
     assert 'WohnungEGlinks' in blatt
-    assert 'Gesamtkostenvon1200,00€' in blatt
-    assert 'Vorauszahlungenvon300,00€' in blatt
-    assert '900,00€(Nachzahlung)' in blatt
     assert 'BittegleichenSiedenausstehendenBetraginHöhevon900,00€aus.' in blatt
+
+    assert 'IhreNebenkosten:1.200,00€' in blatt
+    assert 'IhreVorauszahlungen:-300,00€' in blatt
+    assert 'Nachzahlung:900,00€' in blatt
+    assert 'Gesamtkostenvon1.200,00€' not in blatt
+    assert 'einenSaldoinHöhevon' not in blatt
 
 
 def test_die_korrektur_wickelt_dieselbe_vorlage(auth_client, app_ctx, unkomprimiert):

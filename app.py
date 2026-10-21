@@ -1162,6 +1162,21 @@ def _anschrift_aus(eingabe, feld):
     return anschriften.saeubern(roh) or None
 
 
+def _zustellanschrift(mieter, stichtag=None):
+    """Die Anschrift, an die eine Abrechnung für diesen Mieter geht.
+
+    Phase 58/59: Die Regel steht im Kern (``anschrift.fuer_zustellung``) --
+    nach dem Auszug die hinterlegte Zustelladresse, sonst die der Wohnung.
+    Hier wird nur der Stichtag gesetzt: der Tag, an dem das Blatt entsteht.
+    Die Frist des § 556 Abs. 3 BGB läuft über den Zugang, deshalb hängt sie
+    am Tag der Zustellung und nicht am Abrechnungszeitraum.
+    """
+    heute = stichtag or date.today()
+    return anschriften.fuer_zustellung(
+        mieter.anschrift, mieter.zustellanschrift,
+        ausgezogen=anschriften.ist_ausgezogen(mieter.move_out_date, heute))
+
+
 @app.route('/api/tenants', methods=['POST'])
 def create_tenant():
     eingabe = Eingabe.aus_request()
@@ -3195,6 +3210,7 @@ def finalize_bill():
         end_date=bill_data['end_date'],
         detailliert=is_detailed,
         tenant_anrede=mieter.anrede,
+        tenant_anschrift=_zustellanschrift(mieter),
     )
     
     # Kein eigenes try mehr (NK-030): der zentrale Handler rollt zurueck,
@@ -4308,6 +4324,7 @@ def korrigiere_billing_report(id):
             end_date=bill_data['end_date'],
             detailliert=detailliert,
             tenant_anrede=tenant.anrede,
+            tenant_anschrift=_zustellanschrift(tenant),
         )
         suffix = ("_Detailliert" if detailliert else "_Einfach") + zusatz
         dateiname = (f"Nebenkostenabrechnung_{tenant.name.replace(' ', '_')}"

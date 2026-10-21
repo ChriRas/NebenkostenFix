@@ -109,6 +109,31 @@ def dec(wert) -> Decimal:
     raise GeldFehler(f'Kein Betrag: {wert!r} ({type(wert).__name__}).')
 
 
+def text(betrag, *, waehrung: bool = True) -> str:
+    """Ein Betrag in deutscher Schreibweise: ``2.413,58 €``.
+
+    Der eine Ort, an dem ein Euro-Betrag zu Text wird -- im Brief, in der
+    Tabelle, im Rechenweg. Vorher gab es zwei: ``rechenkern.euro_text``
+    ohne Tausenderpunkt und ``pdf_stil.geld`` mit. Auf demselben Blatt
+    standen dadurch „4817,30 €" im Satz und „4.817,30 €" in der Spalte
+    darunter, und der Leser rechnet zwei Schriften gegeneinander.
+
+    Der Tausenderpunkt bleibt, nicht die alte Fassung: Auf einem Blatt
+    voller vierstelliger Beträge entscheidet er darüber, ob jemand 4.172,80
+    oder 417,28 liest.
+
+        >>> text(Decimal('2413.58'))
+        '2.413,58 €'
+        >>> text(Decimal('-1440'), waehrung=False)
+        '-1.440,00'
+        >>> text(Decimal('0.005'))
+        '0,01 €'
+    """
+    roh = f"{runde(betrag):,.2f}"
+    deutsch = roh.replace(',', '\x00').replace('.', ',').replace('\x00', '.')
+    return f"{deutsch} €" if waehrung else deutsch
+
+
 def runde(betrag) -> Decimal:
     """Kaufmaennisch auf Cent. Nur aufrufen, wo ein Betrag ausgewiesen wird."""
     return dec(betrag).quantize(CENT, rounding=ROUND_HALF_UP)

@@ -127,7 +127,17 @@ def _pdf(detailliert: bool, posten: list[dict]) -> bytes:
         end_date='2024-12-31',
         detailliert=detailliert,
     )
-    return erzeuger.generate(posten, Decimal('600.00'), Decimal('0.00'))
+    return erzeuger.generate(posten, _summe(posten), Decimal('0.00'))
+
+def _summe(posten: list[dict]):
+    """Die Gesamtsumme der Abrechnung: die Summe der Zeilenbetraege.
+
+    So rechnet der Kern (``total_amount += runde(tenant_cost)``), und seit
+    Phase 59 verlaesst sich das Uebersichtsblatt darauf: Es bricht ab, wenn
+    seine Summe von der uebergebenen abweicht. Eine erfundene Gesamtsumme
+    im Pruefstand wuerde genau diesen Waechter ausloesen.
+    """
+    return sum((p['tenant_cost'] for p in posten), start=Decimal('0.00'))
 
 
 @pytest.mark.parametrize('detailliert', [False, True], ids=['einfach', 'detailliert'])
@@ -272,14 +282,17 @@ def test_ein_wort_fuer_die_liste(unkomprimiert, detailliert):
 def test_die_ausfuehrliche_variante_weist_die_rechnungsbetraege(unkomprimiert):
     """Die Betragsspalten der frueheren Tabelle bleiben erhalten -- je Rechnung."""
     geklebt = _geklebt(_pdf(True, [_posten()]))
-    assert '1200,00' in geklebt
+    # Phase 60: mit Tausenderpunkt, wie jeder andere Betrag im Dokument
+    # (``pdf_stil.geld``). Vorher stand hier „1200,00" neben „1.200,00"
+    # auf demselben Blatt.
+    assert '1.200,00' in geklebt
     assert '600,00' in geklebt
 
 
 def test_die_einfache_variante_fuehrt_keine_rechnungsbetraege(unkomprimiert):
     """Der Verweis zeigt auf den Beleg; der Betrag steht an der Position."""
     text = _erzeuge(False, [_posten()])
-    assert '1200,00' not in text
+    assert '1.200,00' not in text and '1200,00' not in text
 
 
 def test_rechnungsdatum_angabe_gibt_iso_oder_nichts():
@@ -413,7 +426,13 @@ def test_ohne_anbieter_keine_anbieterzeile(unkomprimiert, detailliert):
     ohne['provider_name'] = None
     geklebt = _geklebt(_pdf(detailliert, [ohne]))
     assert 'Unbekannt' not in geklebt and 'Anbieter:' not in geklebt
-    assert 'Anbieter:StadtwerkeMusterstadt' in _geklebt(_pdf(detailliert, [_posten()]))
+    # Phase 60: Zeitraum, Anbieter und Beleg stehen als **eine** Zeile unter
+    # der Kostenart, mit Mittelpunkten getrennt und ohne Beschriftung -- der
+    # Name braucht keine. Geprüft bleibt die Sache: Mit Anbieter steht er da,
+    # ohne steht nichts da, auch kein leerer Trenner.
+    mit = _geklebt(_pdf(detailliert, [_posten()]))
+    assert 'StadtwerkeMusterstadt' in mit
+    assert '··' not in geklebt
 
 
 # --- Die Schlusssätze (NK-248) ---------------------------------------------
@@ -476,6 +495,40 @@ def test_allgemeinstrom_steht_bei_den_betriebskosten(unkomprimiert, detailliert)
     strom['category'] = 'Allgemeinstrom'
     gas['category'] = 'Heizkosten'
     zeilen = _zeilen(_pdf(detailliert, [strom, gas]))
-    gruppen = [z for z in zeilen if z in ('Energie', 'Betriebskosten')]
-    assert gruppen == ['Energie', 'Betriebskosten'], gruppen
-    assert zeilen.index('Allgemeinstrom') > zeilen.index('Betriebskosten')
+    # Phase 60: Die Rubrik steht in Versalien -- klein und leise, damit sie
+    # ordnet statt mit den Positionen zu konkurrieren. Geprueft ist hier die
+    # Zuordnung, nicht die Schreibweise.
+    gruppen = [z for z in zeilen if z in ('ENERGIE', 'BETRIEBSKOSTEN')]
+    assert gruppen == ['ENERGIE', 'BETRIEBSKOSTEN'], gruppen
+    # Phase 59: Die Uebersicht vor der Aufstellung nennt die Position auch,
+    # und zwar frueher. Geprueft ist hier die **Aufstellung**: Steht
+    # Allgemeinstrom unter der Gruppe „Betriebskosten"?
+    aufstellung = zeilen[zeilen.index('BETRIEBSKOSTEN'):]
+    assert 'Allgemeinstrom' in aufstellung
+
+
+@pytest.mark.parametrize('detailliert', [False, True], ids=['einfach', 'detailliert'])
+def test_der_zeitraum_der_rechnung_steht_nur_wenn_er_abweicht(
+        unkomprimiert, detailliert):
+    """Phase 60: derselbe Zeitraum siebenmal ist Rauschen, kein Nachweis.
+
+    R-DOC-01 Punkt 1 will den Zeitraum an der Zeile. Deckt er sich mit dem
+    Abrechnungszeitraum -- der Normalfall, und er steht in der Kopfzeile
+    des Blattes --, dann wiederholt die Zeile nur, was schon dasteht: bei
+    sieben Positionen siebenmal dieselbe Zeitspanne. Nach der zweiten
+    Sichtung: „viel zu viel Text".
+
+    Die Richtung, die weh tut, ist die zweite: Eine Rechnung, die **nicht**
+    den ganzen Zeitraum deckt, muss ihren Zeitraum nennen. Genau an der
+    hängt, ob der Mieter die Kürzung nachvollziehen kann.
+    """
+    deckt_sich = _geklebt(_pdf(detailliert, [_posten()]))
+    assert '01.01.2024-31.12.2024' not in deckt_sich, (
+        'Der Zeitraum der Rechnung wiederholt den Abrechnungszeitraum aus '
+        'der Kopfzeile.')
+
+    abweichend = _posten()
+    abweichend['period'] = '01.03.2024 - 30.11.2024'
+    assert '01.03.2024-30.11.2024' in _geklebt(_pdf(detailliert, [abweichend])), (
+        'Eine Rechnung über einen kürzeren Zeitraum nennt ihn nicht mehr. '
+        'Dann steht der gekürzte Betrag ohne seinen Grund da.')

@@ -21,7 +21,7 @@ from reportlab.lib.styles import ParagraphStyle
 from nebenkostenfix.validation import EingabeFehler
 # Farben wie das Deckblatt (Tokens aus style.css)
 from nebenkostenfix.pdf_cover_page import (
-    COLOR_ACCENT, COLOR_BORDER, COLOR_DARK, COLOR_LIGHT_BG, COLOR_MUTED,
+    COLOR_BORDER, COLOR_DARK, COLOR_LIGHT_BG, COLOR_MUTED,
 )
 
 

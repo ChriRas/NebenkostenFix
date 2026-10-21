@@ -855,8 +855,12 @@ def test_pdfs_tragen_die_farben_der_app():
     # PDFs gleichen der App: jede Farbe im PDF ist ein Token aus
     # style.css, Tabellen ohne Vollgitter, Abschnittskopf Indigo.
     # Auch der GiroCode-Kasten und der Fuß des Hilfe-PDFs.
+    # Phase 60: `pdf_stil.py` ist dazugekommen -- dort stehen seit dem
+    # Umbau **alle** Farben des Dokuments, und genau dort muss die Regel
+    # greifen. `pdf_uebersicht.py` ebenso.
     pdf = {name: (WURZEL / 'nebenkostenfix' / name).read_text(encoding='utf-8')
            for name in ('pdf_generator.py', 'pdf_cover_page.py',
+                        'pdf_stil.py', 'pdf_uebersicht.py',
                         'girocode_generator.py', 'hilfe.py')}
     app_farben = {h.lower() for h in re.findall(r'#[0-9a-fA-F]{6}\b', STIL)}
     for name, text in pdf.items():
@@ -865,8 +869,38 @@ def test_pdfs_tragen_die_farben_der_app():
         assert not fremd, f'{name}: Farben ohne App-Token {sorted(fremd)}'
         assert not re.search(r"colors\.(?:grey|gray|black|red)\b|'red'", text), name
         assert "'GRID'" not in text, f'{name}: Vollgitter'
-    kopf = pdf['pdf_generator.py'].split('# Section Header', 1)[1][:400]
-    assert "'BACKGROUND', (0, row_idx), (-1, row_idx), COLOR_ACCENT)" in kopf
+    # Phase 60: Die Rubrik im Detailteil hatte einen violetten Vollbalken.
+    # Der war die zweite Designsprache im selben Dokument (bemerkt nach
+    # Sichtung der Seiten). Jetzt traegt sie eine Haarlinie in der Farbe
+    # des Stils -- und die Absicht des Tests ist nicht mehr „der Balken ist
+    # indigo", sondern **„alle drei Teile holen ihre Farben aus einer
+    # Quelle"**.
+    for name in ('pdf_generator.py', 'pdf_cover_page.py', 'pdf_uebersicht.py'):
+        assert 'pdf_stil' in pdf[name], f'{name}: eigener Farbvorrat'
+    assert "self.stil.linie" in pdf['pdf_generator.py']
+
+
+def test_phase60_jede_tabelle_passt_in_den_satzspiegel():
+    """Eine zu breite Tabelle rutscht aus dem Satz -- und zwar nach links.
+
+    reportlab beschneidet eine zu breite Tabelle nicht, es **zentriert** sie
+    im Rahmen. Eine Tabelle, die 10 pt zu breit ist, steht deshalb 5 pt
+    weiter links als jede Überschrift darüber. Genau das war zu sehen
+    („der Strich da unten zu weit links"), und es ist von Hand nicht zu
+    bemerken: Es sieht aus wie eine schiefe Überschrift.
+
+    Geprüft sind die festen Spaltensätze; die gerechneten (aus SATZBREITE
+    oder einer übergebenen Breite) können den Satz nicht verlassen.
+    """
+    from nebenkostenfix.pdf_stil import SATZBREITE
+
+    for name in ('pdf_generator.py', 'pdf_cover_page.py', 'pdf_uebersicht.py'):
+        text = (WURZEL / 'nebenkostenfix' / name).read_text(encoding='utf-8')
+        for satz in re.findall(r'colWidths=\[([\d.,\s]+)\]', text):
+            breiten = [float(w) for w in satz.replace(' ', '').split(',') if w]
+            assert sum(breiten) <= SATZBREITE, (
+                f'{name}: Spalten {breiten} ergeben {sum(breiten)} pt, '
+                f'der Satzspiegel ist {SATZBREITE} pt breit.')
 
 
 def test_geoeffnete_auswahllisten_im_design():

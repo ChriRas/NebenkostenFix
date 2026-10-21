@@ -70,9 +70,15 @@ def vorgabe(art: str | None = None) -> str:
         '{anrede}\n\n'
         'anbei erhalten Sie die Nebenkostenabrechnung für die Wohnung '
         '{wohnung_name} für den Zeitraum {zeitraum}.\n\n'
-        'Die Abrechnung ergibt bei Gesamtkosten von {gesamtsumme} und '
-        'Vorauszahlungen von {vorauszahlungen} einen Saldo in Höhe von '
-        '{saldo_betrag} ({saldo_art}).\n\n'
+        # Phase 60 (Durchsicht am 2026-10-21): Der Satz „Die Abrechnung ergibt
+        # bei Gesamtkosten von … einen Saldo in Höhe von …" ist raus. Seit
+        # dem Umbau steht direkt darunter der Block „Ihr Anteil an den
+        # Nebenkosten" mit genau diesen drei Zahlen -- untereinander,
+        # beschriftet, nachrechenbar. Zweimal dasselbe hintereinander macht
+        # einen Brief nicht genauer, nur länger.
+        #
+        # Die vier Platzhalter bleiben verfügbar: Wer sie in einer eigenen
+        # Vorlage braucht, setzt sie selbst (so wie {mieter_anschrift}).
         '{aufforderung}\n\n'
         'Sie können Einwendungen gegen diese Abrechnung innerhalb von zwölf '
         'Monaten nach ihrem Zugang geltend machen. ' + saetze(art)['belege'] + '\n\n'
@@ -211,6 +217,44 @@ def _anpassung(v: dict | None) -> str:
     ab = date.fromisoformat(v['ab'])
     return (f"Ab dem {ab:%d.%m.%Y} beträgt Ihre monatliche Vorauszahlung "
             f"{euro_text(Decimal(v['neu']))} (bisher {euro_text(Decimal(v['bisher']))}).")
+
+
+#: Woran ein Gruß zu erkennen ist. Klein gehalten und wörtlich: Hier wird
+#: nicht geraten, sondern nachgesehen.
+GRUSSFORMELN = ('Mit freundlichen Grüßen', 'Mit freundlichem Gruß',
+                'Freundliche Grüße', 'Mit besten Grüßen')
+
+
+def teile(text: str) -> tuple[str, str]:
+    """Trennt den Brief in Körper und Gruß.
+
+    **Wofür:** Das Blatt setzt zwischen Körper und Gruß einen Block mit
+    dem Anteil des Mieters -- so steht es in der Vorlage aus Issue #35.
+    Der Gruß steht aber im Anschreiben des Vermieters (NK-064), und ein
+    Block *hinter* dem Gruß stünde hinter der Unterschrift.
+
+    Gefunden wird der **letzte** Absatz, der mit einer Grußformel beginnt;
+    er und alles danach sind der Gruß. Findet sich keine, ist alles Körper
+    und der Block kommt dahinter -- lieber ein Block am Ende als ein Gruß
+    mitten im Satz.
+
+        >>> brief = chr(10).join(['Hallo,', '', 'Text.', '',
+        ...                           'Mit freundlichen Grüßen', 'Erika'])
+        >>> koerper, gruss = teile(brief)
+        >>> koerper.splitlines()
+        ['Hallo,', '', 'Text.']
+        >>> gruss.splitlines()
+        ['Mit freundlichen Grüßen', 'Erika']
+        >>> teile('Hallo, nur Text.')
+        ('Hallo, nur Text.', '')
+    """
+    stuecke = text.split('\n\n')
+    for nummer in range(len(stuecke) - 1, -1, -1):
+        anfang = stuecke[nummer].lstrip()
+        if any(anfang.startswith(formel) for formel in GRUSSFORMELN):
+            return ('\n\n'.join(stuecke[:nummer]).strip(),
+                    '\n\n'.join(stuecke[nummer:]).strip())
+    return text.strip(), ''
 
 
 def absaetze(text: str) -> list[str]:

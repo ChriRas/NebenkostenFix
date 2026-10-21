@@ -10,18 +10,45 @@ from datetime import datetime
 from decimal import Decimal
 from nebenkostenfix import zeit
 from nebenkostenfix.pdf_cover_page import (
-    build_cover_page_elements, COLOR_ACCENT, COLOR_BORDER, COLOR_DARK, COLOR_HEAD_BG,
-    COLOR_LIGHT_BG, COLOR_MUTED,
+    build_cover_page_elements, COLOR_BORDER, COLOR_MUTED,
 )
 from nebenkostenfix.anschreiben import saetze as anschreiben_saetze
 from nebenkostenfix.girocode_generator import (
     _format_iban_display, build_girocode_elements, vermieter_art, vermieter_ausweis)
 from nebenkostenfix.geld import NULL
 from nebenkostenfix import betrkv
+from nebenkostenfix import pdf_stil
+from nebenkostenfix import pdf_uebersicht
 from nebenkostenfix.zeitraum import HINWEIS_TAGESKONVENTION
 from nebenkostenfix import marke
 from nebenkostenfix.abrechnung_version import SOFTWARE_VERSION, REGEL_VERSION
 
+
+
+def vermieter_anschrift() -> str:
+    """Die eigene Anschrift des Vermieters fuer den Briefkopf (Phase 58).
+
+    Wie ``vermieter_ausweis`` fuer Name und IBAN: Der Generator holt sie
+    selbst, damit jeder Aufrufer sie bekommt, ohne sie durchzureichen.
+    Ohne Anwendungskontext (Werkzeug, Test) gibt es keine Datenbank, und
+    dann bleibt der Briefkopf leer -- das ist richtig so, erfunden wird
+    hier nichts.
+
+    Anders als Name und IBAN hat die Anschrift keinen Rueckfall aus der
+    Umgebung: Es gab nie ein VERMIETER_ANSCHRIFT.
+    """
+    try:
+        from nebenkostenfix.models import Vermieterdaten
+        zeile = Vermieterdaten.einziger()
+    except RuntimeError:  # kein Anwendungskontext
+        return ''
+    return (zeile.anschrift or '').strip() if zeile else ''
+
+
+#: Das Zeichen vor einem Rechenschritt. Vorher stand hier „↳" -- das
+#: gibt es in WinAnsi nicht, und auf dem Blatt erschien ein schwarzer
+#: Kasten. Der Gedankenstrich sagt dasselbe und ist in jeder Schrift da.
+RECHENWEG_ZEICHEN = '– '
 
 
 def stichtag_hinweis(detail: dict) -> str:
@@ -114,9 +141,23 @@ class PDFGenerator:
     ``abrechnung_version`` -- dieselben, die NK-061 mit der Version der
     finalisierten Abrechnung abspeichert."""
     def __init__(self, property_name, apartment_name, tenant_name, start_date, end_date,
-                 detailliert=False, tenant_anrede=None):
+                 detailliert=False, tenant_anrede=None, tenant_anschrift=None,
+):
         self.detailliert = detailliert
+        # Phase 60: ein Erscheinungsbild fuer das ganze Dokument. Welches,
+        # entscheidet `pdf_stil`; hier wird es nur durchgereicht, damit
+        # Deckblatt, Uebersicht und Detailteil dasselbe benutzen.
+        self.stil = pdf_stil.STIL
+        #: Die leise Farbe als Markup für die Angabenzeilen in den Tabellen.
+        #: Abgeschrieben als „#5B5D72" wäre sie eine zweite Quelle -- und
+        #: der Wächter in `test_design_einheit` prüft genau das nicht nach.
+        self.leise_markup = f'#{self.stil.leise.hexval()[2:]}'
         self.tenant_anrede = tenant_anrede  # NK-264
+        # Phase 58/59: die Anschrift, an die dieses Blatt geht. Welche der
+        # beiden Anschriften des Mietverhaeltnisses das ist, hat die Route
+        # mit `anschrift.fuer_zustellung` entschieden -- hier kommt nur das
+        # Ergebnis an, denn ein Satzer soll keine Fristen auslegen.
+        self.tenant_anschrift = tenant_anschrift
         self.property_name = property_name
         self.apartment_name = apartment_name
         self.tenant_name = tenant_name
@@ -138,7 +179,12 @@ class PDFGenerator:
         self.styles.add(ParagraphStyle(name='GrandTotalCell', fontName='Helvetica-Bold', fontSize=12, leading=16))
         self.styles.add(ParagraphStyle(name='GrandTotalCellRight', fontName='Helvetica-Bold', fontSize=12, leading=16, alignment=2))
         self.styles.add(ParagraphStyle(name='Fussnote', fontName='Helvetica', fontSize=8, leading=11, textColor=COLOR_MUTED))
-        self.styles.add(ParagraphStyle(name='MeterHeader', fontName='Helvetica-Bold', fontSize=12, leading=16, textColor=colors.white))
+        # Phase 60: Der Kopf des Zählerkastens stand als letzter noch auf
+        # einem violetten Vollbalken -- die zweite Designsprache, die
+        # sonst überall verschwunden ist. Sie überlebte hier, weil der
+        # Nachweisteil nur bei Zählern entsteht und in keinem Muster
+        # vorkam. Jetzt: dunkle Schrift auf der Kastenfläche.
+        self.styles.add(ParagraphStyle(name='MeterHeader', fontName='Helvetica-Bold', fontSize=11, leading=15, textColor=self.stil.text))
         self.styles.add(ParagraphStyle(name='MeterText', fontName='Helvetica', fontSize=9, leading=14))
         self.styles.add(ParagraphStyle(name='MeterTextBold', fontName='Helvetica-Bold', fontSize=9, leading=14))
         self.styles.add(ParagraphStyle(name='MeterTextRight', fontName='Helvetica-Bold', fontSize=9, leading=14, alignment=2))
@@ -218,58 +264,87 @@ class PDFGenerator:
         if not zeilen:
             return []
 
+        # Phase 60: der Kopf traegt die Schrift des Stils -- auf dunkler
+        # Flaeche waere dunkler Text unlesbar.
+        beleg_saetze = pdf_stil.stile(self.stil)
+        # Phase 60 (Durchsicht am 2026-10-21): Anbieter und Beleg stehen als
+        # leise Zeile **unter** der Position, nicht in eigenen Spalten. Mit
+        # sechs Spalten blieben fuer den Dateinamen 60 pt -- „wasser_2024
+        # .pdf, Seiten 3" brach dort in vier Zeilen, und jede Zeile der
+        # Liste wurde so hoch wie ein Absatz. Dieselbe Form wie in der
+        # Aufstellung: Was die Position ausweist, steht bei ihr.
         kopf = [
-            Paragraph("<b>Position</b>", self.styles['TableCell']),
-            Paragraph("<b>Rechnung</b>", self.styles['TableCell']),
-            Paragraph("<b>Anbieter</b>", self.styles['TableCell']),
-            Paragraph("<b>Beleg</b>", self.styles['TableCell']),
+            Paragraph("Position", beleg_saetze['Kopf']),
+            Paragraph("Rechnung", beleg_saetze['Kopf']),
         ]
         if mit_betraegen:
             kopf += [
-                Paragraph("<b>Rechnungsbetrag (€)</b>", self.styles['TableCellRight']),
-                Paragraph("<b>Zeitanteilig (€)</b>", self.styles['TableCellRight']),
+                Paragraph("Rechnungsbetrag (€)", beleg_saetze['KopfRechts']),
+                Paragraph("Zeitanteilig (€)", beleg_saetze['KopfRechts']),
             ]
         data = [kopf]
         for z in zeilen:
             rechnung = f"Nr. {z['nummer']}"
             if z['datum']:
                 rechnung += f"<br/>vom {z['datum']}"
+            herkunft = ' · '.join(
+                teil for teil in (z['anbieter'], z['dokument']) if teil)
             row = [
-                Paragraph(z['position'], self.styles['TableCell']),
+                Paragraph(
+                    f"<b>{escape(z['position'])}</b>"
+                    + (f"<br/><font size=7.5 color='{self.leise_markup}'>"
+                       f"{escape(herkunft)}</font>" if herkunft else ''),
+                    self.styles['TableCell']),
                 Paragraph(rechnung, self.styles['TableCell']),
-                Paragraph(z['anbieter'], self.styles['TableCell']),
-                Paragraph(z['dokument'] or '—', self.styles['TableCell']),
             ]
             if mit_betraegen:
                 if z['zeitanteilig'] is None:
                     zeitanteilig = 'nach Zähler'
                 else:
-                    zeitanteilig = f"{z['zeitanteilig']:.2f}".replace('.', ',')
+                    # Phase 60: derselbe Tausenderpunkt wie überall
+                    # sonst. Ohne ihn stand „10000,00" neben „10.000,00".
+                    zeitanteilig = pdf_stil.geld(z['zeitanteilig'],
+                                                 waehrung=False)
                 if z['zeitanteilig'] is not None and z['tage'] and z['tage'][0] and z['tage'][1] \
                         and z['tage'][0] < z['tage'][1]:
                     zeitanteilig += f" ({z['tage'][0]}/{z['tage'][1]} Tage)"
                 row += [
                     Paragraph(
-                        f"{z['rechnungsbetrag']:.2f}".replace('.', ','),
+                        pdf_stil.geld(z['rechnungsbetrag'], waehrung=False),
                         self.styles['TableCellRight']),
                     Paragraph(zeitanteilig, self.styles['TableCellRight']),
                 ]
             data.append(row)
 
+        # Phase 60: dieselbe Breite und dieselbe Sprache wie die Aufstellung.
+        # Vorher war die Belegliste schmaler als alles andere und mittig --
+        # auf dem Blatt sah sie aus wie ein Zitat aus einem anderen Papier.
         # NK-250: die Kopfwörter der Betragsspalten passen ungebrochen hinein.
-        breiten = [105, 78, 74, 73, 89, 62] if mit_betraegen else [110, 90, 80, 100]
+        # NK-250: die Kopfwoerter muessen ungebrochen hineinpassen. Phase 60
+        # hat das Zellenpolster von 6 auf 8 pt gehoben -- damit verliert
+        # jede Spalte 4 pt nutzbare Breite, und „Rechnungsbetrag" brach in
+        # „Rechnungsbetra". Die Geldspalten sind deshalb breiter.
+        # Gemessen: „Anbieter · Beleg" braucht bei 7,5 pt bis zu 197 pt,
+        # „Rechnungsbetrag" als Kopfwort 89 (NK-250: es darf nicht brechen),
+        # „Nr. AB-2024-115 vom 28.01.2025" in einer Zeile 176.
+        # Echte Rechnungsnummern sind laenger als die der Muster
+        # („5.0100.009177.3"): die Spalte bekommt 10 pt mehr, die
+        # Angabenzeile unter der Position bricht ohnehin um.
+        breiten = ([190, 96, 90, 94] if mit_betraegen else [280, 190])
+        saetze = pdf_stil.stile(self.stil)
         tabelle = Table(data, colWidths=breiten, repeatRows=1)
-        tabelle.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), COLOR_HEAD_BG),
-            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('LINEBELOW', (0, 0), (-1, -1), 0.5, COLOR_BORDER),
-            ('TOPPADDING', (0, 0), (-1, -1), 6),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
-        ]))
+        befehle = pdf_stil.tabellenstil(self.stil, len(data))
+        befehle.append(('LINEBELOW', (0, 1), (-1, -1), 0.4, self.stil.linie))
+        tabelle.setStyle(TableStyle(befehle))
+        # Eine Ueberschrift allein am Seitenfuss ist ein verwaister Kopf:
+        # Sie bleibt bei den ersten Zeilen ihrer Liste.
         return [
-            Spacer(1, 20),
-            Paragraph("Belegliste", self.styles['TitleBold']),
-            tabelle,
+            Spacer(1, pdf_stil.XL),
+            KeepTogether([
+                Paragraph("Belegliste", saetze['Titel']),
+                Spacer(1, pdf_stil.M),
+                tabelle,
+            ]),
         ]
 
     def _deutsch(self, wert, stellen=2):
@@ -448,10 +523,11 @@ class PDFGenerator:
             daten.append([Paragraph("Summe", self.styles['TotalCell']),
                           Paragraph(f"{self._deutsch(gruppe['summe'])} €",
                                     self.styles['TotalCellRight'])])
-            tabelle = Table(daten, colWidths=[380, 100])
+            # 480 pt ragten 5 pt aus dem Satzspiegel (siehe SATZBREITE).
+            tabelle = Table(daten, colWidths=[370, 100])
             tabelle.setStyle(TableStyle([
-                ('LINEBELOW', (0, 0), (-1, 0), 0.5, COLOR_BORDER),
-                ('LINEABOVE', (0, -1), (-1, -1), 0.5, COLOR_DARK),
+                ('LINEBELOW', (0, 0), (-1, 0), 0.5, self.stil.linie),
+                ('LINEABOVE', (0, -1), (-1, -1), 0.5, self.stil.text),
                 ('VALIGN', (0, 0), (-1, -1), 'TOP'),
             ]))
             elemente += [tabelle, Spacer(1, 8)]
@@ -472,6 +548,7 @@ class PDFGenerator:
         balance = total_amount - prepaid_amount
         # NK-210: der Name aus den Einstellungen statt der Rolle
         vermieter = vermieter_ausweis()[0]
+        vermieter_adresse = vermieter_anschrift()
         cover_elements = build_cover_page_elements(
             property_name=self.property_name,
             apartment_name=self.apartment_name,
@@ -486,33 +563,55 @@ class PDFGenerator:
             # Deckblatt statt des festen Grußes; ohne Vorlage wie gehabt.
             anschreiben=anschreiben,
             vermieter_name=vermieter,
+            # Phase 59: der Briefkopf des Musters -- Empfaenger mit
+            # Anschrift, Absender mit Anschrift.
+            mieter_anschrift=self.tenant_anschrift,
+            vermieter_anschrift=vermieter_adresse,
         )
         elements.extend(cover_elements)
+
+        # Phase 59 (Issue #35, Punkt 2): das Uebersichtsblatt -- eine Zeile
+        # je Position, drei Summen. Es kommt **vor** den Detailteil und
+        # nimmt ihm nichts weg: Der Melder wollte ausdruecklich beides.
+        # `build_uebersicht_elements` bricht ab, wenn seine Summe von
+        # `total_amount` abweicht; zwei Blaetter, die sich widersprechen,
+        # sind schlimmer als ein Blatt weniger.
+        elements.extend(pdf_uebersicht.build_uebersicht_elements(
+            line_items,
+            gesamtsumme=total_amount,
+            vorauszahlungen=prepaid_amount,
+            property_name=self.property_name,
+            apartment_name=self.apartment_name,
+            tenant_name=self.tenant_name,
+            start_date=self.start_date,
+            end_date=self.end_date,
+            vermieter_name=vermieter,
+            vermieter_anschrift=vermieter_adresse,
+            mieter_anschrift=self.tenant_anschrift,
+        ))
         
         start_fmt = datetime.fromisoformat(self.start_date).strftime('%d.%m.%Y')
         end_fmt = datetime.fromisoformat(self.end_date).strftime('%d.%m.%Y')
         creation_date = zeit.als_ortszeit(zeit.jetzt_utc(), '%d.%m.%Y')
         
-        header_data = [
-            [Paragraph(f"<b>{self.property_name}</b><br/>{escape(vermieter) or '(Hausverwaltung / Vermieter)'}", self.styles['HeaderNormal']),
-             Paragraph(f"Datum: {creation_date}", self.styles['HeaderRight'])]
-        ]
+        # Phase 60: **kein zweiter Briefkopf.** Objekt, Vermieter und Datum
+        # stehen auf Blatt 1 und im Kopf des Uebersichtsblatts; hier noch
+        # einmal gesetzt, lasen sie sich wie der Anfang eines neuen
+        # Dokuments. Das Blatt traegt seinen Titel, sonst nichts.
         
-        header_table = Table(header_data, colWidths=[300, 180])
-        header_table.setStyle(TableStyle([
-            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 20),
-        ]))
-        elements.append(header_table)
-        
-        elements.append(Paragraph("An:", self.styles['HeaderNormal']))
-        elements.append(Paragraph(f"<b>{self.tenant_name}</b>", self.styles['HeaderNormal']))
-        elements.append(Paragraph(f"Wohnung: {self.apartment_name}", self.styles['HeaderNormal']))
-        elements.append(Spacer(1, 40))
-        
-        title_text = f"Nebenkostenabrechnung für den Zeitraum {start_fmt} bis {end_fmt}"
-        elements.append(Paragraph(title_text, self.styles['TitleBold']))
-        elements.append(Spacer(1, 20))
+        # Phase 60: derselbe Titelblock wie auf Blatt 1 und 2 -- Titel,
+        # darunter eng die Angaben. Vorher stand hier ein zweiter Briefkopf
+        # („An: …") mit 40 pt Luft, und das Blatt sah aus wie ein eigenes
+        # Dokument.
+        saetze = pdf_stil.stile(self.stil)
+        elements.append(Paragraph('Aufstellung der Kosten', saetze['Titel']))
+        elements.append(Spacer(1, pdf_stil.M))
+        elements.append(Paragraph(
+            f"{escape(self.tenant_name)} · {escape(self.apartment_name)}",
+            saetze['Titelzeile']))
+        elements.append(Paragraph(
+            f"Abrechnungszeitraum: {start_fmt} bis {end_fmt}", saetze['Titelzeile']))
+        elements.append(Spacer(1, pdf_stil.XXL))
         
         # Categorization logic
         categories = {
@@ -533,55 +632,95 @@ class PDFGenerator:
             categories[rubrik]["items"].append(item)
             categories[rubrik]["total"] += item['tenant_cost']
 
+        # Phase 60 (nach der zweiten Sichtung): **drei Spalten statt
+        # vier.** Vorher standen Zeitraum, Anbieter und Rechnungsnummer als
+        # drei eigene Zeilen in einer eigenen Spalte -- bei sieben Posten
+        # waren das einundzwanzig Zeilen Kleingedrucktes, die die Tabelle
+        # erschlugen. Jetzt stehen sie als **eine** leise Zeile unter ihrer
+        # Kostenart, dort, wo sie hingehoeren. Die Angaben sind dieselben.
         data = [
-            [Paragraph("<b>Kostenart</b>", self.styles['TableCell']), 
-             Paragraph("<b>Abrechnungszeitraum / Anbieter</b>", self.styles['TableCell']), 
-             Paragraph("<b>Umlage-Details</b>", self.styles['TableCell']), 
-             Paragraph("<b>Betrag (€)</b>", self.styles['TableCellRight'])]
+            [Paragraph("Kostenart", saetze['Kopf']),
+             Paragraph("Umlage und Rechenweg", saetze['Kopf']),
+             Paragraph("Betrag (€)", saetze['KopfRechts'])]
         ]
-        
+
+        # Phase 60: derselbe Tabellenkopf wie im Uebersichtsblatt. Das Zebra
+        # macht hier keinen Sinn -- eine Position belegt mehrere Zeilen
+        # (Rechenweg, Teilposten), und eine Toenung je Zeile zerschnitte sie.
+        # TOP statt MIDDLE: Bei einer Zeile mit Rechenweg schwebte der
+        # Betrag vorher in der Mitte eines hohen Felds, weit weg von der
+        # Kostenart, zu der er gehoert. Oben ausgerichtet steht alles auf
+        # derselben ersten Zeile.
         table_style = [
-            ('BACKGROUND', (0, 0), (-1, 0), COLOR_HEAD_BG),
-            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 8),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 8),
             ('TOPPADDING', (0, 0), (-1, 0), 8),
             ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
-            ('LINEBELOW', (0, 0), (-1, 0), 1, COLOR_BORDER),
+            ('LINEBELOW', (0, 0), (-1, 0), 0.8, self.stil.linie),
         ]
+        if self.stil.kopf_flaeche is not None:
+            table_style.append(
+                ('BACKGROUND', (0, 0), (-1, 0), self.stil.kopf_flaeche))
+        else:
+            table_style.append(('LINEABOVE', (0, 0), (-1, 0), 0.8, self.stil.linie))
         
         row_idx = 1
         anteilig_ausgewiesen = False
+        # Derselbe Wortlaut, den der Kern den Positionen mitgibt
+        # (``rechenkern``: „%d.%m.%Y - %d.%m.%Y"). Nur so greift der
+        # Vergleich unten, der den wiederholten Zeitraum weglaesst.
+        eigener_zeitraum = (
+            f"{datetime.fromisoformat(self.start_date).strftime('%d.%m.%Y')}"
+            f" - {datetime.fromisoformat(self.end_date).strftime('%d.%m.%Y')}")
         
         for section_name, section_data in categories.items():
             if not section_data["items"]:
                 continue
                 
-            # Section Header
-            data.append([Paragraph(f"{section_name}", self.styles['SectionHeader']), '', '', ''])
+            # Rubrik: Phase 60 -- eine fette Zeile mit Haarlinie statt des
+            # violetten Vollbalkens. Der Balken war die zweite Designsprache
+            # im selben Dokument; eine Ueberschrift muss nicht schreien, um
+            # eine Ueberschrift zu sein.
+            data.append([Paragraph(escape(section_name.upper()),
+                                   saetze['Rubrik']), '', ''])
             table_style.extend([
                 ('SPAN', (0, row_idx), (-1, row_idx)),
-                ('BACKGROUND', (0, row_idx), (-1, row_idx), COLOR_ACCENT),
-                ('TOPPADDING', (0, row_idx), (-1, row_idx), 6),
-                ('BOTTOMPADDING', (0, row_idx), (-1, row_idx), 6),
+                # Die Luft gehoert **ueber** die Rubrik: Dort trennt sie die
+                # vorige Gruppe ab. Darunter bleibt sie knapp, damit die
+                # Rubrik zu ihren Positionen gehoert und nicht dazwischen
+                # schwebt.
+                ('TOPPADDING', (0, row_idx), (-1, row_idx), 16),
+                ('BOTTOMPADDING', (0, row_idx), (-1, row_idx), 5),
+                ('LINEBELOW', (0, row_idx), (-1, row_idx), 0.8, self.stil.linie),
             ])
             row_idx += 1
             
             stripe_counter = 0
             
             for item in section_data["items"]:
-                period_str = item['period']
-                # NK-246: ohne Anbieter keine Anbieterzeile.
+                # Zeitraum, Anbieter und Beleg in einer Zeile, mit
+                # Mittelpunkten getrennt. NK-246: ohne Anbieter keine
+                # Anbieterangabe. R-DOC-01 Punkt 8: der Belegverweis steht
+                # weiter an der Position -- fuer jede Zeile aus genau einer
+                # Rechnung; mehrere (Heizung, D-47) zaehlt die Belegliste.
+                angaben = []
+                # Der Zeitraum der Rechnung steht nur, wenn er **abweicht**.
+                # Deckt er sich mit dem Abrechnungszeitraum, wiederholt er
+                # bloss die Kopfzeile des Blattes -- siebenmal dieselbe
+                # Zeitspanne, und die Zeile, die wirklich abweicht, geht
+                # darin unter. Genau die ist die rechtlich interessante.
+                if item['period'] != eigener_zeitraum:
+                    angaben.append(escape(item['period']))
                 if item.get('provider_name'):
-                    period_str += f"<br/>Anbieter: {item['provider_name']}"
-                # R-DOC-01 Punkt 8: der Belegverweis direkt an der Position
-                # -- fuer jede Zeile, die aus genau einer Rechnung stammt.
-                # Mehrere Rechnungen (Heizung, D-47) zaehlen ueber die
-                # Belegliste am Ende des Dokuments.
+                    angaben.append(escape(item['provider_name']))
                 if item.get('invoice_number'):
                     verweis = f"Rechnung Nr. {item['invoice_number']}"
                     datum = self._format_datum(item.get('rechnungsdatum'))
                     if datum:
                         verweis += f" vom {datum}"
-                    period_str += f"<br/>{verweis}"
+                    angaben.append(escape(verweis))
+                angabenzeile = ' · '.join(angaben)
                 
                 details = item['description']
                 # R-DOC-01 Punkt 6/7: der Rechenweg der Zeile als Satz.
@@ -603,23 +742,44 @@ class PDFGenerator:
                     s for s in item.get('sub_items') or []
                     if not (schritte and s['description'] == item['description'])
                 ]
-                has_sub = bool(folgeposten) or bool(schritte)
+                # Phase 60: Der Rechenweg steht **in derselben Zelle** wie die
+                # Umlage, nicht als eigene Tabellenzeile. Als eigene Zeile
+                # rutschte er unter die ganze Position und stand dann weit
+                # unter der Zahl, die er erklaert (Befund: „die kleinen Sachen
+                # weiter unten"). Teilposten mit eigenem Betrag bleiben
+                # eigene Zeilen -- ihre Zahl gehoert in die Betragsspalte.
+                has_sub = bool(folgeposten)
                 
-                bg_color = colors.white if stripe_counter % 2 == 0 else COLOR_LIGHT_BG
+                # Phase 60: die Tönung kommt aus dem Stil. Im gewählten
+                # gibt es keine -- was die Positionen trennt, ist die
+                # Haarlinie darunter, wie auf dem Übersichtsblatt.
+                bg_color = (colors.white
+                            if self.stil.zebra is None or stripe_counter % 2 == 0
+                            else self.stil.zebra)
                 
                 # Main row
-                main_details = "" if has_sub else details
+                # Eine Stimme je Zelle: Wo ein Rechenweg steht, sagt er die
+                # Umlage mit Zahlen („852,00 € nach Wohnfläche 62 von 186 m²
+                # = 284,00 €"). Die Beschreibung daneben saegte denselben
+                # Satz ohne Zahlen noch einmal.
+                umlage = list(schritte) if schritte else (
+                    [details] if details and not has_sub else [])
+                main_details = '<br/>'.join(escape(z) for z in umlage)
                 data.append([
-                    Paragraph(item['category'], self.styles['TableCell']),
-                    Paragraph(period_str, self.styles['TableCell']),
+                    Paragraph(
+                        f"<b>{escape(item['category'])}</b><br/>"
+                        f"<font size=7.5 color='{self.leise_markup}'>"
+                        f"{angabenzeile}</font>",
+                        self.styles['TableCell']),
                     Paragraph(main_details, self.styles['TableCell']),
-                    Paragraph(f"{item['tenant_cost']:.2f}".replace('.', ','), self.styles['TableCellRight'])
+                    Paragraph(pdf_stil.geld(item['tenant_cost'], waehrung=False),
+                              self.styles['TableCellRight'])
                 ])
                 
                 table_style.extend([
                     ('BACKGROUND', (0, row_idx), (-1, row_idx), bg_color),
-                    ('TOPPADDING', (0, row_idx), (-1, row_idx), 8),
-                    ('BOTTOMPADDING', (0, row_idx), (-1, row_idx), 4 if has_sub else 8),
+                    ('TOPPADDING', (0, row_idx), (-1, row_idx), 9),
+                    ('BOTTOMPADDING', (0, row_idx), (-1, row_idx), 4 if has_sub else 9),
                 ])
                 
                 if not has_sub:
@@ -627,40 +787,15 @@ class PDFGenerator:
                 
                 row_idx += 1
 
-                # Die Rechenschritte unter der Zeile (R-DOC-01 Punkt 6/7):
-                # ohne eigene Betragsspalte -- das Ergebnis steht im Satz,
-                # und der Zeilenbetrag rechts darueber bleibt die eine Zahl,
-                # auf die alles hinauslaeuft. Endet die Zeile mit ihnen (qm,
-                # Personen), schliesst der letzte die Trennlinie ab.
-                for i, schritt in enumerate(schritte):
-                    schliesst_ab = (i == len(schritte) - 1 and not folgeposten)
-                    data.append([
-                        '',
-                        '',
-                        Paragraph(f"↳ {schritt}", self.styles['SubTableCell']),
-                        ''
-                    ])
-
-                    table_style.extend([
-                        ('BACKGROUND', (0, row_idx), (-1, row_idx), bg_color),
-                        ('TOPPADDING', (0, row_idx), (-1, row_idx), 2),
-                        ('BOTTOMPADDING', (0, row_idx), (-1, row_idx), 8 if schliesst_ab else 2),
-                    ])
-
-                    if schliesst_ab:
-                        table_style.append(('LINEBELOW', (0, row_idx), (-1, row_idx), 0.5, COLOR_BORDER))
-
-                    row_idx += 1
-
                 if folgeposten:
                     for i, sub in enumerate(folgeposten):
                         is_last = i == len(folgeposten) - 1
-                        prefix = "↳ "
+                        prefix = RECHENWEG_ZEICHEN
                         data.append([
-                            '', 
-                            '', 
-                            Paragraph(f"{prefix}{sub['description']}", self.styles['SubTableCell']), 
-                            Paragraph(f"{sub['cost']:.2f}".replace('.', ','), self.styles['TableCellRight'])
+                            '',
+                            Paragraph(f"{prefix}{sub['description']}", self.styles['SubTableCell']),
+                            Paragraph(pdf_stil.geld(sub['cost'], waehrung=False),
+                                      self.styles['TableCellRight'])
                         ])
                         
                         table_style.extend([
@@ -678,12 +813,17 @@ class PDFGenerator:
                 
             # Subtotal Row
             data.append([
-                '', 
-                '', 
-                Paragraph(f"Zwischensumme {section_name}:", self.styles['TotalCell']), 
-                Paragraph(f"{section_data['total']:.2f}".replace('.', ','), self.styles['TotalCellRight'])
+                Paragraph(f"Zwischensumme {section_name}",
+                          self.styles['TotalCellRight']),
+                '',
+                Paragraph(pdf_stil.geld(section_data['total'], waehrung=False),
+                          self.styles['TotalCellRight'])
             ])
             table_style.extend([
+                # Beide linken Spalten zusammen: „Zwischensumme Wasser &
+                # Abwasser" brach sonst um, und „Betriebskosten" stand als
+                # eigene Zeile da -- als waere es eine zweite Rubrik.
+                ('SPAN', (0, row_idx), (1, row_idx)),
                 ('TOPPADDING', (0, row_idx), (-1, row_idx), 8),
                 ('BOTTOMPADDING', (0, row_idx), (-1, row_idx), 8),
                 ('LINEABOVE', (0, row_idx), (-1, row_idx), 0.5, COLOR_MUTED),
@@ -691,50 +831,35 @@ class PDFGenerator:
             ])
             row_idx += 1
             
-        # Grand Total Rows
-        data.append([
-            '', 
-            '', 
-            Paragraph("Gesamtkosten der Periode:", self.styles['TotalCell']), 
-            Paragraph(f"{total_amount:.2f}".replace('.', ','), self.styles['TotalCellRight'])
-        ])
-        
+        # Phase 60: Die drei Schlusszeilen stehen **nicht mehr in der
+        # Tabelle**. Dort waren sie die letzten Zeilen eines Satzes, der
+        # ueber Seiten laeuft -- und landeten allein auf der naechsten
+        # Seite, abgeschnitten von der Rechnung, zu der sie gehoeren. Jetzt
+        # sind sie ein eigener, rechtsbuendiger Block wie in der Vorlage:
+        # unteilbar, und er folgt der Tabelle, statt in ihr zu stecken.
         balance = total_amount - prepaid_amount
-        
-        data.append([
-            '', 
-            '', 
-            Paragraph("Abzüglich geleistete Vorauszahlungen:", self.styles['TotalCell']), 
-            Paragraph(f"- {prepaid_amount:.2f}".replace('.', ','), self.styles['TotalCellRight'])
-        ])
-        
-        balance_label = "Nachzahlung des Mieters:" if balance > 0 else ("Guthaben des Mieters:" if balance < 0 else "Saldobetrag:")
-        
-        data.append([
-            '', 
-            '', 
-            Paragraph(balance_label, self.styles['GrandTotalCell']), 
-            Paragraph(f"{balance:.2f}".replace('.', ','), self.styles['GrandTotalCellRight'])
-        ])
-        
-        table_style.extend([
-            ('TOPPADDING', (0, row_idx), (-1, row_idx), 10),
-            ('BOTTOMPADDING', (0, row_idx), (-1, row_idx), 10),
-            ('LINEABOVE', (0, row_idx), (-1, row_idx), 1, COLOR_DARK),
-            ('TOPPADDING', (0, row_idx+1), (-1, row_idx+1), 5),
-            ('BOTTOMPADDING', (0, row_idx+1), (-1, row_idx+1), 10),
-            ('LINEBELOW', (0, row_idx+1), (-1, row_idx+1), 0.5, COLOR_BORDER),
-            ('TOPPADDING', (0, row_idx+2), (-1, row_idx+2), 14),
-            ('BOTTOMPADDING', (0, row_idx+2), (-1, row_idx+2), 14),
-            ('LINEBELOW', (0, row_idx+2), (-1, row_idx+2), 1, COLOR_DARK),
-            ('BACKGROUND', (0, row_idx+2), (-1, row_idx+2), COLOR_LIGHT_BG),
-        ])
-        
-        # Adjust column widths: category (110), period (130), details (170), amount (70) = 480
-        table = Table(data, colWidths=[110, 130, 170, 70])
+        if balance > 0:
+            saldo_wort, saldo_farbe = 'Nachzahlung des Mieters', self.stil.nachzahlung
+        elif balance < 0:
+            saldo_wort, saldo_farbe = 'Guthaben des Mieters', self.stil.guthaben
+        else:
+            saldo_wort, saldo_farbe = 'Saldobetrag', None
+
+        # Die Betragsspalte bleibt schmal, der Rest teilt sich den Platz.
+        # Gemessen, nicht geschaetzt: Die leise Angabenzeile („Anbieter ·
+        # Rechnung Nr. … vom …") braucht bei 7,5 pt rund 190 pt. Blieb die
+        # Spalte darunter, brach sie um, und unter jeder Kostenart stand ein
+        # zweizeiliger grauer Rest -- genau das, was unordentlich aussah.
+        table = Table(data, colWidths=[200, 200, 70], repeatRows=1)
         table.setStyle(TableStyle(table_style))
-        
         elements.append(table)
+        elements.append(Spacer(1, pdf_stil.M))
+        elements.append(KeepTogether(pdf_stil.summenblock([
+            ('Gesamtkosten der Periode', pdf_stil.geld(total_amount), False, None),
+            ('Abzüglich geleistete Vorauszahlungen',
+             '- ' + pdf_stil.geld(prepaid_amount), False, None),
+            (saldo_wort, pdf_stil.geld(abs(balance)), True, saldo_farbe),
+        ], self.stil, saetze, breite=320)))
 
         # R-NUM-03: der Mieter soll die Tageszahl nachrechnen koennen, statt
         # sie glauben zu muessen. Die Erlaeuterung steht nur da, wo ueberhaupt
@@ -792,6 +917,8 @@ class PDFGenerator:
 
         # NK-245: ohne Zaehlerzeile kein leerer Nachweisteil samt Umbruch.
         if self.detailliert and any(item.get('meter_details') for item in line_items):
+            # Der Verweis klebte am GiroCode-Kasten darüber.
+            elements.append(Spacer(1, pdf_stil.M))
             elements.append(Paragraph(
                 '<i>Detaillierte Verbrauchsnachweise auf den folgenden Seiten</i>',
                 self.styles['HeaderNormal']))
@@ -821,7 +948,8 @@ class PDFGenerator:
                 box_data.append([Paragraph(f"{cat_name} — {meter_num_str} ({self.apartment_name})", self.styles['MeterHeader']), ''])
             
                 box_style = [
-                    ('BACKGROUND', (0, 0), (-1, 0), COLOR_ACCENT),
+                    ('BACKGROUND', (0, 0), (-1, 0), self.stil.flaeche),
+                    ('LINEBELOW', (0, 0), (-1, 0), 0.8, self.stil.linie),
                     ('SPAN', (0, 0), (-1, 0)),
                     ('TOPPADDING', (0, 0), (-1, 0), 6),
                     ('BOTTOMPADDING', (0, 0), (-1, 0), 6),
@@ -971,19 +1099,20 @@ class PDFGenerator:
                 row_idx += 1
             
                 for sub in item.get('sub_items', []):
-                    box_data.append([Paragraph(f"• {sub['description']}", self.styles['MeterText']), Paragraph(f"{sub['cost']:.2f} €".replace('.', ','), self.styles['MeterText'])])
+                    box_data.append([Paragraph(f"• {sub['description']}", self.styles['MeterText']), Paragraph(pdf_stil.geld(sub['cost']), self.styles['MeterText'])])
                     row_idx += 1
                 
-                box_data.append([Paragraph(f"GESAMT {cat_name}:", self.styles['MeterTextBold']), Paragraph(f"{item['tenant_cost']:.2f} €".replace('.', ','), self.styles['MeterTextBold'])])
+                box_data.append([Paragraph(f"GESAMT {cat_name}:", self.styles['MeterTextBold']), Paragraph(pdf_stil.geld(item['tenant_cost']), self.styles['MeterTextBold'])])
             
                 box_style.extend([
-                    ('BACKGROUND', (0, 1), (-1, -1), COLOR_LIGHT_BG),
+                    ('BACKGROUND', (0, 1), (-1, -1), self.stil.flaeche),
                     ('BOX', (0, 0), (-1, -1), 1, COLOR_BORDER),
                     ('TOPPADDING', (0, 1), (-1, -1), 4),
                     ('BOTTOMPADDING', (0, 1), (-1, -1), 4),
                 ])
             
-                t = Table(box_data, colWidths=[350, 130])
+                # Wie oben: die Summe der Spalten passt in den Satz.
+                t = Table(box_data, colWidths=[340, 130])
                 t.setStyle(TableStyle(box_style))
                 elements.append(t)
                 elements.append(Spacer(1, 20))

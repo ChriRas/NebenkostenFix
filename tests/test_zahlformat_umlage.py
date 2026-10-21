@@ -6,7 +6,9 @@ Mieter liest. Ein Text ohne Komma oder mit „qm“ fällt hier auf.
 """
 
 from dataclasses import replace
+from decimal import Decimal
 
+from nebenkostenfix.geld import text
 from nebenkostenfix.rechenkern import Wohnung, menge_text, rechne, zahl_text
 
 from tests.test_rechenkern import rechnung, vorgang
@@ -46,3 +48,23 @@ def test_umlage_mit_summe_aus_floats():
     posten = rechne(v)['line_items'][0]
     assert posten['description'] == 'Umlage nach Wohnfläche (55,1 von 117,3 m²)'
     assert not any('0000' in s for s in posten.get('rechenweg', []))
+
+
+def test_der_satz_und_die_spalte_schreiben_denselben_betrag():
+    """Zwei Formatierer auf einem Blatt lesen sich wie zwei Dokumente.
+
+    Bis Phase 60 gab es zwei: ``rechenkern.euro_text`` schrieb den Betrag
+    im Rechenweg und im Anschreiben **ohne** Tausenderpunkt,
+    ``pdf_stil.geld`` den in der Betragsspalte **mit**. Auf Seite 1 stand
+    dadurch „4817,30 €" im Satz und „4.817,30 €" im Block darunter -- für
+    denselben Betrag, auf derselben Seite.
+
+    Der Test prüft die Gleichheit, nicht die eine Schreibweise: Wer sie
+    ändern will, ändert ``geld.text`` und beide ziehen mit.
+    """
+    from nebenkostenfix import pdf_stil
+    from nebenkostenfix.rechenkern import euro_text
+
+    for betrag in (Decimal('0.01'), Decimal('999.99'), Decimal('1200'),
+                   Decimal('4817.30'), Decimal('-1440'), Decimal('1234567.89')):
+        assert euro_text(betrag) == pdf_stil.geld(betrag) == text(betrag), betrag

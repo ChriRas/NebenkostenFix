@@ -30,6 +30,7 @@ from nebenkostenfix.geld import (
     runde,
     runde_einheitspreis,
     summe,
+    text,
 )
 
 
@@ -483,3 +484,19 @@ def test_die_json_grenze_verliert_keinen_cent(auth_client):
         erwartet = Decimal(betrag.replace(".", "").replace(",", "."))
         zurueck = Decimal(repr(gelesen[f"CENT-{nummer}"]))
         assert zurueck == erwartet, f"{betrag}: {zurueck}"
+
+
+# --- Phase 60: ein Betrag, eine Schreibweise ---------------------------------
+
+
+def test_der_tausenderpunkt_steht_ab_vier_stellen():
+    """Er entscheidet, ob jemand 4.172,80 oder 417,28 liest."""
+    assert text(Decimal('999.99')) == '999,99 €'
+    assert text(Decimal('1000')) == '1.000,00 €'
+    assert text(Decimal('1234567.89'), waehrung=False) == '1.234.567,89'
+
+
+def test_der_betrag_wird_vor_dem_schreiben_kaufmaennisch_gerundet():
+    """R-NUM-01 gilt auch für den Text -- sonst zeigte er eine andere Zahl."""
+    assert text(Decimal('0.005')) == '0,01 €'
+    assert text(Decimal('2.344999')) == '2,34 €'

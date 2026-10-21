@@ -119,7 +119,17 @@ def _erzeuge(posten: list[dict], detailliert: bool = False) -> bytes:
         end_date='2024-12-31',
         detailliert=detailliert,
     )
-    return erzeuger.generate(posten, Decimal('900.00'), Decimal('0.00'))
+    return erzeuger.generate(posten, _summe(posten), Decimal('0.00'))
+
+def _summe(posten: list[dict]):
+    """Die Gesamtsumme der Abrechnung: die Summe der Zeilenbetraege.
+
+    So rechnet der Kern (``total_amount += runde(tenant_cost)``), und seit
+    Phase 59 verlaesst sich das Uebersichtsblatt darauf: Es bricht ab, wenn
+    seine Summe von der uebergebenen abweicht. Eine erfundene Gesamtsumme
+    im Pruefstand wuerde genau diesen Waechter ausloesen.
+    """
+    return sum((p['tenant_cost'] for p in posten), start=Decimal('0.00'))
 
 
 def _viele_zeilen() -> list[dict]:

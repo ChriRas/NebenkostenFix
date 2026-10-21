@@ -41,7 +41,10 @@ def test_der_name_steht_im_kopf_und_auf_dem_deckblatt(ohne_vermieter, monkeypatc
     """Maskiert: ``&`` und ``<`` haetten den Satzer sonst abbrechen lassen."""
     monkeypatch.setenv('VERMIETER_NAME', NAME)
     blatt = _geklebt(_erzeuge([]))
-    assert blatt.count('Erika&Söhne<GbR>') == 2
+    # Kopf der Aufstellung, Deckblatt und -- seit Phase 59 -- der Kopf des
+    # Uebersichtsblatts. Ohne Namen steht dort nichts (siehe Test oben),
+    # darum sind es dann weiter zwei Stellen.
+    assert blatt.count('Erika&Söhne<GbR>') == 3
     assert 'Hausverwaltung/Vermieter' not in blatt
 
 

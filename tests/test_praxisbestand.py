@@ -37,7 +37,7 @@ ERWARTUNG = {
         gesamt=2424.49, voraus=1305.0, saldo=1119.49,
         meldungen=[(PREISWARNUNG, 'HS-1')],
         gruende=['Abgerechnet ist bis 31.03.2033', 'WMZ-EG', 'Allgemeinstrom'],
-        pdf=['01.04.2033 bis 31.12.2033', 'Ihre Nachzahlung', 'WA-33', 'HZ-33', 'ST-33', 'VG-33',
+        pdf=['01.04.2033 bis 31.12.2033', 'Nachzahlung:', 'WA-33', 'HZ-33', 'ST-33', 'VG-33',
              f'3371,9 kWh, {GESCHAETZT}']),
     'Mieter 2': dict(
         zeitraum=('2033-04-01', '2033-12-31'),
@@ -46,7 +46,7 @@ ERWARTUNG = {
         gesamt=424.46, voraus=765.0, saldo=-340.54,
         meldungen=[(PREISWARNUNG, 'HS-1')],
         gruende=['Abgerechnet ist bis 31.03.2033', 'Allgemeinstrom'],
-        pdf=['01.04.2033 bis 31.12.2033', 'Ihr Guthaben', 'WA-33', 'VG-33']),
+        pdf=['01.04.2033 bis 31.12.2033', 'Guthaben:', 'WA-33', 'VG-33']),
     'Mieter 3': dict(
         zeitraum=('2033-10-01', '2033-12-31'),
         kosten={'Wasserversorgung': 107.04, 'Heizung': 580.51,
@@ -54,14 +54,14 @@ ERWARTUNG = {
         gesamt=854.21, voraus=330.0, saldo=524.21,
         meldungen=[(PREISWARNUNG, 'HS-1')],
         gruende=['WMZ-W3', 'Den Rest bis zum Auszug (01.01.2034–31.07.2034)'],
-        pdf=['01.10.2033 bis 31.12.2033', 'Ihre Nachzahlung', GESCHAETZT]),
+        pdf=['01.10.2033 bis 31.12.2033', 'Nachzahlung:', GESCHAETZT]),
     'Mieter 5': dict(
         zeitraum=('2033-01-01', '2033-12-31'),
         kosten={'Grundsteuer': 412.8, 'Straßenreinigung und Müllbeseitigung': 263.4},
         gesamt=676.2, voraus=720.0, saldo=-43.8,
         meldungen=[],
         gruende=[],
-        pdf=['01.01.2033 bis 31.12.2033', 'Ihr Guthaben', 'GS-33', 'MU-33']),
+        pdf=['01.01.2033 bis 31.12.2033', 'Guthaben:', 'GS-33', 'MU-33']),
 }
 
 

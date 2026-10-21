@@ -149,7 +149,9 @@ from typing import Mapping, Optional, Sequence
 from nebenkostenfix.abrechnungsart import VORGABE, aufzaehlung, ist_gueltig
 from nebenkostenfix import betrkv
 from nebenkostenfix import co2
-from nebenkostenfix.geld import NULL, dec, restcent_auf_letzte, runde, runde_einheitspreis, summe
+from nebenkostenfix.geld import (NULL, dec, restcent_auf_letzte, runde,
+                                 runde_einheitspreis, summe,
+                                 text as geld_text)
 from nebenkostenfix import heizung
 from nebenkostenfix import lohnausweis
 from nebenkostenfix.haushalt import Stand as Haushaltsstand
@@ -728,15 +730,17 @@ def rechnungsdatum_angabe(datum: Optional[date]) -> Optional[str]:
 
 
 def euro_text(betrag) -> str:
-    """Ein Betrag als Klartext: "1200,00 €" -- wie die Tabelle ihn zeigt.
+    """Ein Betrag als Klartext: "1.200,00 €" -- wie die Tabelle ihn zeigt.
 
     Der Rechenweg (R-DOC-01 Punkt 6) ist ein Satz, keine Formel: er mischt
     Zahlen und Woerter, und die Betraege darin muessen so aussehen wie die
     in der Betragsspalte, sonst rechnet der Mieter zwei Schriften
-    gegeneinander. Kein Tausendertrennzeichen -- die Betragsspalte des
-    Dokuments hat auch keins.
+    gegeneinander. Genau das war der Grund, hier **kein**
+    Tausendertrennzeichen zu setzen -- und genau deshalb aendert sich das
+    jetzt: Seit Phase 60 setzt die Betragsspalte eines, also setzt der Satz
+    daneben auch eins. Geschrieben wird es an einer Stelle (``geld.text``).
     """
-    return f"{runde(betrag):.2f}".replace('.', ',') + ' €'
+    return geld_text(betrag)
 
 
 def zahl_text(wert) -> str:
