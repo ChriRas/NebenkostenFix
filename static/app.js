@@ -1677,6 +1677,31 @@ function tabellenEinrollen(wurzel) {
     });
 }
 
+// Phase 65: lange Namen in Auswahlfeldern enden mit „…", statt auf drei
+// Zeilen umzubrechen. In base-select geht das nur über einen eigenen Knopf mit
+// <selectedcontent>; die App schreibt Optionen oft per innerHTML neu und löscht
+// ihn dabei, darum setzt der Beobachter in initBarrierearm ihn nach.
+function auswahlKnoepfe(wurzel) {
+    if (!CSS.supports('appearance', 'base-select')) return;
+    wurzel.querySelectorAll('select:not([multiple]):not([size])').forEach(feld => {
+        if (feld.querySelector(':scope > button')) return;
+        // Chromium bindet nur das erste <selectedcontent> eines Feldes; ein neuer
+        // Knopf nach innerHTML bliebe leer. Darum immer denselben wieder einsetzen.
+        if (!feld._auswahlKnopf) {
+            feld._auswahlKnopf = document.createElement('button');
+            feld._auswahlKnopf.className = 'auswahl-knopf';
+            feld._auswahlKnopf.append(document.createElement('selectedcontent'));
+        }
+        feld.prepend(feld._auswahlKnopf);
+        // Chromium übernimmt einen nachträglich eingesetzten Knopf erst nach
+        // einem Neuaufbau des Feldes.
+        const anzeige = feld.style.display;
+        feld.style.display = 'none';
+        void feld.offsetHeight;
+        feld.style.display = anzeige;
+    });
+}
+
 function initBarrierearm() {
     document.querySelectorAll('.nav-item').forEach(eintrag => {
         const name = eintrag.textContent.trim();
@@ -1685,6 +1710,7 @@ function initBarrierearm() {
     });
     symbolknoepfeBenennen(document);
     tabellenEinrollen(document);
+    auswahlKnoepfe(document);
     let geplant = false;
     new MutationObserver(() => {
         if (geplant) return;
@@ -1693,6 +1719,7 @@ function initBarrierearm() {
             geplant = false;
             symbolknoepfeBenennen(document);
             tabellenEinrollen(document);
+            auswahlKnoepfe(document);
         });
     }).observe(document.body, { childList: true, subtree: true });
     schriftgroesseZeigen();

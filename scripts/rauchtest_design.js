@@ -95,6 +95,8 @@ global.escapeHtml = s => String(s);
 // echte fetch von Node; so bleiben sie still hängen.
 global.fetch = () => new Promise(() => {});
 global.alert = () => {};
+// Phase 65: auswahlKnoepfe fragt nach base-select; ohne Browser gibt es das nicht.
+global.CSS = { supports: () => false };
 // app.js beobachtet Dialoge und Listen mit MutationObserver (Fokusfalle,
 // Hilfe-Knöpfe). Ohne Browser reicht ein Beobachter, der nichts meldet.
 global.MutationObserver = class {
@@ -964,6 +966,36 @@ async function belegDatumPruefen() {
         umschalter.includes('belegDatumAnbieten()')
         && /rechnungsdatum_fuer_beleg/.test(speichern)
         && /beleg_datum_gesetzt/.test(speichern));
+}
+
+// Phase 65 (Issue #35, Nachtrag): lange Namen in Auswahlfeldern enden mit „…".
+// Chromium bindet nur das erste <selectedcontent> eines Feldes. Schreibt die App
+// die Optionen per innerHTML neu, muss derselbe Knopf zurück, ein neuer bliebe leer.
+async function auswahlKnoepfePruefen() {
+    const m = appQuelle.match(/function auswahlKnoepfe\(wurzel\) \{[\s\S]*?\n\}/);
+    if (!m) throw new Error('auswahlKnoepfe nicht gefunden');
+    const feld = { kinder: [], style: { display: '' }, offsetHeight: 0,
+        querySelector() { return this.kinder[0] || null; },
+        prepend(k) { this.kinder.unshift(k); } };
+    const dok = { createElement: tag => ({ tag, append() {} }) };
+    const lauf = new Function('CSS', 'document', m[0] + '; return auswahlKnoepfe;')(
+        { supports: () => true }, dok);
+    const wurzel = { querySelectorAll: () => [feld] };
+    lauf(wurzel);
+    const erster = feld.kinder[0];
+    pruefe('Phase 65: das Auswahlfeld bekommt einen Knopf', erster && erster.tag === 'button');
+    feld.kinder = [];   // wie innerHTML = '<option>…'
+    lauf(wurzel);
+    pruefe('Phase 65: nach innerHTML kommt derselbe Knopf zurück, kein neuer',
+        feld.kinder[0] === erster && feld.kinder.length === 1);
+    lauf(wurzel);
+    pruefe('Phase 65: ein vorhandener Knopf wird nicht doppelt eingesetzt', feld.kinder.length === 1);
+    pruefe('Phase 65: der Beobachter setzt die Knöpfe nach',
+        (appQuelle.match(/auswahlKnoepfe\(document\)/g) || []).length >= 2);
+    pruefe('Phase 65: der Knopf kürzt mit „…", die offene Liste bricht um',
+        /select > button\.auswahl-knopf \{[^}]*text-overflow: ellipsis/.test(css)
+        && /::picker\(select\) \{[^}]*max-width:/.test(css)
+        && /\n    option \{[^}]*white-space: normal/.test(css));
 }
 
 async function zeitleisteFilterPruefen() {
@@ -2359,6 +2391,7 @@ async function zaehlerPflegePruefen() {
         ['zeitleisteFilterPruefen', 'Phase 62: Zeitleistenfilter-Prüfung'],
         ['rechenwegTextPruefen', 'Rechenweg-Text-Prüfung'],
         ['belegDatumPruefen', 'Phase 64: Belegdatum-Prüfung'],
+        ['auswahlKnoepfePruefen', 'Phase 65: Auswahlknopf-Prüfung'],
         ['anschriftenPruefen', 'Phase 58: Anschriften-Prüfung'],
     ];
     for (const [name, label] of schritte) {

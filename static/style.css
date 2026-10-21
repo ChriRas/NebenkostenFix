@@ -938,6 +938,8 @@ kbd {
     transition: var(--transition);
     appearance: none;
     -webkit-appearance: none;
+    /* Phase 65: zu lange Werte und Platzhalter enden mit „…". */
+    text-overflow: ellipsis;
 }
 
 .form-group textarea {
@@ -1009,6 +1011,18 @@ kbd {
         align-items: center;
     }
 
+    /* Phase 65: der Knopf aus auswahlKnoepfe() (app.js) trägt den Text;
+       lange Namen enden mit „…" statt umzubrechen. */
+    select > button.auswahl-knopf {
+        all: unset;
+        display: block;
+        flex: 1 1 auto;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
     select::picker-icon,
     option::checkmark {
         display: none;
@@ -1017,6 +1031,8 @@ kbd {
     ::picker(select) {
         /* Wie die Systemliste nach unten; nach oben nur ohne Platz. */
         position-try-order: normal;
+        /* Phase 65: lange Optionen brechen um, statt aus dem Bild zu laufen. */
+        max-width: calc(100vw - 2 * var(--space-2));
         margin-block: var(--space-1);
         padding: var(--space-1);
         background: var(--surface);
@@ -1029,6 +1045,7 @@ kbd {
         padding: var(--space-2) var(--space-3);
         border-radius: var(--radius-md);
         font-size: 15px;
+        white-space: normal;
     }
 
     option:hover,
@@ -1180,6 +1197,9 @@ progress {
     display: flex;
     align-items: center;
     gap: var(--space-3);
+    /* Phase 65: lange Kostenarten brechen um, statt herauszuragen. */
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
 
 .accordion-icon {
@@ -2249,6 +2269,20 @@ i.feld-hilfe:hover {
     transition: var(--transition);
 }
 
+/* Phase 65: Wohnungsnamen in der Statistik können länger als die Zeile sein. */
+#analytics-nav .filter-pill {
+    max-width: 100%;
+    white-space: normal;
+    text-align: left;
+    padding-block: var(--space-1);
+    line-height: 1.3;
+}
+
+#analytics-property-select {
+    width: 250px;
+    max-width: 100%;
+}
+
 .filter-pill:hover {
     background: var(--bg-hover);
     border-color: var(--field-border);
@@ -2359,9 +2393,29 @@ i.feld-hilfe:hover {
     border-top: 1px solid var(--divider);
     display: grid;
     gap: var(--space-3);
-    grid-template-columns: 96px 1fr auto auto auto;
+    grid-template-columns: 96px minmax(0, 3fr) minmax(0, 2fr) auto auto;
     min-height: var(--knopf-hoehe);
     padding: var(--space-2) 0;
+}
+
+/* Phase 65: lange Anbieter- und Hausnamen brechen um, statt die Seite
+   zu verbreitern. Schmal: Datum und Betrag oben, Wer und Ort darunter. */
+.zeitleiste-eintrag > * {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+@media (max-width: 720px) {
+    .zeitleiste-eintrag {
+        grid-template-areas: "datum beleg betrag" "wer wer wer" "ort ort ort";
+        grid-template-columns: minmax(0, 1fr) auto auto;
+        row-gap: var(--space-1);
+    }
+    .zeitleiste-datum { grid-area: datum; }
+    .zeitleiste-wer { grid-area: wer; }
+    .zeitleiste-ort { grid-area: ort; color: var(--text-muted); }
+    .zeitleiste-beleg { grid-area: beleg; }
+    .zeitleiste-betrag { grid-area: betrag; }
 }
 
 .zeitleiste-datum {
@@ -2673,6 +2727,15 @@ a.btn-primary:hover {
     .section-header > div:first-child {
         flex: 1 1 0;
         min-width: 0;
+    }
+
+    /* Phase 65: die Hausauswahl der Statistik rückt unter den Titel, statt
+       den Untertitel zu zerdrücken. */
+    #analytics-auswahl {
+        flex: 1 1 100%;
+    }
+    #analytics-property-select {
+        width: 100%;
     }
 
     .kopf-menue-knopf {
@@ -3782,6 +3845,7 @@ td .btn-icon,
 
 .beleg-info {
     grid-column: 1 / -1;
+    overflow-wrap: anywhere;
 }
 
 .beleg-name {
