@@ -326,6 +326,11 @@ def test_die_oberflaeche_fuehrt_beide_felder():
     assert "formData.append('anrede'" in _funktion(js, 'saveTenant')
     oeffnen = _funktion(js, 'openAddTenantModal')
     assert oeffnen.count("getElementById('tenant-anrede').value") == 2
-    assert 'art })' in _funktion(js, 'saveVermieterdaten')
+    # Die Absicht ist „die Art geht mit", nicht „sie steht als Letztes im
+    # Rumpf": Phase 58 hat `anschrift` dahinter gesetzt, und der Test fiel
+    # um, obwohl die Art unverändert mitging.
+    sichern = _funktion(js, 'saveVermieterdaten')
+    rumpf = re.search(r'JSON\.stringify\(\{([^}]*)\}\)', sichern)
+    assert rumpf and 'art' in [w.strip() for w in rumpf.group(1).split(',')]
     assert "getElementById('vermieter-art').value = stand.art" in _funktion(
         js, 'fetchVermieterdaten')

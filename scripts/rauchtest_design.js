@@ -903,6 +903,80 @@ async function rechnungsJahrPruefen() {
         && /id="invoice-summe"/.test(html));
 }
 
+// Phase 58 (Issue #35, Punkt 1): die Anschriften im Mieterdialog und in den
+// Einstellungen. Der Fehler, der hier wehtut, ist der Rest aus dem vorigen
+// Mieter: Wer den Dialog fuellt, aber nicht raeumt, schickt die Abrechnung
+// an die Adresse des Vormieters. Deshalb wird der Dialog zweimal gefahren --
+// einmal mit Mieter, einmal ohne.
+async function anschriftenPruefen() {
+    const funktion = name => {
+        const m = appQuelle.match(new RegExp(`function ${name}\\([^)]*\\) \\{[\\s\\S]*?\\n\\}`));
+        if (!m) throw new Error(`${name} nicht gefunden`);
+        return m[0];
+    };
+
+    const feldStube = () => {
+        const felder = {};
+        return {
+            felder,
+            dokument: {
+                getElementById(id) {
+                    if (!felder[id]) felder[id] = { value: '', textContent: '', style: {} };
+                    return felder[id];
+                },
+            },
+        };
+    };
+    const fenster = { classList: { add() {}, remove() {} }, querySelector: () => ({ textContent: '' }) };
+
+    const dialog = funktion('openAddTenantModal');
+    const fahre = mieter => {
+        const stube = feldStube();
+        new Function('document', 'tenantModal', 'setTimeout', 'editingTenantId', 'mieter',
+            dialog + '\nopenAddTenantModal(mieter);')(
+            stube.dokument, fenster, () => {}, null, mieter);
+        return stube.felder;
+    };
+
+    const bestand = fahre({
+        id: 7, name: 'Mieter Muster', apartment_id: 1,
+        move_in_date: '2025-01-01', move_out_date: '2025-12-31',
+        anschrift: 'Musterweg 1\n12345 Musterstadt',
+        zustellanschrift: 'Neue Straße 9\n54321 Anderswo',
+    });
+    pruefe('Phase 58: der Mieterdialog zeigt beide Anschriften des Mieters',
+        bestand['tenant-anschrift'].value === 'Musterweg 1\n12345 Musterstadt'
+        && bestand['tenant-zustellanschrift'].value === 'Neue Straße 9\n54321 Anderswo');
+
+    const leer = fahre(null);
+    pruefe('Phase 58: „Neuer Mieter" raeumt beide Anschriften -- kein Rest vom Vormieter',
+        leer['tenant-anschrift'].value === ''
+        && leer['tenant-zustellanschrift'].value === '');
+
+    // Immer mitschicken: nur so laesst sich eine Anschrift wieder leeren.
+    const speichern = appQuelle.match(/const formData = new FormData\(\);[\s\S]*?fetch\(url/)[0];
+    pruefe('Phase 58: beide Anschriften gehen immer mit, auch leer',
+        /formData\.append\('anschrift', document\.getElementById\('tenant-anschrift'\)\.value\)/.test(speichern)
+        && /formData\.append\('zustellanschrift', document\.getElementById\('tenant-zustellanschrift'\)\.value\)/.test(speichern)
+        && !/if \([a-zA-Z]+\) formData\.append\('anschrift'/.test(speichern));
+
+    const laden = funktion('fetchVermieterdaten');
+    const sichern = funktion('saveVermieterdaten');
+    pruefe('Phase 58: die Einstellungen laden und speichern die eigene Anschrift',
+        /vermieter-anschrift'\)\.value = stand\.anschrift/.test(laden)
+        && /vermieter-anschrift'\)\.value/.test(sichern)
+        && /JSON\.stringify\(\{ name, iban, art, anschrift \}\)/.test(sichern));
+
+    // Die Felder selbst -- mehrzeilig, weil eine Anschrift mehrzeilig ist.
+    pruefe('Phase 58: die drei Felder stehen mehrzeilig in der Oberflaeche',
+        /<textarea id="tenant-anschrift"/.test(html)
+        && /<textarea id="tenant-zustellanschrift"/.test(html)
+        && /<textarea id="vermieter-anschrift"/.test(html));
+
+    pruefe('Phase 58: die Zustelladresse nennt den Grund (§ 556 Abs. 3 BGB)',
+        /Zustelladresse ab Auszug/.test(html) && /556 Abs. 3 BGB/.test(html));
+}
+
 // Phase 54 (Issue #30): eigene Kostenarten — Tabelle, Nummernvorschlag,
 // Nummernmenü und die Nr.-17-Bestätigung, vom Quelltext her geprüft.
 async function kategorienPruefen() {
@@ -2156,6 +2230,7 @@ async function zaehlerPflegePruefen() {
         ['kategorienPruefen', 'Phase 54: Kostenarten-Prüfung'],
         ['hausgeldPruefungPruefen', 'Phase 50: Hausgeld-Prüfung'],
         ['rechnungsJahrPruefen', 'Phase 57: Jahresfilter-Prüfung'],
+        ['anschriftenPruefen', 'Phase 58: Anschriften-Prüfung'],
     ];
     for (const [name, label] of schritte) {
         try {

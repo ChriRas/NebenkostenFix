@@ -213,7 +213,7 @@ def datenbankpfad(app) -> Path:
     uri = app.config.get('SQLALCHEMY_DATABASE_URI') or ''
     if not uri.startswith('sqlite:'):
         raise SicherungsFehler(
-            f"Sichern kann nur SQLite, die Anwendung laeuft auf: {uri.split(':')[0]}"
+            f"Sichern kann nur SQLite, die Anwendung läuft auf: {uri.split(':')[0]}"
         )
     # sqlite:////abs/pfad hat vier Schraegstriche, sqlite:///relativ nur drei.
     pfad = uri.split('sqlite:///', 1)[1]

@@ -19,6 +19,7 @@ from decimal import Decimal
 # Bandit-Ausnahme: maskiert Text fuer reportlab, parst kein XML
 from xml.sax.saxutils import escape  # nosec B406
 
+from nebenkostenfix import anschrift as anschriften
 from nebenkostenfix.rechenkern import euro_text
 
 # NK-247: neutrale Anrede statt „Sehr geehrte/r“ -- eine Stelle für die
@@ -87,6 +88,13 @@ PLATZHALTER = {
     'anrede': ('Anrede des Mieters -- die eigene aus dem Mieterdialog, '
                'sonst „Guten Tag <Name>,“'),
     'mieter_name': 'Name des Mieters',
+    # Phase 58 (Issue #35): verfuegbar, aber absichtlich nicht in der
+    # Vorgabe -- eine Anschrift gehoert in den Briefkopf des Blattes, nicht
+    # in den Flusstext. Wer sie im Text braucht (etwa fuer ein eigenes
+    # Layout), setzt sie selbst.
+    'mieter_anschrift': ('Anschrift des Mieters -- nach dem Auszug die '
+                         'hinterlegte Zustelladresse'),
+    'vermieter_anschrift': 'Eigene Anschrift aus den Einstellungen',
     'wohnung_name': 'Name der Wohnung',
     'objekt_name': 'Name des Objekts',
     'vermieter_name': ('Name des Vermieters aus den Einstellungen -- leer, '
@@ -150,7 +158,9 @@ def text_fuer(vorlage: str, *, mieter_name: str, wohnung_name: str,
               einwendungsfrist: str | None = None,
               vermieter_name: str = '',
               vorauszahlung: dict | None = None,
-              mieter_anrede: str | None = None) -> str:
+              mieter_anrede: str | None = None,
+              mieter_anschrift: str | None = None,
+              vermieter_anschrift: str | None = None) -> str:
     """Füllt die Vorlage aus dem Ergebnis einer Abrechnung.
 
     ``vermieter_name`` unterschreibt den Gruß (NK-210). Ohne Namen bleibt
@@ -165,8 +175,14 @@ def text_fuer(vorlage: str, *, mieter_name: str, wohnung_name: str,
     (NK-226). Ohne Änderung bleibt der Satz gewollt leer.
 
     ``mieter_anrede`` ist die eigene Anrede des Mieters (NK-264).
+
+    ``mieter_anschrift`` und ``vermieter_anschrift`` sind die Anschriften
+    (Phase 58). Welche der beiden Mieteranschriften gilt, entscheidet
+    ``anschrift.fuer_zustellung``; hier kommt nur noch das Ergebnis an.
+    Fehlt eine Anschrift, bleibt ihr Platzhalter **sichtbar stehen** --
+    ein Brief ohne Empfaenger soll auffallen, nicht leer hinausgehen.
     """
-    return fuelle(vorlage, {
+    werte = {
         'anrede': anrede(mieter_name, mieter_anrede),
         'mieter_name': mieter_name,
         'wohnung_name': wohnung_name,
@@ -180,7 +196,13 @@ def text_fuer(vorlage: str, *, mieter_name: str, wohnung_name: str,
         'aufforderung': _aufforderung(saldo),
         'einwendungsfrist': einwendungsfrist,
         'vorauszahlung_anpassung': _anpassung(vorauszahlung),
-    })
+    }
+    for name, roh in (('mieter_anschrift', mieter_anschrift),
+                      ('vermieter_anschrift', vermieter_anschrift)):
+        gesaeubert = anschriften.saeubern(roh)
+        if gesaeubert:
+            werte[name] = gesaeubert
+    return fuelle(vorlage, werte)
 
 
 def _anpassung(v: dict | None) -> str:

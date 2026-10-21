@@ -454,6 +454,14 @@
                             <label for="vermieter-name">Name (Empfänger)</label>
                             <input type="text" id="vermieter-name" maxlength="200" placeholder="z. B. Max Mustermann">
                         </div>
+                        <!-- Phase 58 (Issue #35): die eigene Anschrift für den
+                             Briefkopf. Ohne Rückfall aus der Umgebung. -->
+                        <div class="form-group">
+                            <label for="vermieter-anschrift">Eigene Anschrift</label>
+                            <textarea id="vermieter-anschrift" rows="3" maxlength="500"
+                                placeholder="Musterweg 1&#10;12345 Musterstadt"></textarea>
+                            <small class="feld-hilfe">Steht als Absender im Briefkopf der Abrechnung.</small>
+                        </div>
                         <div class="form-group">
                             <label for="vermieter-iban">IBAN</label>
                             <input type="text" id="vermieter-iban" maxlength="34" placeholder="z. B. DE02 1203 0000 0000 2020 51">
@@ -1781,6 +1789,21 @@
                     <input type="text" id="tenant-anrede" maxlength="200" placeholder="z. B. Sehr geehrte Frau Muster">
                     <small class="feld-hilfe">Leer lassen für „Guten Tag“ mit dem Namen des Mieters.</small>
                 </div>
+                <!-- Phase 58 (Issue #35): Anschrift der Wohnung und, ab dem
+                     Auszug, die Zustelladresse. Mehrzeilig, weil eine
+                     Anschrift mehrzeilig ist. -->
+                <div class="form-group">
+                    <label for="tenant-anschrift">Anschrift (optional)</label>
+                    <textarea id="tenant-anschrift" rows="3" maxlength="500"
+                        placeholder="Musterweg 1&#10;12345 Musterstadt"></textarea>
+                    <small class="feld-hilfe">Steht im Briefkopf der Abrechnung. Straße, Hausnummer, PLZ und Ort — eine Angabe pro Zeile.</small>
+                </div>
+                <div class="form-group">
+                    <label for="tenant-zustellanschrift">Zustelladresse ab Auszug (optional)</label>
+                    <textarea id="tenant-zustellanschrift" rows="3" maxlength="500"
+                        placeholder="Neue Straße 9&#10;54321 Anderswo"></textarea>
+                    <small class="feld-hilfe">Gilt erst ab dem Tag nach dem Auszug. Die Abrechnungsfrist (§ 556 Abs. 3 BGB) läuft über den Zugang beim Mieter — eine Abrechnung an die alte Wohnung erreicht ihn nicht.</small>
+                </div>
                 <div class="form-group">
                     <label for="tenant-apartment">Zugeordnete Wohnung</label>
                     <select id="tenant-apartment">
@@ -3004,7 +3027,7 @@
     </div>
     <script src="/static/formular.js?v=2"></script>
     <script src="/static/umzug.js?v=1"></script>
-    <script src="/static/app.js?v=40"></script>
+    <script src="/static/app.js?v=41"></script>
 </body>
 
 </html>

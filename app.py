@@ -288,6 +288,9 @@ from nebenkostenfix import hausgeld
 from nebenkostenfix import mieter_daten
 from nebenkostenfix import beispielimmobilie
 from nebenkostenfix import zeitleiste
+# Phase 58: `anschrift` als Modulname waere in den Routen zu nah an
+# den gleichnamigen Feldern; der Plural sagt, dass es der Kern ist.
+from nebenkostenfix import anschrift as anschriften
 from nebenkostenfix.zeitraum import ein_jahr_nach, grenze, letzter_tag, tage
 from nebenkostenfix.frist import frist_status, einwendungsfrist, zustellwarnung
 from nebenkostenfix.heizung import (
@@ -1128,6 +1131,11 @@ def get_tenants():
             'property_name': t.apartment.property.name if t.apartment and t.apartment.property else 'Unknown',
             'gesperrt_bis': t.gesperrt_bis.isoformat() if t.gesperrt_bis else None,
             'anrede': t.anrede,
+            # Phase 58 (Issue #35): beide Anschriften roh, wie sie stehen.
+            # Welche gilt, entscheidet der Kern zum Zeitpunkt der Zustellung
+            # -- die Liste soll beide zeigen koennen.
+            'anschrift': t.anschrift,
+            'zustellanschrift': t.zustellanschrift,
             'ist_beispiel': beispielimmobilie.ist_beispiel(
                 t.apartment.property if t.apartment else None),
         })
@@ -1136,6 +1144,22 @@ def get_tenants():
 def _anrede_aus(eingabe):
     """Die eigene Anrede des Mieters (NK-264); leer heißt neutraler Gruß."""
     return eingabe.text('anrede', standard='', maxlaenge=200).strip() or None
+
+
+#: Grosszuegig fuer eine mehrzeilige Anschrift, eng genug, dass niemand
+#: einen Aufsatz in den Briefkopf schreibt.
+ANSCHRIFT_MAXLAENGE = 500
+
+
+def _anschrift_aus(eingabe, feld):
+    """Eine Anschrift aus dem Textfeld (Phase 58); leer heißt keine.
+
+    Der Kern räumt Ränder und Leerzeilen aus, bevor etwas gespeichert
+    wird: eine Leerzeile im Briefkopf hat niemand getippt, und ein Feld,
+    in dem nur ein Umbruch steht, ist keine Anschrift.
+    """
+    roh = eingabe.text(feld, standard='', maxlaenge=ANSCHRIFT_MAXLAENGE)
+    return anschriften.saeubern(roh) or None
 
 
 @app.route('/api/tenants', methods=['POST'])
@@ -1149,6 +1173,8 @@ def create_tenant():
         move_out_date=eingabe.datum('move_out_date'),
         last_billed_until=eingabe.datum('last_billed_until'),
         anrede=_anrede_aus(eingabe),
+        anschrift=_anschrift_aus(eingabe, 'anschrift'),
+        zustellanschrift=_anschrift_aus(eingabe, 'zustellanschrift'),
     )
     db.session.add(new_tenant)
     db.session.flush() # get id
@@ -1231,6 +1257,13 @@ def update_delete_tenant(id):
         tenant.last_billed_until = eingabe.datum('last_billed_until')
     if eingabe.vorhanden('anrede'):
         tenant.anrede = _anrede_aus(eingabe)
+    # Phase 58: nur wenn geschickt. Eine aeltere Oberflaeche soll die
+    # Anschrift nicht loeschen, weil sie das Feld noch nicht kennt; ein
+    # leer geschicktes Feld soll sie aber wirklich ausraeumen.
+    if eingabe.vorhanden('anschrift'):
+        tenant.anschrift = _anschrift_aus(eingabe, 'anschrift')
+    if eingabe.vorhanden('zustellanschrift'):
+        tenant.zustellanschrift = _anschrift_aus(eingabe, 'zustellanschrift')
 
     vertrag = eingabe.datei('contract_file')
     if vertrag:
@@ -3292,6 +3325,9 @@ def _vermieter_stand():
         'iban_quelle': quelle(iban_tabelle, iban_umgebung),
         'girocode_bereit': bool(name and iban),
         'art': zeile.art if zeile else None,
+        # Phase 58: ohne Herkunftsangabe -- anders als Name und IBAN hatte
+        # die Anschrift nie einen Rueckfall aus der Umgebung.
+        'anschrift': (zeile.anschrift or '') if zeile else '',
         'logo': vermieter_logo.pfad() is not None,
     }
 
@@ -3513,6 +3549,10 @@ def setze_vermieterdaten():
         if art and art not in ARTEN:
             raise EingabeFehler('Die Art des Vermieters ist „privat“ oder „firma“.', 'art')
         zeile.art = art or None
+    # Phase 58: wie die Art nur auf Zuruf, damit eine aeltere Oberflaeche
+    # die Anschrift stehen laesst statt sie stillschweigend zu leeren.
+    if eingabe.vorhanden('anschrift'):
+        zeile.anschrift = _anschrift_aus(eingabe, 'anschrift')
     zeile.aktualisiert_am = date.today()
     db.session.commit()
     return jsonify(_vermieter_stand())
