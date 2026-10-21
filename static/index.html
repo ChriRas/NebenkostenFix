@@ -2552,6 +2552,11 @@
                     <div class="form-group">
                         <label>Rechnungsdatum (Ausstellungsdatum auf dem Beleg)</label>
                         <input type="date" id="invoice-rechnungsdatum">
+                        <!-- Phase 64: auf einem Sammelbeleg gilt ein Datum oft für alle. -->
+                        <label class="haken-zeile" id="invoice-datum-beleg-zeile" hidden>
+                            <input type="checkbox" id="invoice-datum-fuer-beleg">
+                            Datum auch für <span id="invoice-datum-beleg-anzahl"></span> dieses Belegs übernehmen
+                        </label>
                     </div>
                     <!-- NK-124: die Tarifpreise (NK-055). Sie gehören zusammen:
                          entweder beide oder keine — so rechnet der Kern es. -->
@@ -3027,7 +3032,7 @@
     </div>
     <script src="/static/formular.js?v=2"></script>
     <script src="/static/umzug.js?v=1"></script>
-    <script src="/static/app.js?v=42"></script>
+    <script src="/static/app.js?v=44"></script>
 </body>
 
 </html>

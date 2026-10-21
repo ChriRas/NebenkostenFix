@@ -906,6 +906,66 @@ async function rechnungsJahrPruefen() {
 // Phase 62 (Issue #35, Nachtrag): die Zeitleiste folgt der Immobilie aus
 // dem Kopf und den Filtern der Liste. Gefahren wird die Adresse gegen einen
 // DOM-Stub, das Auffuellen der Auswahlfelder gegen ein Schein-<select>.
+// Abwärtskompatibel: Ein Schritt im Rechenweg ist seit Phase 61 ein Paar
+// [Text, Betrag], in 0.16 war er ein Text. Die Vorschau der
+// Jahresabrechnung zeigte das Paar als "Text,23.70".
+async function rechenwegTextPruefen() {
+    const m = appQuelle.match(/function rechenwegText\([^)]*\) \{[\s\S]*?\n\}/);
+    if (!m) throw new Error('rechenwegText nicht gefunden');
+    const euro = appQuelle.match(/const euroText = [^\n]*/)[0];
+    const rechenwegText = new Function(euro + '; ' + m[0] + '; return rechenwegText;')();
+    pruefe('Rechenweg: Paare aus Text und Betrag werden zum Satz mit Euro-Betrag',
+        rechenwegText([['Rechnungsbetrag', '1200.00'], ['anteilig 184 von 366 Tagen', '603.28']])
+            .replace(/\u00a0/g, ' ') === 'Rechnungsbetrag 1.200,00 € · anteilig 184 von 366 Tagen 603,28 €');
+    pruefe('Rechenweg: alte Schritte (reine Texte aus 0.16) bleiben unverändert',
+        rechenwegText(['1.200,00 € Rechnungsbetrag', 'anteilig = 603,28 €'])
+            === '1.200,00 € Rechnungsbetrag · anteilig = 603,28 €'
+        && rechenwegText(undefined) === '');
+    pruefe('Rechenweg: die Vorschau der Jahresabrechnung nutzt rechenwegText',
+        /rechenwegText\(zeile\.rechenweg\)/.test(appQuelle)
+        && !/\(zeile\.rechenweg \|\| \[\]\)\.join/.test(appQuelle));
+}
+
+async function belegDatumPruefen() {
+    const m = appQuelle.match(/function belegDatumAnbieten\([^)]*\) \{[\s\S]*?\n\}/);
+    if (!m) throw new Error('belegDatumAnbieten nicht gefunden');
+    const felder = {
+        'invoice-document-id': { value: '7' }, 'invoice-id': { value: '' },
+        'invoice-datum-beleg-zeile': { hidden: true },
+        'invoice-datum-beleg-anzahl': { textContent: '' },
+        'invoice-datum-fuer-beleg': { checked: true },
+    };
+    const bau = rechnungen => new Function('document', 'invoices', m[0] + '; return belegDatumAnbieten;')(
+        { getElementById: id => felder[id] }, rechnungen);
+    const sammel = [{ id: 1, invoice_document_id: 7 }, { id: 2, invoice_document_id: 7 },
+                    { id: 3, invoice_document_id: 8 }];
+
+    bau(sammel)();
+    pruefe('Phase 64: am Sammelbeleg erscheint der Haken, er ist nie vorbelegt',
+        !felder['invoice-datum-beleg-zeile'].hidden && !felder['invoice-datum-fuer-beleg'].checked
+        && felder['invoice-datum-beleg-anzahl'].textContent.includes('2'));
+    felder['invoice-id'].value = '1';
+    bau(sammel)();
+    pruefe('Phase 64: beim Bearbeiten zählt die eigene Rechnung nicht mit',
+        !felder['invoice-datum-beleg-zeile'].hidden
+        && felder['invoice-datum-beleg-anzahl'].textContent === 'die andere Rechnung');
+    felder['invoice-document-id'].value = '8';
+    felder['invoice-id'].value = '3';
+    bau(sammel)();
+    pruefe('Phase 64: allein auf dem Beleg gibt es keinen Haken',
+        felder['invoice-datum-beleg-zeile'].hidden);
+    felder['invoice-document-id'].value = '';
+    bau(sammel)();
+    pruefe('Phase 64: ohne Beleg gibt es keinen Haken', felder['invoice-datum-beleg-zeile'].hidden);
+
+    const umschalter = appQuelle.match(/function toggleInvoiceFileUpload\(\) \{[\s\S]*?\n\}/)[0];
+    const speichern = appQuelle.match(/async function saveInvoice\(\) \{[\s\S]*?\n\}/)[0];
+    pruefe('Phase 64: der Haken folgt dem gewählten Beleg und geht mit dem Speichern',
+        umschalter.includes('belegDatumAnbieten()')
+        && /rechnungsdatum_fuer_beleg/.test(speichern)
+        && /beleg_datum_gesetzt/.test(speichern));
+}
+
 async function zeitleisteFilterPruefen() {
     const funktion = name => {
         const m = appQuelle.match(new RegExp(`function ${name}\\([^)]*\\) \\{[\\s\\S]*?\\n\\}`));
@@ -2297,6 +2357,8 @@ async function zaehlerPflegePruefen() {
         ['hausgeldPruefungPruefen', 'Phase 50: Hausgeld-Prüfung'],
         ['rechnungsJahrPruefen', 'Phase 57: Jahresfilter-Prüfung'],
         ['zeitleisteFilterPruefen', 'Phase 62: Zeitleistenfilter-Prüfung'],
+        ['rechenwegTextPruefen', 'Rechenweg-Text-Prüfung'],
+        ['belegDatumPruefen', 'Phase 64: Belegdatum-Prüfung'],
         ['anschriftenPruefen', 'Phase 58: Anschriften-Prüfung'],
     ];
     for (const [name, label] of schritte) {

@@ -2737,8 +2737,24 @@ def create_invoice():
         co2_emission_kg=felder['co2_emission_kg'],
     )
     db.session.add(invoice)
+    db.session.flush()
+    antwort = {'id': invoice.id}
+    _datum_fuer_den_beleg(eingabe, invoice, antwort)
     db.session.commit()
-    return jsonify({'id': invoice.id}), 201
+    return jsonify(antwort), 201
+
+
+def _datum_fuer_den_beleg(eingabe, invoice, antwort):
+    """Auf Wunsch bekommen alle Rechnungen desselben Belegs dieses
+    Rechnungsdatum (Sammelbeleg, ein Ausstellungsdatum für alle). Ein leeres
+    Datum wird nie auf die anderen übertragen."""
+    if not (eingabe.wahrheit('rechnungsdatum_fuer_beleg')
+            and invoice.invoice_document_id and invoice.rechnungsdatum):
+        return
+    antwort['beleg_datum_gesetzt'] = CostInvoice.query.filter(
+        CostInvoice.invoice_document_id == invoice.invoice_document_id,
+        CostInvoice.id != invoice.id,
+    ).update({'rechnungsdatum': invoice.rechnungsdatum}, synchronize_session=False)
 
 @app.route('/api/invoices/<int:id>', methods=['PUT'])
 def update_invoice(id):
@@ -2790,9 +2806,11 @@ def update_invoice(id):
     invoice.heizkostenart = felder['heizkostenart']
     invoice.co2_kosten = felder['co2_kosten']
     invoice.co2_emission_kg = felder['co2_emission_kg']
-    
+
+    antwort = {'id': invoice.id}
+    _datum_fuer_den_beleg(eingabe, invoice, antwort)
     db.session.commit()
-    return jsonify({'id': invoice.id}), 200
+    return jsonify(antwort), 200
 
 @app.route('/api/invoices/<int:id>', methods=['DELETE'])
 def delete_invoice(id):

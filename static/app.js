@@ -5405,6 +5405,20 @@ function toggleInvoiceFileUpload() {
         document.getElementById('group-invoice-file').style.display = 'block';
         document.getElementById('group-invoice-pages').style.display = 'none';
     }
+    belegDatumAnbieten();
+}
+
+// Phase 64: hängen weitere Rechnungen am gewählten Beleg, darf das
+// Rechnungsdatum für alle gelten. Freiwillig: der Haken ist nie vorbelegt.
+function belegDatumAnbieten() {
+    const docId = Number(document.getElementById('invoice-document-id').value);
+    const eigene = Number(document.getElementById('invoice-id').value);
+    const weitere = docId
+        ? invoices.filter(i => i.invoice_document_id === docId && i.id !== eigene).length : 0;
+    document.getElementById('invoice-datum-beleg-zeile').hidden = weitere === 0;
+    document.getElementById('invoice-datum-beleg-anzahl').textContent =
+        weitere === 1 ? 'die andere Rechnung' : `die ${weitere} anderen Rechnungen`;
+    document.getElementById('invoice-datum-fuer-beleg').checked = false;
 }
 
 // --- Eingang -----------------------------------------------------
@@ -6006,6 +6020,8 @@ async function saveInvoice() {
     // NK-124: das Ausstellungsdatum des Belegs, freiwillig wie im Modell.
     const rechnungsdatum = document.getElementById('invoice-rechnungsdatum').value;
     if (rechnungsdatum) formData.append('rechnungsdatum', rechnungsdatum);
+    const fuerBeleg = document.getElementById('invoice-datum-fuer-beleg');
+    if (docId && rechnungsdatum && fuerBeleg.checked) formData.append('rechnungsdatum_fuer_beleg', 'true');
     // NK-124: die Tarifpreise wandern nur zusammen (dieselbe Regel wie der
     // CHECK in der Datenbank: ein Preis ohne Partner waere gelogen).
     const preisHt = document.getElementById('invoice-preis-ht').value;
@@ -6069,10 +6085,14 @@ async function saveInvoice() {
             body: formData
         });
         if(!res.ok) throw await serverFehler(res);
+        const gespeichert = await res.json();
         // In „Alle Rechnungen“ bleibt die neue Rechnung gewählt.
         if (!invId && btn.closest('.als-spalte') && kostenAnsicht === 'alle') {
             verwirfNeueDatei();
-            eingangRechnung = (await res.json()).id;
+            eingangRechnung = gespeichert.id;
+        }
+        if (gespeichert.beleg_datum_gesetzt) {
+            showSuccess(`Rechnungsdatum auch bei ${gespeichert.beleg_datum_gesetzt} weiteren Rechnungen des Belegs gesetzt.`);
         }
         closeAddInvoiceModal();
         fetchInvoices();
@@ -7313,6 +7333,11 @@ let jahrAktuell = 1;
 let jahrVorschau = {};
 
 const euroText = betrag => Number(betrag || 0).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
+
+// Ein Schritt ist seit Phase 61 ein Paar [Text, Betrag], in 0.16 war er ein Text.
+function rechenwegText(schritte) {
+    return (schritte || []).map(s => Array.isArray(s) ? `${s[0]} ${euroText(s[1])}` : s).join(' · ');
+}
 // Ortszeit: new Date('2026-10-15') wäre UTC-Mitternacht, also nach heute 0 Uhr.
 const nachHeute = iso => String(iso || '').slice(0, 10) > new Date().toLocaleDateString('sv-SE');
 const datumText = iso => iso ? new Date(`${String(iso).slice(0, 10)}T00:00:00`).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—';
@@ -7525,7 +7550,7 @@ async function jahrVorschauLaden() {
             const daten = await res.json();
             jahrVorschau[m.id] = daten;
             const positionen = daten.line_items.map(zeile => {
-                const weg = (zeile.rechenweg || []).join(' · ');
+                const weg = rechenwegText(zeile.rechenweg);
                 const rechenwegHtml = weg ? '<br><span class="text-muted">' + escapeHtml(weg) + '</span>' : '';
                 return `<li><strong>${escapeHtml(zeile.category)}</strong>: ${escapeHtml(euroText(zeile.tenant_cost))}${rechenwegHtml}</li>`;
             }).join('');

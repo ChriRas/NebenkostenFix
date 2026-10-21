@@ -129,3 +129,32 @@ def test_die_detailansicht_bietet_csv_und_belege_an():
         encoding='utf-8')
     assert '/api/billing/reports/${id}/positionen.csv' in quelle
     assert '/api/billing/reports/${id}/belege' in quelle
+
+
+def _erlaeuterung(rechenweg):
+    from nebenkostenfix.csv_export import positionen_csv
+
+    text = positionen_csv({
+        'line_items': [{'category': 'Wasser', 'tenant_cost': Decimal('603.28'),
+                        'billing_type': 'qm', 'description': 'Beschreibung',
+                        'rechenweg': rechenweg}],
+        'total_amount': '603.28', 'prepaid_amount': '0.00', 'balance': '603.28',
+    })
+    return list(csv.reader(io.StringIO(text), delimiter=';'))[1][12]
+
+
+def test_der_rechenweg_steht_als_satz_in_der_csv_nicht_als_liste():
+    """Abwaertskompatibel: Seit Phase 61 ist ein Schritt ein Paar aus Text
+    und Betrag (im Schnappschuss als JSON-Liste), vorher war er ein Text.
+    Die Spalte 'Erlaeuterung' bekam beides als Python-Darstellung
+    ("[['Rechnungsbetrag', '1200.00'], ...]"). Beide Formen werden zu
+    lesbaren Schritten, getrennt mit ' · '."""
+    neu = _erlaeuterung([['Rechnungsbetrag', '1200.00'],
+                         ['anteilig 184 von 366 Tagen', '603.28']])
+    assert neu == 'Rechnungsbetrag 1.200,00 € · anteilig 184 von 366 Tagen 603,28 €'
+
+    alt = _erlaeuterung(['1.200,00 € Rechnungsbetrag', 'anteilig = 603,28 €'])
+    assert alt == '1.200,00 € Rechnungsbetrag · anteilig = 603,28 €'
+
+    assert _erlaeuterung(None) == 'Beschreibung'
+    assert _erlaeuterung([['=Formel', '1']]).startswith("'=")
