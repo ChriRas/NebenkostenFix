@@ -19,6 +19,7 @@ from nebenkostenfix.geld import NULL
 from nebenkostenfix import betrkv
 from nebenkostenfix import pdf_stil
 from nebenkostenfix import pdf_uebersicht
+from nebenkostenfix.rechenkern import VERMIETERANTEIL_VORSATZ
 from nebenkostenfix.zeitraum import HINWEIS_TAGESKONVENTION
 from nebenkostenfix import marke
 from nebenkostenfix.abrechnung_version import SOFTWARE_VERSION, REGEL_VERSION
@@ -45,10 +46,28 @@ def vermieter_anschrift() -> str:
     return (zeile.anschrift or '').strip() if zeile else ''
 
 
-#: Das Zeichen vor einem Rechenschritt. Vorher stand hier „↳" -- das
-#: gibt es in WinAnsi nicht, und auf dem Blatt erschien ein schwarzer
-#: Kasten. Der Gedankenstrich sagt dasselbe und ist in jeder Schrift da.
-RECHENWEG_ZEICHEN = '– '
+def zahlungssatz(saetze: dict, iban: str | None) -> str:
+    """Der Satz „Bitte überweisen Sie … auf das Konto mit der IBAN …".
+
+    Die IBAN steht darin in **einer** Zeile. Durchsicht am 2026-10-22: Vorher
+    brach der Absatz mitten durch sie hindurch („… IBAN DE89" / „3704 0044
+    …"), und eine halbe Kontonummer am Zeilenende liest sich wie ein
+    Tippfehler. Geschützte Leerzeichen halten die Vierergruppen zusammen;
+    der Umbruch sucht sich die Stelle davor.
+
+        >>> satz = zahlungssatz({'konto': 'mein Konto'}, 'DE89370400440532013000')
+        >>> 'DE89\u00a03704\u00a00044\u00a00532\u00a00130\u00a000' in satz
+        True
+        >>> zahlungssatz({'bekanntes_konto': 'das bekannte Konto'}, None)
+        'Bitte überweisen Sie den ausstehenden Betrag innerhalb von 14 Tagen auf das bekannte Konto.'
+    """
+    if iban:
+        konto = (f"{saetze['konto']} mit der IBAN "
+                 f"{_format_iban_display(iban).replace(' ', chr(0xa0))}")
+    else:
+        konto = saetze['bekanntes_konto']
+    return ("Bitte überweisen Sie den ausstehenden Betrag innerhalb von "
+            f"14 Tagen auf {konto}.")
 
 
 def stichtag_hinweis(detail: dict) -> str:
@@ -173,6 +192,11 @@ class PDFGenerator:
         self.styles.add(ParagraphStyle(name='TableCell', fontName='Helvetica', fontSize=9, leading=12))
         self.styles.add(ParagraphStyle(name='TableCellRight', fontName='Helvetica', fontSize=9, leading=12, alignment=2))
         self.styles.add(ParagraphStyle(name='SubTableCell', fontName='Helvetica', fontSize=8, leading=11, leftIndent=10, textColor=COLOR_MUTED))
+        # Phase 61: Der Teilposten liest sich wie die Umlage darüber, nur
+        # eingerückt. Vorher war er kleiner, grau und trug einen
+        # Gedankenstrich -- drei Signale für dasselbe, und in einer Tabelle,
+        # in der andere Zeilen ihren Satz schwarz und oben tragen.
+        self.styles.add(ParagraphStyle(name='Teilposten', fontName='Helvetica', fontSize=8.5, leading=11.5, leftIndent=12))
         self.styles.add(ParagraphStyle(name='SectionHeader', fontName='Helvetica-Bold', fontSize=10, leading=14, textColor=colors.white))
         self.styles.add(ParagraphStyle(name='TotalCell', fontName='Helvetica-Bold', fontSize=10, leading=14))
         self.styles.add(ParagraphStyle(name='TotalCellRight', fontName='Helvetica-Bold', fontSize=10, leading=14, alignment=2))
@@ -482,23 +506,37 @@ class PDFGenerator:
 
         positionen = (landlord_share or {}).get('positions') or []
         if positionen:
-            elemente.append(Spacer(1, 12))
-            elemente.append(Paragraph(
-                "<b>Vermieteranteil (nicht auf die Mieter umgelegt)</b>",
-                self.styles['TableCell']))
+            # Phase 61 (Durchsicht am 2026-10-22): **eine Tabelle, kein Fließtext.**
+            # Vorher stand je Position ein Satz, der mit „— Nicht auf die
+            # Mieter umgelegt:" anfing -- an jeder einzelnen Zeile, obwohl die
+            # Überschrift darüber genau das sagt. Der Betrag hing hinten am
+            # Satz und brach um, sodass das Eurozeichen in der nächsten Zeile
+            # allein stand. Jetzt: links die Position mit ihrem Grund, rechts
+            # der Betrag, darunter die Summe.
+            saetze = pdf_stil.stile(self.stil)
+            elemente.append(Spacer(1, pdf_stil.XL))
+            elemente.append(Paragraph('Vermieteranteil (nicht auf die Mieter '
+                                      'umgelegt)', saetze['Zwischentitel']))
+            elemente.append(Spacer(1, pdf_stil.M))
+            zeilen = []
             for p in positionen:
-                elemente.append(Paragraph(
-                    f"{p.get('category')} — {p.get('description')}: "
-                    f"{self._deutsch(p.get('amount'))} €.",
-                    self.styles['TableCell']))
-            elemente.append(Paragraph(
-                f"Insgesamt beim Vermieter: "
-                f"{self._deutsch((landlord_share or {}).get('total_amount'))} € "
-                f"(Leerstand "
-                f"{self._deutsch((landlord_share or {}).get('leerstand_amount'))} €, "
-                f"Eigennutzung "
-                f"{self._deutsch((landlord_share or {}).get('eigennutzung_amount'))} €).",
-                self.styles['TableCell']))
+                grund = str(p.get('description') or '')
+                if grund.startswith(VERMIETERANTEIL_VORSATZ):
+                    grund = grund[len(VERMIETERANTEIL_VORSATZ):]
+                bezeichnung = p.get('category') or ''
+                if grund:
+                    bezeichnung = f"{bezeichnung} — {grund}"
+                zeilen.append((bezeichnung, pdf_stil.geld(p.get('amount')),
+                               False, None))
+            anteil = landlord_share or {}
+            zeilen.append((
+                f"Insgesamt beim Vermieter (Leerstand "
+                f"{pdf_stil.geld(anteil.get('leerstand_amount'))}, "
+                f"Eigennutzung {pdf_stil.geld(anteil.get('eigennutzung_amount'))})",
+                pdf_stil.geld(anteil.get('total_amount')), True, None))
+            elemente.append(pdf_stil.summenblock(
+                zeilen, self.stil, saetze, breite=pdf_stil.SATZBREITE,
+                ausrichtung='LEFT', schlicht=True))
 
         return elemente
 
@@ -639,8 +677,7 @@ class PDFGenerator:
         # erschlugen. Jetzt stehen sie als **eine** leise Zeile unter ihrer
         # Kostenart, dort, wo sie hingehoeren. Die Angaben sind dieselben.
         data = [
-            [Paragraph("Kostenart", saetze['Kopf']),
-             Paragraph("Umlage und Rechenweg", saetze['Kopf']),
+            [Paragraph("Kostenart und Umlage", saetze['Kopf']),
              Paragraph("Betrag (€)", saetze['KopfRechts'])]
         ]
 
@@ -683,7 +720,7 @@ class PDFGenerator:
             # im selben Dokument; eine Ueberschrift muss nicht schreien, um
             # eine Ueberschrift zu sein.
             data.append([Paragraph(escape(section_name.upper()),
-                                   saetze['Rubrik']), '', ''])
+                                   saetze['Rubrik']), ''])
             table_style.extend([
                 ('SPAN', (0, row_idx), (-1, row_idx)),
                 # Die Luft gehoert **ueber** die Rubrik: Dort trennt sie die
@@ -727,10 +764,12 @@ class PDFGenerator:
                 # Steht er, tragen die Tage ihn selbst -- der alte
                 # Zeitanteil-Anhang wuerde dasselbe zweimal sagen.
                 schritte = item.get('rechenweg') or []
+                zusatz = ''
                 if (not schritte and item.get('overlap_days')
                         and item.get('invoice_days')
                         and item['overlap_days'] < item['invoice_days']):
-                    details += f", anteilig {item['overlap_days']} von {item['invoice_days']} Tagen"
+                    zusatz = (f"anteilig {item['overlap_days']} von "
+                              f"{item['invoice_days']} Tagen")
                     anteilig_ausgewiesen = True
 
                 # Ein Teilposten, der nur die Zeilenbeschreibung wiederholt
@@ -740,7 +779,7 @@ class PDFGenerator:
                 # Eigenverbrauch, Allgemeinanteil) bleiben.
                 folgeposten = [
                     s for s in item.get('sub_items') or []
-                    if not (schritte and s['description'] == item['description'])
+                    if s['description'] != item['description']
                 ]
                 # Phase 60: Der Rechenweg steht **in derselben Zelle** wie die
                 # Umlage, nicht als eigene Tabellenzeile. Als eigene Zeile
@@ -762,16 +801,65 @@ class PDFGenerator:
                 # Umlage mit Zahlen („852,00 € nach Wohnfläche 62 von 186 m²
                 # = 284,00 €"). Die Beschreibung daneben saegte denselben
                 # Satz ohne Zahlen noch einmal.
-                umlage = list(schritte) if schritte else (
-                    [details] if details and not has_sub else [])
-                main_details = '<br/>'.join(escape(z) for z in umlage)
+                # Phase 61 (Durchsicht am 2026-10-22): **Jede Zeile hat dieselbe
+                # Form.** Vorher blieb die Zelle bei Positionen mit
+                # Teilposten leer, und darunter standen eingerückte graue
+                # Zeilen -- in derselben Tabelle, in der andere Zeilen ihren
+                # Satz oben und schwarz trugen. „Manchmal schwarz, manchmal
+                # weiter unten versetzt in hellgrau": zwei Formen für
+                # dieselbe Sache. Jetzt steht die Umlage immer oben, auf
+                # Höhe ihres Betrags; die Teilposten folgen darunter in
+                # derselben Schrift.
+                # Eine Zeile sagt die Umlage **einmal**. Lesen sich die
+                # Teilposten zusammen schon wie die Beschreibung
+                # („Eigenverbrauch (32,7 m³) + Anteil Allgemein (…)"),
+                # dann stuende sie darueber und darunter dasselbe. Die
+                # Tageszahl faellt dabei nicht mit weg: Sie steht in keinem
+                # Teilposten und ist R-NUM-03.
+                deckt_ab = bool(folgeposten) and all(
+                    s['description'] in details for s in folgeposten)
+                if schritte:
+                    # Die Schritte sagen die Umlage mit Zahlen
+                    # („nach Wohnfläche 52,40 von 210,00 m²  2,25 €").
+                    # Die Beschreibung daneben sagte denselben Satz ohne
+                    # Zahlen noch einmal. Die Tageszahl steckt als eigener
+                    # Schritt schon drin.
+                    umlage = []
+                elif deckt_ab or not details:
+                    umlage = [zusatz] if zusatz else []
+                else:
+                    umlage = [f"{details}, {zusatz}" if zusatz else details]
+                # Phase 61: **Zwei Spalten statt dreier.** Die
+                # Rechenschritte brauchen 240 bis 310 pt für eine Zeile --
+                # in einer 200 pt breiten Spalte bricht jeder von ihnen um,
+                # und aus zwei Schritten werden vier Zeilen. Keine Aufteilung
+                # in drei Spalten löst das: Die Kostenart-Spalte braucht
+                # ihrerseits 190 pt für die Angabenzeile. Also steht jetzt
+                # alles zu einer Position **untereinander in einer Zelle** --
+                # Name, Rechenweg, Herkunft --, und daneben der Betrag. Jede
+                # Zeile passt, nichts bricht um.
+                # Die Herkunftszeile steht **direkt unter dem Namen**
+                # (Durchsicht am 2026-10-22). Vorher schloss sie die Zelle ab --
+                # das hiess „schliesst die Position ab" nur dort, wo keine
+                # Teilposten folgten; bei Zaehlerpositionen stand sie
+                # mittendrin. Jetzt ist ihr Platz immer derselbe, egal was
+                # folgt: Name, woher, wie gerechnet.
+                zeilen = [f"<b>{escape(item['category'])}</b>"]
+                if angabenzeile:
+                    zeilen.append(f"<font size=7.5 color='{self.leise_markup}'>"
+                                  f"{angabenzeile}</font>")
+                zeilen += [escape(z) for z in umlage]
+                zelle = [Paragraph('<br/>'.join(zeilen),
+                                   self.styles['TableCell'])]
+                # Phase 61: Steht ein Rechenweg, kommt er als eigene kleine
+                # Aufstellung dazu -- links der Schritt, rechts sein
+                # Ergebnis, rechtsbündig untereinander. Vorher war jeder
+                # Schritt ein Satz mit „=", und weil der nächste wieder mit
+                # dem Zwischenergebnis anfing, stand jede Zahl zweimal.
+                if schritte:
+                    zelle.append(pdf_stil.rechenweg(schritte, self.stil, saetze))
                 data.append([
-                    Paragraph(
-                        f"<b>{escape(item['category'])}</b><br/>"
-                        f"<font size=7.5 color='{self.leise_markup}'>"
-                        f"{angabenzeile}</font>",
-                        self.styles['TableCell']),
-                    Paragraph(main_details, self.styles['TableCell']),
+                    zelle,
                     Paragraph(pdf_stil.geld(item['tenant_cost'], waehrung=False),
                               self.styles['TableCellRight'])
                 ])
@@ -790,10 +878,9 @@ class PDFGenerator:
                 if folgeposten:
                     for i, sub in enumerate(folgeposten):
                         is_last = i == len(folgeposten) - 1
-                        prefix = RECHENWEG_ZEICHEN
                         data.append([
-                            '',
-                            Paragraph(f"{prefix}{sub['description']}", self.styles['SubTableCell']),
+                            Paragraph(escape(sub['description']),
+                                      self.styles['Teilposten']),
                             Paragraph(pdf_stil.geld(sub['cost'], waehrung=False),
                                       self.styles['TableCellRight'])
                         ])
@@ -815,15 +902,10 @@ class PDFGenerator:
             data.append([
                 Paragraph(f"Zwischensumme {section_name}",
                           self.styles['TotalCellRight']),
-                '',
                 Paragraph(pdf_stil.geld(section_data['total'], waehrung=False),
                           self.styles['TotalCellRight'])
             ])
             table_style.extend([
-                # Beide linken Spalten zusammen: „Zwischensumme Wasser &
-                # Abwasser" brach sonst um, und „Betriebskosten" stand als
-                # eigene Zeile da -- als waere es eine zweite Rubrik.
-                ('SPAN', (0, row_idx), (1, row_idx)),
                 ('TOPPADDING', (0, row_idx), (-1, row_idx), 8),
                 ('BOTTOMPADDING', (0, row_idx), (-1, row_idx), 8),
                 ('LINEABOVE', (0, row_idx), (-1, row_idx), 0.5, COLOR_MUTED),
@@ -846,11 +928,12 @@ class PDFGenerator:
             saldo_wort, saldo_farbe = 'Saldobetrag', None
 
         # Die Betragsspalte bleibt schmal, der Rest teilt sich den Platz.
-        # Gemessen, nicht geschaetzt: Die leise Angabenzeile („Anbieter ·
-        # Rechnung Nr. … vom …") braucht bei 7,5 pt rund 190 pt. Blieb die
-        # Spalte darunter, brach sie um, und unter jeder Kostenart stand ein
-        # zweizeiliger grauer Rest -- genau das, was unordentlich aussah.
-        table = Table(data, colWidths=[200, 200, 70], repeatRows=1)
+        # 390 pt für den Text, 80 für den Betrag. Gemessen am längsten,
+        # was vorkommt: ein Rechenschritt („732,00 € Rechnungsbetrag,
+        # anteilig 275 von 366 Tagen = 550,00 €") braucht 267 pt, ein
+        # Teilposten mit Personentagen 307, die Angabenzeile bei 7,5 pt
+        # rund 300. Alles passt in eine Zeile.
+        table = Table(data, colWidths=[390, 80], repeatRows=1)
         table.setStyle(TableStyle(table_style))
         elements.append(table)
         elements.append(Spacer(1, pdf_stil.M))
@@ -897,10 +980,9 @@ class PDFGenerator:
         saetze = anschreiben_saetze(vermieter_art())
         zahlungsblock = []
         if balance > 0:
-            iban = vermieter_ausweis()[1]
-            konto = (f"{saetze['konto']} mit der IBAN {_format_iban_display(iban)}"
-                     if iban else saetze['bekanntes_konto'])
-            zahlungsblock.append(Paragraph(f"Bitte überweisen Sie den ausstehenden Betrag innerhalb von 14 Tagen auf {konto}.", self.styles['HeaderNormal']))
+            zahlungsblock.append(Paragraph(
+                zahlungssatz(saetze, vermieter_ausweis()[1]),
+                self.styles['HeaderNormal']))
         zahlungsblock.append(Paragraph(saetze['rueckfragen'], self.styles['HeaderNormal']))
         # GiroCode (EPC-QR) -- nur bei Nachzahlung. NK-270: Satz und Kasten
         # bleiben zusammen direkt nach der Belegliste; passt der Block nicht
@@ -1114,8 +1196,13 @@ class PDFGenerator:
                 # Wie oben: die Summe der Spalten passt in den Satz.
                 t = Table(box_data, colWidths=[340, 130])
                 t.setStyle(TableStyle(box_style))
-                elements.append(t)
-                elements.append(Spacer(1, 20))
+                # Phase 61 (Durchsicht am 2026-10-22): Der Kasten bleibt
+                # zusammen. Vorher rutschte die letzte Zeile -- „GESAMT
+                # WASSERVERSORGUNG" samt Rahmenkante -- allein auf die
+                # nächste Seite, während der Rest des Nachweises oben
+                # stand. Passt er nicht mehr, fängt er auf der nächsten
+                # Seite als Ganzes an.
+                elements.append(KeepTogether([t, Spacer(1, 20)]))
 
 
         doc.build(elements, onFirstPage=_fuss_zeichnen, onLaterPages=_fuss_zeichnen)

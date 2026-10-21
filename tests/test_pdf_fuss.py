@@ -30,6 +30,7 @@ from nebenkostenfix import marke
 from nebenkostenfix.abrechnung_version import SOFTWARE_VERSION, REGEL_VERSION
 from reportlab.lib.pagesizes import A4
 from nebenkostenfix.pdf_generator import PDFGenerator
+from nebenkostenfix.rechenkern import Schritt
 
 FARM = 'Haus am Anger'
 
@@ -97,8 +98,9 @@ def _zeile(nummer: int) -> dict:
         'invoice_total_amount': Decimal('1200.00'),
         'prorated_amount': Decimal('603.28'),
         'rechenweg': [
-            '1200,00 € Rechnungsbetrag, anteilig 184 von 366 Tagen = 603,28 €',
-            '603,28 € nach Wohnfläche 50 von 100 qm = 301,64 €',
+            Schritt('Rechnungsbetrag', Decimal('1200.00')),
+            Schritt('anteilig 184 von 366 Tagen', Decimal('603.28')),
+            Schritt('nach Wohnfläche 50 von 100 m²', Decimal('301.64')),
         ],
         'sub_items': [
             {

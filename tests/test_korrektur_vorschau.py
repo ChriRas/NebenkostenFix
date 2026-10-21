@@ -12,6 +12,7 @@ Kennzeichen noch die Route (404).
 
 from nebenkostenfix.abrechnung_version import REGEL_VERSION
 from nebenkostenfix.models import BillingReportVersion, MeterReading, TenantBillingReport, db
+from nebenkostenfix.rechenkern import Schritt
 from tests.test_versionierung import _bericht, _finalisiere, _welt
 
 
@@ -214,7 +215,8 @@ def _alte_texte(wert):
     """Das Ergebnis, wie es eine ältere Fassung beschrieben hätte."""
     if isinstance(wert, dict):
         return {k: (f'{v} (alter Text)' if k == 'description' else
-                    [f'{s} qm' for s in v] if k == 'rechenweg' else _alte_texte(v))
+                    [s._replace(text=f'{s.text} qm') for s in v]
+                    if k == 'rechenweg' else _alte_texte(v))
                 for k, v in wert.items()}
     if isinstance(wert, list):
         return [_alte_texte(v) for v in wert]

@@ -27,6 +27,7 @@ import reportlab.rl_config
 
 from nebenkostenfix.pdf_generator import PDFGenerator
 from nebenkostenfix.rechenkern import (
+    Schritt,
     Heizungsanlage,
     Kategorie,
     Mieter,
@@ -39,6 +40,16 @@ from nebenkostenfix.rechenkern import (
     rechne,
     zahl_text,
 )
+
+def ausgewiesen(schritte) -> list:
+    """Die Schritte so, wie sie auf dem Blatt stehen: Text und Betrag.
+
+    Phase 61: Ein Schritt traegt seinen Wert als ``Decimal`` -- ungerundet,
+    denn gerundet wird erst beim Ausweisen (R-NUM-01). Festgenagelt wird
+    hier deshalb der **Ausweis**, nicht die Zwischenarithmetik.
+    """
+    return [(s.text, euro_text(s.betrag)) for s in schritte]
+
 
 JAHR_BEGINN = date(2024, 1, 1)
 JAHR_ENDE = date(2024, 12, 31)
@@ -104,8 +115,9 @@ def test_ganzjaehriger_mieter_hat_einen_schritt():
     zeile = wasserzeile(rechne(welt(rechnungen=(wasserrechnung(),))))
 
     assert zeile['tenant_cost'] == Decimal('600.00')
-    assert zeile['rechenweg'] == [
-        '1.200,00 € nach Wohnfläche 50 von 100 m² = 600,00 €',
+    assert ausgewiesen(zeile['rechenweg']) == [
+        ('Rechnungsbetrag', '1.200,00 €'),
+        ('nach Wohnfläche 50 von 100 m²', '600,00 €'),
     ]
 
 
@@ -122,9 +134,10 @@ def test_unterjaehriges_verhaeltnis_zeigt_tage_und_zwischenergebnis():
     assert zeile['overlap_days'] == 184
     assert zeile['invoice_days'] == 366
     assert zeile['tenant_cost'] == Decimal('301.64')
-    assert zeile['rechenweg'] == [
-        '1.200,00 € Rechnungsbetrag, anteilig 184 von 366 Tagen = 603,28 €',
-        '603,28 € nach Wohnfläche 50 von 100 m² = 301,64 €',
+    assert ausgewiesen(zeile['rechenweg']) == [
+        ('Rechnungsbetrag', '1.200,00 €'),
+        ('anteilig 184 von 366 Tagen', '603,28 €'),
+        ('nach Wohnfläche 50 von 100 m²', '301,64 €'),
     ]
 
 
@@ -143,8 +156,9 @@ def test_personen_rechnen_ueber_den_personentaganteil():
         if z['billing_type'] == 'personen')
 
     assert zeile['tenant_cost'] == Decimal('600.00')
-    assert zeile['rechenweg'] == [
-        '1.200,00 € nach Personentagen 366 von 732 = 600,00 €',
+    assert ausgewiesen(zeile['rechenweg']) == [
+        ('Rechnungsbetrag', '1.200,00 €'),
+        ('nach Personentagen 366 von 732', '600,00 €'),
     ]
 
 
@@ -207,7 +221,7 @@ def test_heizung_traegt_die_masse_als_ausgangswert():
     )))
 
     assert zeile['tenant_cost'] == Decimal('5700.00')
-    assert zeile['rechenweg'] == ['10.000,00 € Rechnungsbetrag']
+    assert ausgewiesen(zeile['rechenweg']) == [('Rechnungsbetrag', '10.000,00 €')]
     assert [p['cost'] for p in zeile['sub_items']] == [
         Decimal('4200.00'), Decimal('1500.00')]
 
@@ -226,8 +240,9 @@ def test_unterjaehrige_heizung_kuerzt_die_masse_mit_tagen():
     )))
 
     assert zeile['overlap_days'] == 184
-    assert zeile['rechenweg'] == [
-        '10.000,00 € Rechnungsbetrag, anteilig 184 von 366 Tagen = 5.027,32 €',
+    assert ausgewiesen(zeile['rechenweg']) == [
+        ('Rechnungsbetrag', '10.000,00 €'),
+        ('anteilig 184 von 366 Tagen', '5.027,32 €'),
     ]
 
 
@@ -358,8 +373,9 @@ def _qmzeile() -> dict:
         'invoice_total_amount': Decimal('1200.00'),
         'prorated_amount': Decimal('603.28'),
         'rechenweg': [
-            '1.200,00 € Rechnungsbetrag, anteilig 184 von 366 Tagen = 603,28 €',
-            '603,28 € nach Wohnfläche 50 von 100 m² = 301,64 €',
+            Schritt('Rechnungsbetrag', Decimal('1200.00')),
+            Schritt('anteilig 184 von 366 Tagen', Decimal('603.28')),
+            Schritt('nach Wohnfläche 50 von 100 m²', Decimal('301.64')),
         ],
         'sub_items': [
             {
@@ -378,8 +394,13 @@ def test_die_schritte_stehen_unter_der_zeile(unkomprimiert, detailliert):
     geklebt = _geklebt(_erzeuge([_qmzeile()], detailliert))
 
     assert '184von366Tagen' in geklebt
-    assert '1.200,00€Rechnungsbetrag,anteilig184von366Tagen=603,28€' in geklebt
-    assert '603,28€nachWohnfläche50von100m²=301,64€' in geklebt
+    # Phase 61: Text links, Betrag rechtsbündig in der Flucht. Kein „="
+    # mehr und kein Zwischenergebnis, das zweimal dasteht -- geprüft ist
+    # unverändert, dass **jeder** Schritt mit seinem Ergebnis auf dem
+    # Blatt steht (R-DOC-01 Punkt 6 und 7).
+    assert 'Rechnungsbetrag1.200,00€' in geklebt
+    assert 'anteilig184von366Tagen603,28€' in geklebt
+    assert 'nachWohnfläche50von100m²301,64€' in geklebt
     assert '301,64' in text
 
 
@@ -411,7 +432,7 @@ def test_echte_teilposten_bleiben_neben_dem_rechenweg(unkomprimiert):
         'billing_type': 'heizkosten',
         'invoice_total_amount': Decimal('10000.00'),
         'prorated_amount': Decimal('10000.00'),
-        'rechenweg': ['10.000,00 € Rechnungsbetrag'],
+        'rechenweg': [Schritt('Rechnungsbetrag', Decimal('10000.00'))],
         'sub_items': [
             {
                 'type': 'heizung_verbrauch',
@@ -427,7 +448,8 @@ def test_echte_teilposten_bleiben_neben_dem_rechenweg(unkomprimiert):
     }
     geklebt = _geklebt(_erzeuge([zeile]))
 
-    assert '10.000,00€Rechnungsbetrag' in geklebt
+    # Phase 61: Text links, Betrag rechts -- nicht mehr in einem Satz.
+    assert 'Rechnungsbetrag10.000,00€' in geklebt
     assert 'Verbrauchskosten70%' in geklebt
     # Phase 60: Betraege im ganzen Dokument mit Tausenderpunkt -- auf
     # einem Blatt voller vierstelliger Zahlen entscheidet der Punkt, ob
@@ -471,9 +493,12 @@ def test_der_rechenweg_erfindet_keinen_zeitanteil(unkomprimiert):
     zeile = _qmzeile()
     zeile['overlap_days'] = 366
     zeile['rechenweg'] = [
-        '1.200,00 € nach Wohnfläche 50 von 100 m² = 600,00 €',
+        Schritt('Rechnungsbetrag', Decimal('1200.00')),
+        Schritt('nach Wohnfläche 50 von 100 m²', Decimal('600.00')),
     ]
     geklebt = _geklebt(_erzeuge([zeile]))
 
     assert 'anteilig' not in geklebt
-    assert '1.200,00€nachWohnfläche50von100m²=600,00€' in geklebt
+    # Phase 61: Text links, Betrag rechtsbündig in der Flucht -- kein „="
+    # mehr, und jede Zahl steht einmal.
+    assert 'nachWohnfläche50von100m²600,00€' in geklebt

@@ -146,6 +146,37 @@ def stile(s: Stil) -> dict:
     }
 
 
+def rechenweg(schritte, s: Stil, saetze: dict, *, breite: int = 374) -> Table:
+    """Die Schritte einer Zeile: links die Rechnung, rechts ihr Ergebnis.
+
+    Phase 61. Vorher war jeder Schritt ein Satz mit Gleichheitszeichen, und
+    weil der nächste Schritt wieder mit dem Zwischenergebnis anfing, stand
+    jede Zahl zweimal. Rechtsbündig untereinander braucht es kein „="
+    mehr: Die Spalte **ist** die Gleichheit, und die unterste Zahl ist das
+    Ergebnis.
+
+    Jeder Schritt ist ein Paar (Text, Betrag) -- ein
+    ``rechenkern.Schritt``, oder was davon nach einer Runde durch JSON
+    uebrig ist: eine zweielementige Liste. Deshalb wird **entpackt** und
+    nicht nach Feldnamen gefragt; ein NamedTuple verspricht genau das.
+    """
+    rechts = 70
+    daten = []
+    for schritt in schritte:
+        text, betrag = schritt
+        daten.append([Paragraph(escape(text), saetze['Zelle']),
+                      Paragraph(geld(betrag), saetze['ZelleRechts'])])
+    tabelle = Table(daten, colWidths=[breite - rechts, rechts])
+    tabelle.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('TOPPADDING', (0, 0), (-1, -1), 1),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 1),
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+    ]))
+    return tabelle
+
+
 def kopfdaten(paare, s: Stil, saetze: dict, *, breite_links: int = 130) -> Table:
     """Beschriftung und Wert, eng gesetzt -- der Block unter dem Titel.
 

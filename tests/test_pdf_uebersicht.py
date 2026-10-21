@@ -31,6 +31,7 @@ import reportlab
 from nebenkostenfix import abrechnungsart, heizung
 from nebenkostenfix import pdf_uebersicht as uebersichtsblatt
 from nebenkostenfix.pdf_generator import PDFGenerator
+from nebenkostenfix.rechenkern import Schritt
 
 
 # --- PDF-Text lesen (wie tests/test_pdf_rechenweg.py) -------------------
@@ -92,7 +93,8 @@ def _posten() -> list[dict]:
             'billing_type': 'qm', 'invoice_days': 365, 'overlap_days': 365,
             'provider_name': 'Stadtwerke Musterstadt',
             'sub_items': [], 'rechenweg': [
-                '600,00 € nach Wohnfläche 50 von 100 m² = 300,00 €'],
+                Schritt('Rechnungsbetrag', Decimal('600.00')),
+                Schritt('nach Wohnfläche 50 von 100 m²', Decimal('300.00'))],
         },
         {
             'category': 'Allgemeinstrom',
@@ -352,10 +354,11 @@ def test_das_blatt_steht_vor_dem_detailteil(pdf):
     blaetter = [b for b in _blaetter(pdf) if b]
     mit_uebersicht = next(i for i, b in enumerate(blaetter)
                           if 'Kostenposition' in b)
-    # Phase 60: Die Aufstellung hat drei Spalten; ihr Kopf heißt jetzt
-    # „Umlage und Rechenweg" statt „Abrechnungszeitraum / Anbieter".
+    # Phase 61: Die Aufstellung hat zwei Spalten -- „Kostenart und Umlage"
+    # und den Betrag. Drei Spalten waren zu eng: Jeder Rechenschritt brach
+    # um. (Phase 60 hieß der Kopf noch „Umlage und Rechenweg".)
     mit_detail = next(i for i, b in enumerate(blaetter)
-                      if 'UmlageundRechenweg' in b)
+                      if 'KostenartundUmlage' in b)
 
     assert mit_uebersicht < mit_detail
 
@@ -367,7 +370,9 @@ def test_der_detailteil_bleibt_unberuehrt(app_ctx, unkomprimiert):
     """
     text = _geklebt(_pdf(detailliert=True))
 
-    assert 'nachWohnfläche50von100m²=300,00€' in text.replace(' ', '')
+    # Phase 61: Text links, Betrag rechtsbündig -- das „=" ist weg,
+    # die Spalte sagt es.
+    assert 'nachWohnfläche50von100m²300,00€' in text.replace(' ', '')
     assert 'StadtwerkeMusterstadt' in text
 
 
