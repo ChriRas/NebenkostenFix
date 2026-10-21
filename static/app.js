@@ -3107,13 +3107,43 @@ function zeigeInvoiceListe() {
 async function zeigeInvoiceZeitleiste() {
     pilleInvoiceAnsicht('pills-invoice-zeitleiste');
     document.getElementById('invoices-container').style.display = 'none';
-    document.getElementById('invoice-filter').style.display = 'none';
+    // Die Filterleiste bleibt stehen: die Zeitleiste ist eine zweite
+    // Ansicht derselben Auswahl, nicht ein zweiter Bestand.
+    document.getElementById('invoices-zeitleiste').style.display = 'block';
+    await ladeInvoiceZeitleiste();
+}
+
+function zeitleisteSichtbar() {
     const ziel = document.getElementById('invoices-zeitleiste');
-    ziel.style.display = 'block';
+    return !!ziel && ziel.style.display === 'block';
+}
+
+// Dieselben Filter wie renderInvoices(), dazu die Immobilie aus dem Kopf
+// (hausFilter). Ohne sie zeigte die Zeitleiste alle Immobilien, auch wenn
+// oben eine gewählt ist.
+function zeitleisteAdresse() {
+    const wert = id => (document.getElementById(id) || {}).value || '';
+    const teile = new URLSearchParams();
+    if (hausFilter) teile.set('property_id', String(hausFilter.id));
+    if (wert('invoice-jahr-filter')) teile.set('jahr', wert('invoice-jahr-filter'));
+    if (wert('invoice-category-filter')) teile.set('kategorie', wert('invoice-category-filter'));
+    if (wert('invoice-search').trim()) teile.set('suche', wert('invoice-search').trim());
+    const abfrage = teile.toString();
+    return '/api/invoices/zeitleiste' + (abfrage ? '?' + abfrage : '');
+}
+
+// Zählt jede Anfrage mit: beim Tippen in der Suche gilt nur die jüngste.
+let zeitleisteLauf = 0;
+
+async function ladeInvoiceZeitleiste() {
+    const lauf = ++zeitleisteLauf;
+    const ziel = document.getElementById('invoices-zeitleiste');
     try {
-        const res = await fetch('/api/invoices/zeitleiste');
+        const res = await fetch(zeitleisteAdresse());
         if (!res.ok) throw await serverFehler(res);
-        renderInvoiceZeitleiste(await res.json(), ziel);
+        const daten = await res.json();
+        if (lauf !== zeitleisteLauf) return;
+        renderInvoiceZeitleiste(daten, ziel);
     } catch (fehler) {
         console.error(fehler);
         zeigeMeldung(meldungZu(fehler,
@@ -3652,37 +3682,51 @@ function tabelleSortieren(knopf) {
 }
 window.tabelleSortieren = tabelleSortieren;
 
+// Füllt ein Filterfeld neu und behält die Wahl. Eine Wahl, zu der es
+// nichts mehr gibt, bleibt als Eintrag stehen: sonst wäre der Filter
+// still weg, und „Keine Treffer" hätte keinen sichtbaren Grund.
+function auswahlNachBestand(feld, werte, beschriftung) {
+    if (!feld) return;
+    const gewaehlt = feld.value;
+    const liste = gewaehlt && !werte.includes(gewaehlt) ? [...werte, gewaehlt] : werte;
+    while (feld.options.length > 1) feld.remove(1);
+    liste.forEach(w => {
+        const opt = document.createElement('option');
+        opt.value = w;
+        opt.textContent = beschriftung(w);
+        feld.appendChild(opt);
+    });
+    feld.value = gewaehlt;
+}
+
+// Das Jahr, das der Filter gerade zeigt -- oder null (alle, ohne Datum).
+function gefiltertesJahr() {
+    const wert = (document.getElementById('invoice-jahr-filter') || {}).value || '';
+    return /^\d{4}$/.test(wert) ? Number(wert) : null;
+}
+
 function renderInvoices() {
     const container = document.getElementById('invoices-container');
     if (!container) return;
     container.replaceChildren();
+    // Filter und Immobilienwahl rufen hierher; die Zeitleiste zieht mit.
+    if (zeitleisteSichtbar()) ladeInvoiceZeitleiste();
     
-    // Populate Category Dropdown if needed
+    // Die Auswahlfelder folgen dem Bestand bei jedem Zeichnen: ein neues
+    // Jahr erscheint sofort, nach einem Immobilienwechsel stehen nur deren
+    // Jahre da (Phase 62; vorher wurden sie nur einmal gefüllt).
     const catSelect = document.getElementById('invoice-category-filter');
-    if (catSelect && catSelect.options.length <= 1) {
-        const uniqueCats = [...new Set(invoices.map(i => i.category_name))].sort();
-        uniqueCats.forEach(c => {
-            const opt = document.createElement('option');
-            opt.value = c;
-            opt.textContent = zaehlerArtName(c);
-            catSelect.appendChild(opt);
-        });
-    }
-    
+    auswahlNachBestand(catSelect, [...new Set(invoices.map(i => i.category_name))].sort(),
+        zaehlerArtName);
+
     // Phase 57: die Jahre aus dem Bestand, das juengste zuerst; der
     // Altbestand ohne Datum steht am Ende, wie in der Zeitleiste.
     const jahrSelect = document.getElementById('invoice-jahr-filter');
-    if (jahrSelect && jahrSelect.options.length <= 1) {
-        const jahre = [...new Set(invoices.map(rechnungsJahr))];
-        const echte = jahre.filter(j => j !== OHNE_DATUM).sort().reverse();
-        if (jahre.includes(OHNE_DATUM)) echte.push(OHNE_DATUM);
-        echte.forEach(j => {
-            const opt = document.createElement('option');
-            opt.value = j;
-            opt.textContent = j === OHNE_DATUM ? 'Ohne Rechnungsdatum' : j;
-            jahrSelect.appendChild(opt);
-        });
-    }
+    const jahre = [...new Set(invoices.map(rechnungsJahr))];
+    const echte = jahre.filter(j => j !== OHNE_DATUM).sort().reverse();
+    if (jahre.includes(OHNE_DATUM)) echte.push(OHNE_DATUM);
+    auswahlNachBestand(jahrSelect, echte,
+        j => j === OHNE_DATUM ? 'Ohne Rechnungsdatum' : j);
 
     // Read filters
     const searchInput = document.getElementById('invoice-search');
@@ -5321,7 +5365,8 @@ async function openAddInvoiceModal(editInvoiceId = null, spalte = null) {
         document.getElementById('invoice-amount').value = '';
         document.getElementById('invoice-number').value = '';
         document.getElementById('invoice-description').value = '';
-        const year = new Date().getFullYear();
+        // Issue #35: wer sich ein Jahr ansieht, erfasst meist auch für dieses.
+        const year = gefiltertesJahr() || new Date().getFullYear();
         document.getElementById('invoice-start').value = `${year}-01-01`;
         document.getElementById('invoice-end').value = `${year}-12-31`;
         document.getElementById('invoice-rechnungsdatum').value = '';
@@ -6883,7 +6928,8 @@ async function oeffneRechnungstabelle() {
     document.getElementById('rt-anbieter').innerHTML = providers.map(a =>
         `<option value="${escapeHtml(a.name)}"></option>`).join('');
     const jahr = document.getElementById('rt-jahr');
-    if (!jahr.value) jahr.value = new Date().getFullYear() - 1;
+    if (gefiltertesJahr()) jahr.value = gefiltertesJahr();
+    else if (!jahr.value) jahr.value = new Date().getFullYear() - 1;
     document.getElementById('rt-zeilen').innerHTML = '';
     document.getElementById('rt-meldung').textContent = '';
     rtImmobilieGewaehlt();

@@ -5177,8 +5177,17 @@ def beispielimmobilie_entfernen():
 def zeitleiste_route():
     """Die Rechnungen nach Ausstellungsdatum (NK-144, D-57): Jahre und
     Monate absteigend, Altbestand ohne Rechnungsdatum in einer eigenen
-    Gruppe am Ende."""
-    return jsonify(zeitleiste.erstellen()), 200
+    Gruppe am Ende.
+
+    Die Filter der Rechnungsliste gelten hier mit (``property_id``,
+    ``jahr``, ``kategorie``, ``suche``) -- sonst zeigte die Zeitleiste
+    Rechnungen einer Immobilie, die oben gar nicht gewaehlt ist."""
+    return jsonify(zeitleiste.erstellen(
+        property_id=request.args.get('property_id', type=int),
+        jahr=request.args.get('jahr') or None,
+        kategorie=request.args.get('kategorie') or None,
+        suche=(request.args.get('suche') or '').strip() or None,
+    )), 200
 
 
 if __name__ == '__main__':

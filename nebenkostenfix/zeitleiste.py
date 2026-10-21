@@ -43,9 +43,47 @@ def _gruppe(monat: int) -> dict:
             'summe': None, 'rechnungen': []}
 
 
-def erstellen() -> dict:
-    """Die Zeitleiste: Jahre und Monate absteigend, Altbestand am Ende."""
-    rechnungen = CostInvoice.query.order_by(CostInvoice.id).all()
+#: Der Schluessel des Jahresfilters fuer Rechnungen ohne Rechnungsdatum --
+#: derselbe Wert wie ``OHNE_DATUM`` in static/app.js.
+OHNE_DATUM = 'ohne'
+
+
+def passt(rechnung: CostInvoice, *, property_id: int | None = None,
+          jahr: str | None = None, kategorie: str | None = None,
+          suche: str | None = None) -> bool:
+    """Dieselben Filter wie die Rechnungsliste (``renderInvoices`` in
+    static/app.js): Immobilie aus dem Kopf, Jahr des Rechnungsdatums,
+    Kostenart, Suche in Rechnungsnummer und Anbieter.
+
+    Die Zeitleiste ist eine zweite Ansicht derselben Auswahl. Zeigte sie
+    mehr als die Liste, waere der Filter oben eine Behauptung.
+    """
+    if property_id is not None and rechnung.property_id != property_id:
+        return False
+    if jahr:
+        datum = rechnung.rechnungsdatum
+        eigenes = str(datum.year) if datum else OHNE_DATUM
+        if eigenes != jahr:
+            return False
+    if kategorie and rechnung.category.name != kategorie:
+        return False
+    if suche:
+        nadel = suche.lower()
+        nummer = (rechnung.invoice_number or '').lower()
+        anbieter = (rechnung.provider.name if rechnung.provider else '').lower()
+        if nadel not in nummer and nadel not in anbieter:
+            return False
+    return True
+
+
+def erstellen(**filter_) -> dict:
+    """Die Zeitleiste: Jahre und Monate absteigend, Altbestand am Ende.
+
+    ``filter_`` nimmt die Schluessel von :func:`passt`; ohne sie zeigt die
+    Zeitleiste den ganzen Bestand.
+    """
+    rechnungen = [r for r in CostInvoice.query.order_by(CostInvoice.id).all()
+                  if passt(r, **filter_)]
 
     jahre: dict[int, dict] = {}
     ohne_datum = []

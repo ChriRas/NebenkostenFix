@@ -903,6 +903,72 @@ async function rechnungsJahrPruefen() {
         && /id="invoice-summe"/.test(html));
 }
 
+// Phase 62 (Issue #35, Nachtrag): die Zeitleiste folgt der Immobilie aus
+// dem Kopf und den Filtern der Liste. Gefahren wird die Adresse gegen einen
+// DOM-Stub, das Auffuellen der Auswahlfelder gegen ein Schein-<select>.
+async function zeitleisteFilterPruefen() {
+    const funktion = name => {
+        const m = appQuelle.match(new RegExp(`function ${name}\\([^)]*\\) \\{[\\s\\S]*?\\n\\}`));
+        if (!m) throw new Error(`${name} nicht gefunden`);
+        return m[0];
+    };
+    const felder = {};
+    const dokument = { getElementById: id => felder[id] };
+    const bau = new Function('document', 'hausFilter',
+        funktion('zeitleisteAdresse') + funktion('gefiltertesJahr')
+        + '; return { zeitleisteAdresse, gefiltertesJahr };');
+
+    let fns = bau(dokument, null);
+    pruefe('Phase 62: ohne Filter holt die Zeitleiste den ganzen Bestand',
+        fns.zeitleisteAdresse() === '/api/invoices/zeitleiste');
+
+    Object.assign(felder, {
+        'invoice-jahr-filter': { value: '2024' },
+        'invoice-category-filter': { value: 'Heizung' },
+        'invoice-search': { value: '  Stadtwerke ' },
+    });
+    fns = bau(dokument, { id: 7 });
+    const adresse = new URL(fns.zeitleisteAdresse(), 'http://x');
+    pruefe('Phase 62: die Zeitleiste fragt mit Immobilie, Jahr, Kostenart und Suche',
+        adresse.pathname === '/api/invoices/zeitleiste'
+        && adresse.searchParams.get('property_id') === '7'
+        && adresse.searchParams.get('jahr') === '2024'
+        && adresse.searchParams.get('kategorie') === 'Heizung'
+        && adresse.searchParams.get('suche') === 'Stadtwerke');
+
+    pruefe('Phase 62: das gefilterte Jahr wird beim Erfassen vorbelegt',
+        fns.gefiltertesJahr() === 2024
+        && /gefiltertesJahr\(\) \|\| new Date\(\)\.getFullYear\(\)/.test(funktion('openAddInvoiceModal'))
+        && /if \(gefiltertesJahr\(\)\) jahr\.value = gefiltertesJahr\(\)/.test(appQuelle));
+    felder['invoice-jahr-filter'].value = 'ohne';
+    pruefe('Phase 62: „Ohne Rechnungsdatum" belegt kein Jahr vor',
+        fns.gefiltertesJahr() === null);
+
+    // Ein Schein-<select>: options, remove, appendChild, value.
+    const feld = {
+        options: [{ value: '' }], value: '',
+        remove(i) { this.options.splice(i, 1); },
+        appendChild(o) { this.options.push(o); },
+    };
+    const auffuellen = new Function('document', funktion('auswahlNachBestand') + '; return auswahlNachBestand;')(
+        { createElement: () => ({}) });
+    auffuellen(feld, ['2025', '2024'], j => j);
+    feld.value = '2024';
+    auffuellen(feld, ['2026', '2025', '2024'], j => j);
+    pruefe('Phase 62: ein neues Jahr erscheint, die Wahl bleibt',
+        feld.options.map(o => o.value).join() === ',2026,2025,2024' && feld.value === '2024');
+    auffuellen(feld, ['2023'], j => j);
+    pruefe('Phase 62: eine Wahl ohne Bestand bleibt sichtbar stehen, statt still zu verschwinden',
+        feld.options.map(o => o.value).join() === ',2023,2024' && feld.value === '2024');
+
+    const zeichnen = funktion('renderInvoices');
+    pruefe('Phase 62: renderInvoices zieht die sichtbare Zeitleiste nach',
+        /if \(zeitleisteSichtbar\(\)\) ladeInvoiceZeitleiste\(\)/.test(zeichnen));
+    const umschalter = appQuelle.match(/async function zeigeInvoiceZeitleiste\(\) \{[\s\S]*?\n\}/)[0];
+    pruefe('Phase 62: die Filterleiste bleibt in der Zeitleiste stehen',
+        !/invoice-filter'\)\.style\.display = 'none'/.test(umschalter));
+}
+
 // Phase 58 (Issue #35, Punkt 1): die Anschriften im Mieterdialog und in den
 // Einstellungen. Der Fehler, der hier wehtut, ist der Rest aus dem vorigen
 // Mieter: Wer den Dialog fuellt, aber nicht raeumt, schickt die Abrechnung
@@ -2230,6 +2296,7 @@ async function zaehlerPflegePruefen() {
         ['kategorienPruefen', 'Phase 54: Kostenarten-Prüfung'],
         ['hausgeldPruefungPruefen', 'Phase 50: Hausgeld-Prüfung'],
         ['rechnungsJahrPruefen', 'Phase 57: Jahresfilter-Prüfung'],
+        ['zeitleisteFilterPruefen', 'Phase 62: Zeitleistenfilter-Prüfung'],
         ['anschriftenPruefen', 'Phase 58: Anschriften-Prüfung'],
     ];
     for (const [name, label] of schritte) {

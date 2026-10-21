@@ -150,5 +150,109 @@ def test_umschalter_und_container_sind_verdrahtet():
         'app.js hat keinen Cache-Buster oder faellt hinter v39 zurueck.')
     with open('static/app.js', encoding='utf-8') as datei:
         skript = datei.read()
-    assert "fetch('/api/invoices/zeitleiste')" in skript
+    assert 'fetch(zeitleisteAdresse())' in skript
     assert 'renderInvoiceZeitleiste' in skript
+
+
+# --- Phase 62 (Issue #35, Nachtrag): die Zeitleiste folgt den Filtern ---
+#
+# Befund: „Der Filter oben macht auf dieser Zeitleistenansicht keinen
+# Unterschied." Die Zeitleiste holte immer den ganzen Bestand, und ihre
+# Umschaltung blendete die Filterleiste aus. Bei gewaehlter Immobilie
+# standen unter „Ohne Rechnungsdatum" Rechnungen einer anderen.
+
+
+def _zweites_haus() -> Apartment:
+    anderes = Property(name='Nachbarhaus')
+    db.session.add(anderes)
+    db.session.flush()
+    wohnung = Apartment(name='Whg. N', property_id=anderes.id, sqm=40)
+    db.session.add(wohnung)
+    db.session.flush()
+    return wohnung
+
+
+def _alle_eintraege(koerper) -> list[dict]:
+    eintraege = [r for j in koerper['jahre'] for m in j['monate']
+                 for r in m['rechnungen']]
+    if koerper['ohne_datum']:
+        eintraege += koerper['ohne_datum']['rechnungen']
+    return eintraege
+
+
+def test_die_immobilie_aus_dem_kopf_filtert_auch_den_altbestand(app_ctx, auth_client):
+    immobilie, wohnung, kategorie = _vorbereitung()
+    nachbar = _zweites_haus()
+    _rechnung(wohnung, kategorie, '2024-01-01', '2024-12-31', '2025-02-01', '100.00')
+    _rechnung(nachbar, kategorie, '2019-01-01', '2019-12-31', None, '70.00')
+    _rechnung(nachbar, kategorie, '2019-01-01', '2019-12-31', None, '30.00')
+
+    koerper = auth_client.get(
+        f'/api/invoices/zeitleiste?property_id={immobilie.id}').get_json()
+    assert koerper['ohne_datum'] is None, 'Altbestand des Nachbarhauses steht in der Zeitleiste'
+    assert {e['property_name'] for e in _alle_eintraege(koerper)} == {'Zeitleistenhof'}
+    assert koerper['gesamt'] == 100.0
+
+    nur_nachbar = auth_client.get(
+        f'/api/invoices/zeitleiste?property_id={nachbar.property_id}').get_json()
+    assert nur_nachbar['jahre'] == []
+    assert nur_nachbar['ohne_datum']['summe'] == 100.0
+
+
+def test_das_jahr_filtert_und_ohne_waehlt_den_altbestand(app_ctx, auth_client,
+                                                         zwei_rechnungen):
+    _, wohnung, kategorie = _vorbereitung()
+    _rechnung(wohnung, kategorie, '2019-01-01', '2019-12-31', None, '5.00')
+
+    nur_2024 = auth_client.get('/api/invoices/zeitleiste?jahr=2024').get_json()
+    assert [j['jahr'] for j in nur_2024['jahre']] == [2024]
+    assert nur_2024['ohne_datum'] is None
+    assert nur_2024['gesamt'] == 300.0
+
+    ohne = auth_client.get('/api/invoices/zeitleiste?jahr=ohne').get_json()
+    assert ohne['jahre'] == []
+    assert ohne['ohne_datum']['summe'] == 5.0
+
+
+def test_kostenart_und_suche_filtern_wie_die_liste(app_ctx, auth_client,
+                                                   zwei_rechnungen):
+    _, wohnung, _ = _vorbereitung()
+    andere = CostCategory.query.filter(
+        CostCategory.id != CostCategory.query.first().id).first()
+    db.session.add(CostInvoice(
+        property_id=wohnung.property_id, apartment_id=wohnung.id,
+        category_id=andere.id, invoice_number='RE-4711',
+        start_date=date(2025, 1, 1), end_date=date(2025, 12, 31),
+        rechnungsdatum=date(2025, 6, 1), amount=Decimal('42.00')))
+    db.session.commit()
+
+    nach_art = auth_client.get('/api/invoices/zeitleiste',
+                               query_string={'kategorie': andere.name}).get_json()
+    assert nach_art['gesamt'] == 42.0
+
+    gesucht = auth_client.get('/api/invoices/zeitleiste?suche=re-47').get_json()
+    assert [e['kategorie_name'] for e in _alle_eintraege(gesucht)] == [andere.name]
+
+    ohne_filter = auth_client.get('/api/invoices/zeitleiste').get_json()
+    assert ohne_filter['gesamt'] == 492.0
+
+
+def test_die_ansicht_reicht_die_filter_weiter():
+    """Die Adresse der Zeitleiste traegt Immobilie und Filter, die Leiste
+    bleibt stehen, und jedes Neuzeichnen der Liste zieht sie nach."""
+    with open('static/app.js', encoding='utf-8') as datei:
+        skript = datei.read()
+    adresse = re.search(r'function zeitleisteAdresse\(\) \{[\s\S]*?\n\}', skript)
+    assert adresse, 'zeitleisteAdresse() fehlt'
+    for teil in ('hausFilter', 'property_id', 'invoice-jahr-filter',
+                 'invoice-category-filter', 'invoice-search'):
+        assert teil in adresse.group(0), f'{teil} fehlt in der Zeitleisten-Adresse'
+
+    umschalter = re.search(r'async function zeigeInvoiceZeitleiste\(\) \{[\s\S]*?\n\}', skript)
+    assert umschalter
+    assert "'invoice-filter').style.display = 'none'" not in umschalter.group(0), (
+        'Die Zeitleiste blendet die Filterleiste aus.')
+
+    zeichnen = re.search(r'function renderInvoices\(\) \{[\s\S]*?\n\}', skript)
+    assert zeichnen and 'ladeInvoiceZeitleiste()' in zeichnen.group(0), (
+        'renderInvoices laedt die sichtbare Zeitleiste nicht nach.')
