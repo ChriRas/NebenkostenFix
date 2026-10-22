@@ -55,14 +55,17 @@ Kurze Antworten stehen in den [häufigen Fragen](docs/handbuch/faq.md).
   und Beleg-Eingang: Beleg und Rechnungsformular nebeneinander; Dunkelmodus
 - **Immobilien und Wohnungen** mit beliebig vielen Einheiten und Umlageschlüsseln
 - **Mieter** mit Ein- und Auszug, anteilige Abrechnung und Leerstand inbegriffen, eigene Anrede je Mieter;
+  Wohnungs- und Zustellanschrift, nach dem Auszug geht die Abrechnung an die Zustellanschrift;
   Soll und Ist der Vorauszahlungen je Monat mit Zahlungserinnerung
-- **Rechnungen** einzeln, als Sammelrechnung oder als Tabelle, Belege als PDF oder Foto; die Tabelle lässt sich wie im Vorjahr vorbelegen
+- **Rechnungen** einzeln, als Sammelrechnung oder als Tabelle, Belege als PDF oder Foto; die Tabelle lässt sich wie im Vorjahr vorbelegen;
+  Auswahl nach Rechnungsdatum je Jahr mit Summenzeile
 - **Zähler** mit Beweisfoto, Zwischenablesung und Doppeltarif (HT/NT), Rückfrage bei unplausiblen Ständen;
   alle Zähler einer Immobilie in einem Rutsch ablesen, am Handy mit Foto von der Kamera; Zählerwechsel und Eichfrist
 - **Allgemeinverbrauch** (Hauptzähler abzüglich der Wohnungszähler) gemessen zwischen gemeinsamen Ablesungen,
   nach Personentagen geteilt; der Verbrauchsnachweis zeigt die Stände an den Stichtagen
 - **Heizkosten** nach HeizkostenV, CO₂-Kostenaufteilung nach Stufenmodell
-- **Abrechnung** als PDF mit Deckblatt, Anschreiben und Zahlungs-QR-Code (GiroCode), danach ein Vorschlag
+- **Abrechnung** als PDF: Brief mit Anschriften, Übersichtsblatt mit allen Kostenpositionen, dann der
+  Rechenweg je Position; bei Nachzahlung mit Zahlungs-QR-Code (GiroCode). Dazu ein Vorschlag
   zur Anpassung der Vorauszahlung (§ 560 Abs. 4 BGB); Lohnanteile nach § 35a EStG in eigener Tabelle,
   Belegeinsicht als Paket mit Belegen und Ablesefotos
 - **Korrektur** mit Vorschau alt → neu, zugunsten oder zulasten des Mieters; Abrechnungen nach älterem Regelstand
@@ -126,14 +129,15 @@ Store. Die Daten liegen wie beim Installer unter `Dokumente\NebenkostenFix`.
 - **Daten:** `Dokumente\NebenkostenFix`, im Installer änderbar und nie im Programmordner.
   Liegt „Dokumente“ in OneDrive, schlägt die App einen lokalen Ort vor.
 - **Update:** Die App meldet neue Versionen selbst (siehe [Updates](#updates)). Die neue
-  Setup-Exe über die alte zu installieren geht ebenso. Die Daten bleiben, vorher wird gesichert.
+  Setup-Exe über die alte zu installieren geht ebenso, die Daten bleiben. Gesichert wird
+  automatisch beim Update aus der App und bei jeder Änderung am Datenbankschema.
 - **Deinstallation:** Die Daten bleiben stehen, der Deinstaller sagt, wo sie liegen.
 - **Passwort vergessen:** Menü „Hilfe“. Ohne Anmeldung gibt es kein Passwort.
 
 Die Prüfsumme jeder Setup-Exe steht im Release (`SHA256SUMS.txt`):
 
 ```powershell
-Get-FileHash .\NebenkostenFix-0.10.0-Setup.exe -Algorithm SHA256
+Get-FileHash .\NebenkostenFix-0.17.0-Setup.exe -Algorithm SHA256
 ```
 
 **Warnung von Windows SmartScreen:** Die Setup-Exe ist nicht mit einem Code-Signing-Zertifikat
@@ -156,21 +160,6 @@ arm64.
 mkdir nebenkostenfix && cd nebenkostenfix
 # docker-compose.yml aus diesem Repository hierher kopieren
 ```
-
-<details>
-<summary>Solange das Paket nicht öffentlich ist: Anmeldung bei der Registry</summary>
-
-Das Abbild liegt unter `ghcr.io/nerbry72/nebenkostenfix`. Ist das Paket privat, braucht
-`docker` einmalig eine Anmeldung mit einem GitHub-Token mit dem Recht `read:packages`:
-
-```bash
-docker login ghcr.io -u <github-name>
-```
-
-Auf der Synology: Container Manager → Registry → Einstellungen, dort `ghcr.io` mit
-GitHub-Name und Token hinzufügen.
-
-</details>
 
 **2. Starten**
 
@@ -218,10 +207,10 @@ curl http://localhost:6060/api/health     # {"status":"ok", ...}
    Container nicht in `daten/` schreiben.
 4. **Starten:** Mit „Weiter“ bis „Fertig“. Der Container Manager lädt das Abbild und startet
    es.
-5. **Einmal-Code:** In der File Station `docker/nebenkostenfix/daten/ERSTEINRICHTUNG-CODE.txt`
-   öffnen.
-6. **Einrichten:** `http://<synology>:6060` im Browser öffnen, Konto anlegen und den Code
-   eintragen.
+5. **Einrichtung öffnen:** `http://<synology>:6060` im Browser öffnen. Erst dabei entsteht der
+   Einmal-Code.
+6. **Einmal-Code:** In der File Station `docker/nebenkostenfix/daten/ERSTEINRICHTUNG-CODE.txt`
+   öffnen, dann im Browser das Konto anlegen und den Code eintragen.
 
 #### Einstellungen
 
@@ -273,7 +262,7 @@ docker compose pull && docker compose up -d    # Update auf die neueste Version
 ```
 
 Nach einem Update passt die Anwendung das Datenbankschema beim Start selbst an und sichert
-vorher automatisch. Eine bestimmte Version starten Sie mit `NK_VERSION=0.10.0` in der `.env`.
+vorher automatisch. Eine bestimmte Version starten Sie mit `NK_VERSION=0.17.0` in der `.env`.
 
 Tritt ein unerwarteter Fehler auf, zeigt die Anwendung eine **Vorgangsnummer**. Unter dieser
 Nummer steht im Protokoll, was passiert ist:
@@ -338,7 +327,7 @@ Belege, Vermieterdaten, Logo und Einstellungen sowie eine Prüfsumme je Datei. I
 steht das unter Einstellungen → Datensicherung. Auf der Kommandozeile:
 
 ```bash
-docker compose exec web flask backup create
+docker compose exec web flask backup create --ziel /data/backups
 docker compose exec web flask backup info /data/backups/sicherung-20260315-030000.nkfix
 ```
 
@@ -384,7 +373,8 @@ Probelauf mit Fehlern je Zeile. Übernommen wird nur, wenn keine Zeile einen Feh
 
 ## Sicherheit
 
-- Ohne Anmeldung öffnet sich keine Seite. Einzige Ausnahme ist `/api/health`.
+- Mit Anmeldung (Vorgabe in Docker) ist ohne Anmeldung nur `/api/health` sowie die Anmelde- und
+  Einrichtungsseite erreichbar.
 - Nach 5 Fehlversuchen für ein Konto (oder 20 von einer Adresse) ist die Anmeldung
   15 Minuten gesperrt.
 - Schreibende Anfragen von fremden Seiten lehnt die Anwendung ab. Jede Antwort trägt eine
@@ -429,7 +419,8 @@ Wie Sie mitmachen, steht in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ### Voraussetzungen
 
-Python 3.11. Alle Werkzeuge kommen aus `requirements-dev.txt`.
+Python 3.11. Die Werkzeuge kommen aus `requirements-dev.txt`, Playwright für den Rundgang
+installieren Sie separat (`pip install playwright` und `playwright install chromium`).
 
 ```bash
 python3.11 -m venv .venv && . .venv/bin/activate
@@ -459,8 +450,10 @@ Tests laufen nie gegen einen Datenordner mit echten Daten.
 3. Einen Pull Request nach `main` öffnen. Dann laufen die CI (`ci.yml`), der Windows-Bau
    mit Installer-, Update- und Umzugsprobe (`windows.yml`) und der Browser-Rundgang
    (`rundgang.yml`), jeweils einmal pro Stand.
-4. `SOFTWARE_VERSION` in `nebenkostenfix/abrechnung_version.py` anheben. Die CI lehnt einen Pull Request ab,
-   dessen Version schon veröffentlicht ist.
+4. `SOFTWARE_VERSION` in `nebenkostenfix/abrechnung_version.py` anheben und
+   `docs/release-notizen/<version>.md` anlegen (Vorlage: `docs/release-notizen/LIESMICH.md`).
+   Die CI lehnt einen Pull Request ab, dessen Version schon veröffentlicht ist oder dem die
+   Release-Notizen fehlen.
 5. Nach dem Merge baut `release.yml` alles und veröffentlicht es.
 
 ### Versionen und Releases
@@ -474,9 +467,12 @@ Die Versionsnummer steht an genau einer Stelle: `SOFTWARE_VERSION` in `nebenkost
    aktualisieren und wieder deinstallieren.
 3. Docker-Abbild bauen, Rauchtest, dann für amd64 und arm64 nach
    `ghcr.io/nerbry72/nebenkostenfix:<version>` und `:latest` schieben.
-4. GitHub-Release `v<version>` mit `NebenkostenFix-<version>-Setup.exe`, `SHA256SUMS.txt` und
-   dem signierten `update.json` anlegen. Aus dem `update.json` erfahren die installierten Apps
-   von der neuen Version.
+4. GitHub-Release `v<version>` mit `NebenkostenFix-<version>-Setup.exe`, `SHA256SUMS.txt`,
+   `THIRD_PARTY_LICENSES.txt` und dem signierten `update.json` anlegen. Aus dem `update.json`
+   erfahren die installierten Apps von der neuen Version. Der Release-Text besteht aus der
+   Installationsanleitung, dem Inhalt von `docs/release-notizen/<version>.md` und einem
+   Vergleichslink zur Vorversion.
+5. Die MSIX als Einreichung in den Microsoft Store geben.
 
 ### Aufbau
 
