@@ -25,16 +25,16 @@ Die Nebenkostenabrechnung für private Vermieter. Kostenlos, und Ihre Daten blei
 
 ## Neuerungen in dieser Version
 
-Version 0.16.0: Eigene Kostenarten, die Miete im Blick und die Maßeinheit am Zähler. Die Rechenregeln sind unverändert, bis auf einen behobenen Fehler bei gemischten Maßeinheiten.
+Version 0.17.0: Anschriften im Brief, ein neu aufgebautes PDF und Rechnungen nach Jahr. Die Rechenregeln sind unverändert.
 
-- Sie legen eigene Kostenarten an und benennen vorhandene um, damit die Namen zu Ihrer Abrechnung passen. Jede gehört zu einer Nummer aus § 2 BetrKV, mehrere dürfen sich eine Nummer teilen.
-- Zur Kaltmiete tragen Sie ein Soll je Stichtag ein. Eine künftige Mieterhöhung legen Sie im Voraus an, sie erscheint als „geplant“. Eine Monatsübersicht stellt Soll, Ist und Differenz gegenüber.
-- Jede Abrechnung zeigt ihren Zahlungsstand: offen, teilweise beglichen oder beglichen. Eine Zahlung gehört immer zu einer Abrechnung desselben Mieters.
-- Am Zähler steht jetzt die Maßeinheit. Ein Warmwasserzähler, der Kilowattstunden misst, ist damit erfassbar; bei Wärmepumpen ist das der übliche Aufbau.
-- Die Hausgeldabrechnung Ihrer Verwaltung lässt sich nachrechnen: welche Position umlagefähig ist, was auf Ihren Anteil entfällt, ob die Summen stimmen.
-- Behoben: Der Posten nach § 7 Abs. 2 HeizkostenV ließ sich nicht wählen. Er öffnet sich, sobald die Heizungsanlage gewählt ist.
-- Behoben: Zähler mit verschiedenen Maßeinheiten unter einer Kostenart wurden zusammengezählt. Jetzt verteilt die Abrechnung nach Wohnfläche und weist darauf hin.
-- Neu: eine Warnung, wenn eine Heizkostenrechnung weder einer Wohnung noch einer Anlage zugeordnet ist.
+- Mieter haben eine Wohnungsanschrift und eine Zustellanschrift für die Zeit nach dem Auszug, der Vermieter eine Anschrift für den Briefkopf. Welche gilt, entscheidet die App nach dem Auszugsdatum.
+- Die Abrechnung beginnt mit dem Brief, danach folgt ein Übersichtsblatt mit allen Kostenpositionen und den Summen bis zum Ergebnis. Erst dahinter stehen die einzelnen Berechnungen.
+- Das ganze PDF hat ein Erscheinungsbild. Der Rechenweg steht als Tabelle, Beträge überall mit Tausenderpunkt.
+- Unter Kosten wählen Sie ein Jahr und sehen die Summe der Auswahl. Die Zeitleiste folgt dem Filter und zeigt die Summe je Jahr.
+- Bei Sammelbelegen übernehmen Sie das Rechnungsdatum auf Wunsch für alle Rechnungen des Belegs.
+- Behoben: Die Statistik nannte jede Heizung „Gas“, auch eine Wärmepumpe. Der Bereich heißt jetzt „Wärme“.
+- Behoben: Die IBAN brach im Zahlungshinweis mitten durch, und der Brief nannte das Ergebnis zweimal.
+- Behoben: In schmalen Fenstern liefen Texte über ihren Rand.
 
 ## Produktmerkmale
 
