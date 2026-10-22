@@ -102,3 +102,16 @@ def test_der_workflow_erzeugt_die_notizen_nicht_mehr_selbst(schalter):
         'haengt an dessen Labels und schreibt „What\'s Changed" auf Englisch.')
     assert 'docs/release-notizen/${VERSION}.md' in workflow, (
         'Der Release-Workflow haengt die Release-Notizen nicht mehr an.')
+
+
+def test_die_vorversion_ist_die_letzte_veroeffentlichte():
+    """Ein Entwurf oder eine Vorabversion als „Vorversion" ergaebe einen
+    falschen Vergleichslink. Und scheitert ``gh`` dort, darf der Schritt nicht
+    abbrechen: das Abbild ist dann schon gepusht, der Release fehlte."""
+    workflow = _ohne_kommentare((WURZEL / '.github' / 'workflows' / 'release.yml').read_text(
+        encoding='utf-8'))
+    aufruf = workflow[workflow.index('vorher=$(gh release list'):]
+    aufruf = aufruf[:aufruf.index('\n', aufruf.index(')'))]
+
+    assert '--exclude-drafts' in aufruf and '--exclude-pre-releases' in aufruf, aufruf
+    assert aufruf.rstrip().endswith("|| vorher=''"), aufruf

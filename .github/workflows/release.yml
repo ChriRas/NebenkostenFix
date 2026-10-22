@@ -210,8 +210,12 @@ jobs:
           # und schreibt "What's Changed" -- englisch, in einer deutschen App.
           cat "docs/release-notizen/${VERSION}.md" >> notizen.md
           # Die Vorversion ist die zuletzt veroeffentlichte; dieser Release
-          # entsteht erst in der naechsten Zeile.
-          vorher=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 1 --json tagName --jq '.[0].tagName // empty')
+          # entsteht erst in der naechsten Zeile. Entwuerfe und Vorabversionen
+          # zaehlen nicht. Der Vergleichslink ist Beiwerk: scheitert gh hier,
+          # fehlt er, der Release entsteht trotzdem (das Abbild ist schon
+          # gepusht, ein Abbruch liesse es ohne Release stehen).
+          vorher=$(gh release list --repo "$GITHUB_REPOSITORY" --exclude-drafts --exclude-pre-releases \
+            --limit 1 --json tagName --jq '.[0].tagName // empty') || vorher=''
           if [ -n "$vorher" ]; then
             basis="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/compare"
             printf '\n---\n\n**Alle Änderungen im Einzelnen:** [%s...v%s](%s/%s...v%s)\n' \
