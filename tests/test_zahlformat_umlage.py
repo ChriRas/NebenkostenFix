@@ -6,7 +6,9 @@ Mieter liest. Ein Text ohne Komma oder mit „qm“ fällt hier auf.
 """
 
 from dataclasses import replace
+from decimal import Decimal
 
+from nebenkostenfix.geld import runde, text
 from nebenkostenfix.rechenkern import Wohnung, menge_text, rechne, zahl_text
 
 from tests.test_rechenkern import rechnung, vorgang
@@ -30,7 +32,7 @@ def test_umlage_nach_wohnflaeche_mit_komma_und_m2():
     v = replace(vorgang([rechnung('1132.50')]), wohnung=meine, wohnungen=(meine, andere))
     posten = rechne(v)['line_items'][0]
     assert posten['description'] == 'Umlage nach Wohnfläche (52,5 von 113,25 m²)'
-    assert all('qm' not in s for s in posten.get('rechenweg', []))
+    assert all('qm' not in s.text for s in posten.get('rechenweg', []))
 
 
 def test_zahl_text_ohne_gleitkommareste():
@@ -45,4 +47,53 @@ def test_umlage_mit_summe_aus_floats():
     v = replace(vorgang([rechnung('1173.00')]), wohnung=meine, wohnungen=(meine, andere))
     posten = rechne(v)['line_items'][0]
     assert posten['description'] == 'Umlage nach Wohnfläche (55,1 von 117,3 m²)'
-    assert not any('0000' in s for s in posten.get('rechenweg', []))
+    assert not any('0000' in s.text for s in posten.get('rechenweg', []))
+
+
+def test_der_satz_und_die_spalte_schreiben_denselben_betrag():
+    """Zwei Formatierer auf einem Blatt lesen sich wie zwei Dokumente.
+
+    Bis Phase 60 gab es zwei: ``rechenkern.euro_text`` schrieb den Betrag
+    im Rechenweg und im Anschreiben **ohne** Tausenderpunkt,
+    ``pdf_stil.geld`` den in der Betragsspalte **mit**. Auf Seite 1 stand
+    dadurch „4817,30 €" im Satz und „4.817,30 €" im Block darunter -- für
+    denselben Betrag, auf derselben Seite.
+
+    Der Test prüft die Gleichheit, nicht die eine Schreibweise: Wer sie
+    ändern will, ändert ``geld.text`` und beide ziehen mit.
+    """
+    from nebenkostenfix import pdf_stil
+    from nebenkostenfix.rechenkern import euro_text
+
+    for betrag in (Decimal('0.01'), Decimal('999.99'), Decimal('1200'),
+                   Decimal('4817.30'), Decimal('-1440'), Decimal('1234567.89')):
+        assert euro_text(betrag) == pdf_stil.geld(betrag) == text(betrag), betrag
+
+
+def test_ein_rechenschritt_nennt_seinen_betrag_als_zahl():
+    """Phase 61: Text und Wert getrennt -- kein Satz mit Gleichheitszeichen.
+
+    Durchsicht am 2026-10-22: „2x ein = mit Geldbetrag … für ein schnelles
+    Überfliegen unübersichtlich." Der Grund war die Form: Jeder Schritt war
+    ein Satz, der mit seinem Ausgangswert begann und mit „= Ergebnis"
+    endete, und der nächste begann wieder mit demselben Zwischenwert. Fünf
+    Beträge auf dem Blatt, drei davon verschieden.
+
+    Getrennt gehalten kann das Blatt die Werte rechtsbündig untereinander
+    setzen. Der Test hält die **Trennung** fest, nicht das Layout: Im Text
+    eines Schritts steht kein Eurozeichen und kein „=".
+    """
+    v = vorgang([rechnung('1132.50')])
+    posten = rechne(v)['line_items'][0]
+
+    assert posten['rechenweg'], 'Die Zeile hat keinen Rechenweg.'
+    for schritt in posten['rechenweg']:
+        assert '€' not in schritt.text, (
+            f'„{schritt.text}" trägt einen Betrag im Satz. Der Wert gehört '
+            'in schritt.betrag, damit das Blatt ihn in die Flucht setzen kann.')
+        assert '=' not in schritt.text, f'„{schritt.text}" rechnet im Satz.'
+        assert isinstance(schritt.betrag, Decimal), (
+            f'„{schritt.text}" trägt seinen Wert nicht als Decimal (R-NUM-01).')
+
+    # Und die Kette führt auf den Betrag der Zeile (R-NUM-02).
+    assert runde(posten['rechenweg'][-1].betrag) == runde(posten['tenant_cost'])

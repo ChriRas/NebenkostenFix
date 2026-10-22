@@ -227,7 +227,9 @@ def test_direktrechnung_ueber_den_zeitraum_hinaus_teilt_nach_verbrauch():
     zeile = next(z for z in ergebnis['line_items'] if z['category'] == 'Gas')
     assert zeile['tenant_cost'] == Decimal('200.00')
     assert 'nach Verbrauch: 100 von 500 m³' in zeile['description']
-    assert any('× 100 / 500' in s for s in zeile['rechenweg'])
+    # Phase 61: Der Schritt heisst jetzt 'nach Verbrauch 100 von
+    # 500 kWh' und traegt sein Ergebnis als Zahl, nicht im Satz.
+    assert any('100 von 500' in s.text for s in zeile['rechenweg'])
 
 
 def test_direktrechnung_im_zeitraum_bleibt_hundert_prozent():

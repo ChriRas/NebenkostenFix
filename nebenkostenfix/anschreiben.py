@@ -19,6 +19,7 @@ from decimal import Decimal
 # Bandit-Ausnahme: maskiert Text fuer reportlab, parst kein XML
 from xml.sax.saxutils import escape  # nosec B406
 
+from nebenkostenfix import anschrift as anschriften
 from nebenkostenfix.rechenkern import euro_text
 
 # NK-247: neutrale Anrede statt „Sehr geehrte/r“ -- eine Stelle für die
@@ -69,9 +70,15 @@ def vorgabe(art: str | None = None) -> str:
         '{anrede}\n\n'
         'anbei erhalten Sie die Nebenkostenabrechnung für die Wohnung '
         '{wohnung_name} für den Zeitraum {zeitraum}.\n\n'
-        'Die Abrechnung ergibt bei Gesamtkosten von {gesamtsumme} und '
-        'Vorauszahlungen von {vorauszahlungen} einen Saldo in Höhe von '
-        '{saldo_betrag} ({saldo_art}).\n\n'
+        # Phase 60 (Durchsicht am 2026-10-21): Der Satz „Die Abrechnung ergibt
+        # bei Gesamtkosten von … einen Saldo in Höhe von …" ist raus. Seit
+        # dem Umbau steht direkt darunter der Block „Ihr Anteil an den
+        # Nebenkosten" mit genau diesen drei Zahlen -- untereinander,
+        # beschriftet, nachrechenbar. Zweimal dasselbe hintereinander macht
+        # einen Brief nicht genauer, nur länger.
+        #
+        # Die vier Platzhalter bleiben verfügbar: Wer sie in einer eigenen
+        # Vorlage braucht, setzt sie selbst (so wie {mieter_anschrift}).
         '{aufforderung}\n\n'
         'Sie können Einwendungen gegen diese Abrechnung innerhalb von zwölf '
         'Monaten nach ihrem Zugang geltend machen. ' + saetze(art)['belege'] + '\n\n'
@@ -87,6 +94,13 @@ PLATZHALTER = {
     'anrede': ('Anrede des Mieters -- die eigene aus dem Mieterdialog, '
                'sonst „Guten Tag <Name>,“'),
     'mieter_name': 'Name des Mieters',
+    # Phase 58 (Issue #35): verfuegbar, aber absichtlich nicht in der
+    # Vorgabe -- eine Anschrift gehoert in den Briefkopf des Blattes, nicht
+    # in den Flusstext. Wer sie im Text braucht (etwa fuer ein eigenes
+    # Layout), setzt sie selbst.
+    'mieter_anschrift': ('Anschrift des Mieters -- nach dem Auszug die '
+                         'hinterlegte Zustelladresse'),
+    'vermieter_anschrift': 'Eigene Anschrift aus den Einstellungen',
     'wohnung_name': 'Name der Wohnung',
     'objekt_name': 'Name des Objekts',
     'vermieter_name': ('Name des Vermieters aus den Einstellungen -- leer, '
@@ -150,7 +164,9 @@ def text_fuer(vorlage: str, *, mieter_name: str, wohnung_name: str,
               einwendungsfrist: str | None = None,
               vermieter_name: str = '',
               vorauszahlung: dict | None = None,
-              mieter_anrede: str | None = None) -> str:
+              mieter_anrede: str | None = None,
+              mieter_anschrift: str | None = None,
+              vermieter_anschrift: str | None = None) -> str:
     """Füllt die Vorlage aus dem Ergebnis einer Abrechnung.
 
     ``vermieter_name`` unterschreibt den Gruß (NK-210). Ohne Namen bleibt
@@ -165,8 +181,14 @@ def text_fuer(vorlage: str, *, mieter_name: str, wohnung_name: str,
     (NK-226). Ohne Änderung bleibt der Satz gewollt leer.
 
     ``mieter_anrede`` ist die eigene Anrede des Mieters (NK-264).
+
+    ``mieter_anschrift`` und ``vermieter_anschrift`` sind die Anschriften
+    (Phase 58). Welche der beiden Mieteranschriften gilt, entscheidet
+    ``anschrift.fuer_zustellung``; hier kommt nur noch das Ergebnis an.
+    Fehlt eine Anschrift, bleibt ihr Platzhalter **sichtbar stehen** --
+    ein Brief ohne Empfaenger soll auffallen, nicht leer hinausgehen.
     """
-    return fuelle(vorlage, {
+    werte = {
         'anrede': anrede(mieter_name, mieter_anrede),
         'mieter_name': mieter_name,
         'wohnung_name': wohnung_name,
@@ -180,7 +202,13 @@ def text_fuer(vorlage: str, *, mieter_name: str, wohnung_name: str,
         'aufforderung': _aufforderung(saldo),
         'einwendungsfrist': einwendungsfrist,
         'vorauszahlung_anpassung': _anpassung(vorauszahlung),
-    })
+    }
+    for name, roh in (('mieter_anschrift', mieter_anschrift),
+                      ('vermieter_anschrift', vermieter_anschrift)):
+        gesaeubert = anschriften.saeubern(roh)
+        if gesaeubert:
+            werte[name] = gesaeubert
+    return fuelle(vorlage, werte)
 
 
 def _anpassung(v: dict | None) -> str:
@@ -189,6 +217,44 @@ def _anpassung(v: dict | None) -> str:
     ab = date.fromisoformat(v['ab'])
     return (f"Ab dem {ab:%d.%m.%Y} beträgt Ihre monatliche Vorauszahlung "
             f"{euro_text(Decimal(v['neu']))} (bisher {euro_text(Decimal(v['bisher']))}).")
+
+
+#: Woran ein Gruß zu erkennen ist. Klein gehalten und wörtlich: Hier wird
+#: nicht geraten, sondern nachgesehen.
+GRUSSFORMELN = ('Mit freundlichen Grüßen', 'Mit freundlichem Gruß',
+                'Freundliche Grüße', 'Mit besten Grüßen')
+
+
+def teile(text: str) -> tuple[str, str]:
+    """Trennt den Brief in Körper und Gruß.
+
+    **Wofür:** Das Blatt setzt zwischen Körper und Gruß einen Block mit
+    dem Anteil des Mieters -- so steht es in der Vorlage aus Issue #35.
+    Der Gruß steht aber im Anschreiben des Vermieters (NK-064), und ein
+    Block *hinter* dem Gruß stünde hinter der Unterschrift.
+
+    Gefunden wird der **letzte** Absatz, der mit einer Grußformel beginnt;
+    er und alles danach sind der Gruß. Findet sich keine, ist alles Körper
+    und der Block kommt dahinter -- lieber ein Block am Ende als ein Gruß
+    mitten im Satz.
+
+        >>> brief = chr(10).join(['Hallo,', '', 'Text.', '',
+        ...                           'Mit freundlichen Grüßen', 'Erika'])
+        >>> koerper, gruss = teile(brief)
+        >>> koerper.splitlines()
+        ['Hallo,', '', 'Text.']
+        >>> gruss.splitlines()
+        ['Mit freundlichen Grüßen', 'Erika']
+        >>> teile('Hallo, nur Text.')
+        ('Hallo, nur Text.', '')
+    """
+    stuecke = text.split('\n\n')
+    for nummer in range(len(stuecke) - 1, -1, -1):
+        anfang = stuecke[nummer].lstrip()
+        if any(anfang.startswith(formel) for formel in GRUSSFORMELN):
+            return ('\n\n'.join(stuecke[:nummer]).strip(),
+                    '\n\n'.join(stuecke[nummer:]).strip())
+    return text.strip(), ''
 
 
 def absaetze(text: str) -> list[str]:

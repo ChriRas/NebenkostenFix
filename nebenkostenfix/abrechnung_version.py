@@ -33,7 +33,7 @@ from nebenkostenfix import betrkv
 # Die einzige Stelle der Versionsnummer (x.y.z). Docker-Abbild, Windows-
 # Installer und GitHub-Release lesen sie von hier; jeder Merge nach main
 # braucht eine neue Nummer, sonst lehnt die CI den Pull Request ab.
-SOFTWARE_VERSION = '0.16.0'
+SOFTWARE_VERSION = '0.17.0'
 
 # Der Stand der rechtlichen Grundlage (BetrKV, HeizkostenV, CO2KostAufG),
 # gegen den die Rechenregeln geprüft sind. Wer eine Regel nach neuer
@@ -86,8 +86,10 @@ def json_sicher(objekt):
 
 # Felder, die nur in Worten sagen, was die Zahlen daneben schon tragen.
 # Ändert eine neue Fassung allein ihren Wortlaut (Zahlformat, „m²“), rechnet
-# die Abrechnung gleich und braucht keine Korrektur (NK-235).
-PROSA = frozenset({'description', 'rechenweg'})
+# die Abrechnung gleich und braucht keine Korrektur (NK-235). Die Hinweise
+# an den Vermieter gehören dazu: 0.17.0 schreibt Beträge darin mit
+# Tausenderpunkt und ergänzt den Zustellhinweis, an den Zahlen ändert beides nichts.
+PROSA = frozenset({'description', 'rechenweg', 'warnings'})
 
 
 def _ohne_prosa(wert):

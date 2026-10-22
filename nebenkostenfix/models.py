@@ -100,6 +100,13 @@ class Tenant(db.Model):
     gesperrt_bis = db.Column(db.Date, nullable=True)
     # NK-264: eigene Anrede („Sehr geehrte Frau Muster“); leer = „Guten Tag <Name>,“.
     anrede = db.Column(db.String(200), nullable=True)
+    # Phase 58 (Issue #35): die Anschrift der Wohnung und, ab dem Auszug,
+    # die Adresse für die Zustellung. Zwei Felder, weil eine Anschrift
+    # nicht halbjährlich wechselt wie ein Sollbetrag -- und weil die
+    # Frist des § 556 Abs. 3 BGB über den Zugang läuft. Welche der beiden
+    # gilt, entscheidet `nebenkostenfix.anschrift.fuer_zustellung`.
+    anschrift = db.Column(db.Text, nullable=True)
+    zustellanschrift = db.Column(db.Text, nullable=True)
     
     cost_profiles = db.relationship('TenantCostProfile', backref='tenant', lazy=True, cascade="all, delete-orphan")
     payments = db.relationship('Payment', backref='tenant', lazy=True, cascade="all, delete-orphan")
@@ -697,6 +704,11 @@ class Vermieterdaten(db.Model):
     iban = db.Column(db.String(34), nullable=True)
     # NK-264: 'privat' (ich) oder 'firma' (wir); leer = neutrale Sätze (NK-248).
     art = db.Column(db.String(10), nullable=True)
+    # Phase 58 (Issue #35): die eigene Anschrift für den Briefkopf. Anders
+    # als Name und IBAN hat sie keinen Rückfall aus der Umgebung -- es gab
+    # nie ein VERMIETER_ANSCHRIFT, und eine neue Umgebungsvariable würde
+    # einen Weg wiederbeleben, den NK-124 gerade abgelöst hat.
+    anschrift = db.Column(db.Text, nullable=True)
     aktualisiert_am = db.Column(db.Date)
 
     @classmethod

@@ -34,6 +34,7 @@ jobs:
       pull-requests: read
     outputs:
       wert: ${{ steps.v.outputs.wert }}
+      minor: ${{ steps.v.outputs.minor }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -58,7 +59,16 @@ jobs:
             echo "::error file=nebenkostenfix/abrechnung_version.py::v$v ist schon veroeffentlicht. SOFTWARE_VERSION anheben."
             exit 1
           fi
+          # Ohne Release-Notizen bricht der Release hier ab, nicht erst nach
+          # dem Bau: 0.16.0 ging ohne sie hinaus und der Release-Text bestand
+          # danach aus der Installationsanleitung und einer PR-Titelzeile.
+          if [ ! -s "docs/release-notizen/$v.md" ]; then
+            echo "::error::docs/release-notizen/$v.md fehlt oder ist leer. Was ist neu, was ist behoben? Vorlage: docs/release-notizen/LIESMICH.md"
+            exit 1
+          fi
           echo "wert=$v" >> "$GITHUB_OUTPUT"
+          # 0.17.3 -> 0.17: wer bei einer Reihe bleiben will, bekommt ihre Patches ohne Handarbeit.
+          echo "minor=${v%.*}" >> "$GITHUB_OUTPUT"
           echo "## NebenkostenFix $v" >> "$GITHUB_STEP_SUMMARY"
 
   windows:
@@ -77,6 +87,7 @@ jobs:
       packages: write
     env:
       VERSION: ${{ needs.version.outputs.wert }}
+      MINOR: ${{ needs.version.outputs.minor }}
     steps:
       - uses: actions/checkout@v7
       - uses: docker/setup-qemu-action@v4
@@ -111,6 +122,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           tags: |
             ${{ env.ABBILD }}:${{ env.VERSION }}
+            ${{ env.ABBILD }}:${{ env.MINOR }}
             ${{ env.ABBILD }}:latest
           labels: |
             org.opencontainers.image.version=${{ env.VERSION }}
@@ -119,7 +131,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
       - run: |
-          echo "- Docker: \`${ABBILD}:${VERSION}\` und \`:latest\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Docker: \`${ABBILD}:${VERSION}\`, \`:${MINOR}\` und \`:latest\`" >> "$GITHUB_STEP_SUMMARY"
 
   release:
     name: GitHub-Release
@@ -194,11 +206,58 @@ jobs:
           oder in der Compose-Datei \`NK_VERSION=${VERSION}\` setzen und \`docker compose pull && docker compose up -d\`.
 
           **Prüfsumme (SHA256):** \`$(cut -d' ' -f1 SHA256SUMS.txt)\`
+
+          ---
+
           NOTIZ
+          # Was neu ist, steht im Repo und nicht in --generate-notes: das
+          # erzeugt nur eine Zeile je Pull Request, haengt an dessen Labels
+          # und schreibt "What's Changed" -- englisch, in einer deutschen App.
+          cat "docs/release-notizen/${VERSION}.md" >> notizen.md
+          # Die Vorversion ist die zuletzt veroeffentlichte; dieser Release
+          # entsteht erst in der naechsten Zeile. Entwuerfe und Vorabversionen
+          # zaehlen nicht. Der Vergleichslink ist Beiwerk: scheitert gh hier,
+          # fehlt er, der Release entsteht trotzdem (das Abbild ist schon
+          # gepusht, ein Abbruch liesse es ohne Release stehen).
+          vorher=$(gh release list --repo "$GITHUB_REPOSITORY" --exclude-drafts --exclude-pre-releases \
+            --limit 1 --json tagName --jq '.[0].tagName // empty') || vorher=''
+          if [ -n "$vorher" ]; then
+            basis="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/compare"
+            printf '\n---\n\n**Alle Änderungen im Einzelnen:** [%s...v%s](%s/%s...v%s)\n' \
+              "$vorher" "$VERSION" "$basis" "$vorher" "$VERSION" >> notizen.md
+          fi
           gh release create "v${VERSION}" "${dateien[@]}" \
             --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
-            --title "NebenkostenFix ${VERSION}" --notes-file notizen.md --generate-notes
+            --title "NebenkostenFix ${VERSION}" --notes-file notizen.md
           echo "- Release: v${VERSION}" >> "$GITHUB_STEP_SUMMARY"
+
+  # Die Website liest Version und Neuerungen beim Deploy aus den Releases.
+  # Ohne Anstoss kaeme die neue Version erst mit ihrem taeglichen Lauf
+  # (04:17 UTC), der als Rueckfallnetz bleibt. WEBSITE_TOKEN: Fine-grained
+  # Token nur fuer NebenkostenFix-Website, "Actions: Read and write"; der
+  # GITHUB_TOKEN darf nicht in andere Repos. Fehlt das Token oder ist es
+  # abgelaufen, gibt es nur eine Warnung, der Release bleibt gruen.
+  website:
+    name: Website aktualisieren
+    needs: release
+    if: github.repository == 'Nerbry72/NebenkostenFix'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Deploy der Website anstossen
+        env:
+          GH_TOKEN: ${{ secrets.WEBSITE_TOKEN }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::warning::WEBSITE_TOKEN fehlt, die Website folgt mit dem taeglichen Lauf."
+            exit 0
+          fi
+          if gh workflow run deploy.yml --repo Nerbry72/NebenkostenFix-Website; then
+            echo "- Website: Deploy angestossen" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning::Website-Anstoss gescheitert (Token abgelaufen?), die Website folgt mit dem taeglichen Lauf."
+          fi
 
   # Die MSIX aus dem Bau geht als neue Einreichung in den Microsoft Store.
   # Die Zugangsdaten (Entra-App mit Manager-Rolle) liegen nur im Environment

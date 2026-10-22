@@ -82,6 +82,17 @@ def test_loeschung_sperrt_statt_zu_loeschen(mieter, auth_client):
     assert Haushaltsgroesse.query.count() == 1
 
 
+def test_die_zustellanschrift_geht_mit_der_sperre(mieter, auth_client):
+    """Review 0.17.0: die neue Adresse nach dem Auszug ist kein Aufbewahrungsgut."""
+    from nebenkostenfix.models import Tenant, db
+    mieter.zustellanschrift = 'Neue Strasse 1\n12345 Neustadt'
+    db.session.commit()
+    assert auth_client.delete(f'/api/tenants/{mieter.id}').status_code == 200
+    zeile = db.session.get(Tenant, mieter.id)
+    assert zeile.gesperrt_bis is not None
+    assert zeile.zustellanschrift is None
+
+
 def test_gesperrte_sind_ueberall_ausgeblendet(mieter, auth_client):
     auth_client.delete(f'/api/tenants/{mieter.id}')
     assert auth_client.get('/api/tenants').get_json() == []

@@ -1677,6 +1677,33 @@ function tabellenEinrollen(wurzel) {
     });
 }
 
+// Phase 65: lange Namen in Auswahlfeldern enden mit „…", statt auf drei
+// Zeilen umzubrechen. In base-select geht das nur über einen eigenen Knopf mit
+// <selectedcontent>; die App schreibt Optionen oft per innerHTML neu und löscht
+// ihn dabei, darum setzt der Beobachter in initBarrierearm ihn nach.
+function auswahlKnoepfe(wurzel) {
+    if (!CSS.supports('appearance', 'base-select')) return;
+    wurzel.querySelectorAll('select:not([multiple]):not([size])').forEach(feld => {
+        if (feld.querySelector(':scope > button')) return;
+        // Chromium bindet nur das erste <selectedcontent> eines Feldes; ein neuer
+        // Knopf nach innerHTML bliebe leer. Darum immer denselben wieder einsetzen.
+        if (!feld._auswahlKnopf) {
+            feld._auswahlKnopf = document.createElement('button');
+            // Ohne type wäre er in einem Formular ein Absendeknopf.
+            feld._auswahlKnopf.type = 'button';
+            feld._auswahlKnopf.className = 'auswahl-knopf';
+            feld._auswahlKnopf.append(document.createElement('selectedcontent'));
+        }
+        feld.prepend(feld._auswahlKnopf);
+        // Chromium übernimmt einen nachträglich eingesetzten Knopf erst nach
+        // einem Neuaufbau des Feldes.
+        const anzeige = feld.style.display;
+        feld.style.display = 'none';
+        void feld.offsetHeight;
+        feld.style.display = anzeige;
+    });
+}
+
 function initBarrierearm() {
     document.querySelectorAll('.nav-item').forEach(eintrag => {
         const name = eintrag.textContent.trim();
@@ -1685,6 +1712,7 @@ function initBarrierearm() {
     });
     symbolknoepfeBenennen(document);
     tabellenEinrollen(document);
+    auswahlKnoepfe(document);
     let geplant = false;
     new MutationObserver(() => {
         if (geplant) return;
@@ -1693,6 +1721,7 @@ function initBarrierearm() {
             geplant = false;
             symbolknoepfeBenennen(document);
             tabellenEinrollen(document);
+            auswahlKnoepfe(document);
         });
     }).observe(document.body, { childList: true, subtree: true });
     schriftgroesseZeigen();
@@ -2593,6 +2622,10 @@ async function saveTenant() {
         formData.append('move_in_date', moveIn);
         // NK-264: immer mitschicken, damit Leeren die eigene Anrede löscht.
         formData.append('anrede', document.getElementById('tenant-anrede').value.trim());
+        // Phase 58: dasselbe für die beiden Anschriften. Ein nur bedingt
+        // geschicktes Feld lässt sich nie wieder leeren.
+        formData.append('anschrift', document.getElementById('tenant-anschrift').value);
+        formData.append('zustellanschrift', document.getElementById('tenant-zustellanschrift').value);
         if (moveOut) formData.append('move_out_date', moveOut);
         if (lastBilled) formData.append('last_billed_until', lastBilled);
         
@@ -2920,6 +2953,8 @@ function openAddTenantModal(tenant = null) {
         editingTenantId = tenant.id;
         document.getElementById('tenant-name').value = tenant.name;
         document.getElementById('tenant-anrede').value = tenant.anrede || '';
+        document.getElementById('tenant-anschrift').value = tenant.anschrift || '';
+        document.getElementById('tenant-zustellanschrift').value = tenant.zustellanschrift || '';
         
         // Ensure the dropdown shows the correct option
         setTimeout(() => {
@@ -2958,6 +2993,8 @@ function openAddTenantModal(tenant = null) {
         editingTenantId = null;
         document.getElementById('tenant-name').value = '';
         document.getElementById('tenant-anrede').value = '';
+        document.getElementById('tenant-anschrift').value = '';
+        document.getElementById('tenant-zustellanschrift').value = '';
         document.getElementById('tenant-move-in').value = '';
         document.getElementById('tenant-move-out').value = '';
         document.getElementById('tenant-last-billed').value = '';
@@ -3099,13 +3136,51 @@ function zeigeInvoiceListe() {
 async function zeigeInvoiceZeitleiste() {
     pilleInvoiceAnsicht('pills-invoice-zeitleiste');
     document.getElementById('invoices-container').style.display = 'none';
-    document.getElementById('invoice-filter').style.display = 'none';
+    // Die Filterleiste bleibt stehen: die Zeitleiste ist eine zweite
+    // Ansicht derselben Auswahl, nicht ein zweiter Bestand.
+    document.getElementById('invoices-zeitleiste').style.display = 'block';
+    await ladeInvoiceZeitleiste();
+}
+
+function zeitleisteSichtbar() {
     const ziel = document.getElementById('invoices-zeitleiste');
-    ziel.style.display = 'block';
+    return !!ziel && ziel.style.display === 'block';
+}
+
+// Dieselben Filter wie renderInvoices(), dazu die Immobilie aus dem Kopf
+// (hausFilter). Ohne sie zeigte die Zeitleiste alle Immobilien, auch wenn
+// oben eine gewählt ist.
+function zeitleisteAdresse() {
+    const wert = id => (document.getElementById(id) || {}).value || '';
+    const teile = new URLSearchParams();
+    if (hausFilter) teile.set('property_id', String(hausFilter.id));
+    if (wert('invoice-jahr-filter')) teile.set('jahr', wert('invoice-jahr-filter'));
+    if (wert('invoice-category-filter')) teile.set('kategorie', wert('invoice-category-filter'));
+    if (wert('invoice-search').trim()) teile.set('suche', wert('invoice-search').trim());
+    const abfrage = teile.toString();
+    return '/api/invoices/zeitleiste' + (abfrage ? '?' + abfrage : '');
+}
+
+// Zählt jede Anfrage mit: beim Tippen in der Suche gilt nur die jüngste.
+let zeitleisteLauf = 0;
+
+// Jeder Tastendruck in der Suche zeichnet die Liste neu; die Zeitleiste
+// lädt erst, wenn die Eingabe kurz ruht (Review 0.17.0).
+let zeitleisteWartet = null;
+function zeitleisteNachladen() {
+    clearTimeout(zeitleisteWartet);
+    zeitleisteWartet = setTimeout(ladeInvoiceZeitleiste, 250);
+}
+
+async function ladeInvoiceZeitleiste() {
+    const lauf = ++zeitleisteLauf;
+    const ziel = document.getElementById('invoices-zeitleiste');
     try {
-        const res = await fetch('/api/invoices/zeitleiste');
+        const res = await fetch(zeitleisteAdresse());
         if (!res.ok) throw await serverFehler(res);
-        renderInvoiceZeitleiste(await res.json(), ziel);
+        const daten = await res.json();
+        if (lauf !== zeitleisteLauf) return;
+        renderInvoiceZeitleiste(daten, ziel);
     } catch (fehler) {
         console.error(fehler);
         zeigeMeldung(meldungZu(fehler,
@@ -3135,8 +3210,12 @@ function zeitleisteBetrag(zahl) {
 function zeitleisteEintragZeile(e) {
     const wer = [e.provider_name, e.kategorie_name]
         .filter(Boolean).join(' · ');
+    // Wie in der Liste: öffnet den Beleg, bei Sammelbelegen auf der ersten Seite der Rechnung.
+    const seite = String(e.seiten || '').match(/\d+/);
+    let docUrl = dateiAdresse('rechnung', e.id);
+    if (seite) docUrl += `#page=${seite[0]}`;
     const beleg = e.hat_beleg
-        ? '<i class="ph ph-file-pdf" title="Beleg vorhanden"></i>'
+        ? `<a href="${docUrl}" target="_blank" rel="noopener" title="Beleg ansehen" aria-label="Beleg ansehen"><i class="ph ph-file-pdf" aria-hidden="true"></i></a>`
         : `<i class="ph ph-file-x" title="Kein Beleg erfasst"></i>`;
     return '<div class="zeitleiste-eintrag">' +
         `<span class="zeitleiste-datum">${escapeHtml(zeitleisteDatum(e.rechnungsdatum))}</span>` +
@@ -3163,7 +3242,10 @@ function zeitleisteKarte(titel, summe, rechnungen) {
 function renderInvoiceZeitleiste(daten, ziel) {
     const teile = [];
     for (const jahr of daten.jahre || []) {
-        teile.push(`<h2 class="zeitleiste-jahr">${jahr.jahr}</h2>`);
+        // Phase 57: die Jahressumme kommt aus zeitleiste.erstellen() und
+        // wurde bisher nur nicht gezeigt -- nicht hier nachgerechnet.
+        teile.push(`<h2 class="zeitleiste-jahr">${jahr.jahr}` +
+            `<span class="zeitleiste-jahressumme">${zeitleisteBetrag(jahr.summe)}</span></h2>`);
         for (const monat of jahr.monate || []) {
             teile.push(zeitleisteKarte(
                 `${monat.label} ${jahr.jahr}`, monat.summe, monat.rechnungen));
@@ -3175,12 +3257,18 @@ function renderInvoiceZeitleiste(daten, ziel) {
             daten.ohne_datum.summe, daten.ohne_datum.rechnungen));
     }
     if (teile.length === 0) {
-        ziel.innerHTML = leerzustand({
+        // Wie in der Liste: ein Filter ohne Treffer ist kein leerer Bestand.
+        ziel.innerHTML = invoices.length === 0 ? leerzustand({
             icon: 'ph-receipt',
             titel: 'Noch keine Rechnungen erfasst',
             text: 'Sobald Sie Rechnungen erfassen, erscheinen sie hier '
                 + 'chronologisch nach Ausstellungsdatum.',
             aktion: { label: 'Rechnung erfassen', fn: 'openAddInvoiceModal()', icon: 'ph-plus' },
+        }) : leerzustand({
+            icon: 'ph-magnifying-glass',
+            titel: 'Keine Rechnungen gefunden',
+            text: 'Für diese Suche oder diesen Filter gibt es keine Treffer.',
+            aktion: { label: 'Filter zurücksetzen', fn: 'rechnungsfilterZuruecksetzen()', icon: 'ph-x-circle' },
         });
         return;
     }
@@ -3583,11 +3671,25 @@ function getCategoryIcon(catName) {
 }
 
 // NK-156: der Leerzustand „Keine Treffer“ führt zurück zur ganzen Liste.
+// Phase 57 (Issue #35): das Jahr einer Rechnung ist das Jahr ihres
+// Ausstellungsdatums (D-57) -- nicht des Tages, an dem sie erfasst wurde,
+// und nicht des Abrechnungszeitraums. Eine Rechnung ohne Datum hat kein
+// Jahr; sie bekommt eine eigene Gruppe, statt stillschweigend in einem
+// beliebigen zu landen.
+const OHNE_DATUM = 'ohne';
+
+function rechnungsJahr(rechnung) {
+    const datum = rechnung.rechnungsdatum || '';
+    return datum.length >= 4 ? datum.slice(0, 4) : OHNE_DATUM;
+}
+
 function rechnungsfilterZuruecksetzen() {
     const suche = document.getElementById('invoice-search');
     const kategorie = document.getElementById('invoice-category-filter');
+    const jahr = document.getElementById('invoice-jahr-filter');
     if (suche) suche.value = '';
     if (kategorie) kategorie.value = '';
+    if (jahr) jahr.value = '';
     renderInvoices();
 }
 window.rechnungsfilterZuruecksetzen = rechnungsfilterZuruecksetzen;
@@ -3627,27 +3729,53 @@ function tabelleSortieren(knopf) {
 }
 window.tabelleSortieren = tabelleSortieren;
 
+// Füllt ein Filterfeld neu und behält die Wahl. Eine Wahl, zu der es
+// nichts mehr gibt, bleibt als Eintrag stehen: sonst wäre der Filter
+// still weg, und „Keine Treffer" hätte keinen sichtbaren Grund.
+function auswahlNachBestand(feld, werte, beschriftung) {
+    if (!feld) return;
+    const gewaehlt = feld.value;
+    const liste = gewaehlt && !werte.includes(gewaehlt) ? [...werte, gewaehlt] : werte;
+    while (feld.options.length > 1) feld.remove(1);
+    liste.forEach(w => {
+        const opt = document.createElement('option');
+        opt.value = w;
+        opt.textContent = beschriftung(w);
+        feld.appendChild(opt);
+    });
+    feld.value = gewaehlt;
+}
+
 function renderInvoices() {
     const container = document.getElementById('invoices-container');
     if (!container) return;
     container.replaceChildren();
+    // Filter und Immobilienwahl rufen hierher; die Zeitleiste zieht mit.
+    if (zeitleisteSichtbar()) zeitleisteNachladen();
     
-    // Populate Category Dropdown if needed
+    // Die Auswahlfelder folgen dem Bestand bei jedem Zeichnen: ein neues
+    // Jahr erscheint sofort, nach einem Immobilienwechsel stehen nur deren
+    // Jahre da (Phase 62; vorher wurden sie nur einmal gefüllt).
     const catSelect = document.getElementById('invoice-category-filter');
-    if (catSelect && catSelect.options.length <= 1) {
-        const uniqueCats = [...new Set(invoices.map(i => i.category_name))].sort();
-        uniqueCats.forEach(c => {
-            const opt = document.createElement('option');
-            opt.value = c;
-            opt.textContent = zaehlerArtName(c);
-            catSelect.appendChild(opt);
-        });
-    }
-    
+    auswahlNachBestand(catSelect, [...new Set(invoices.map(i => i.category_name))].sort(),
+        zaehlerArtName);
+
+    // Phase 57: die Jahre aus dem Bestand, das juengste zuerst; der
+    // Altbestand ohne Datum steht am Ende, wie in der Zeitleiste.
+    const jahrSelect = document.getElementById('invoice-jahr-filter');
+    const jahre = [...new Set(invoices.map(rechnungsJahr))];
+    const echte = jahre.filter(j => j !== OHNE_DATUM).sort().reverse();
+    if (jahre.includes(OHNE_DATUM)) echte.push(OHNE_DATUM);
+    auswahlNachBestand(jahrSelect, echte,
+        // Das Wort steht dabei: der Filter geht nach dem Rechnungsdatum, und
+        // die Rechnung vom Februar 2025 gehört meist zum Abrechnungsjahr 2024.
+        j => j === OHNE_DATUM ? 'Ohne Rechnungsdatum' : `Rechnungsdatum ${j}`);
+
     // Read filters
     const searchInput = document.getElementById('invoice-search');
     const searchVal = searchInput ? searchInput.value.toLowerCase() : '';
     const catFilterVal = catSelect ? catSelect.value : '';
+    const jahrFilterVal = jahrSelect ? jahrSelect.value : '';
     
     // Filter invoices
     let filtered = invoices.filter(i => {
@@ -3661,14 +3789,21 @@ function renderInvoices() {
         if (catFilterVal) {
             matchCat = i.category_name === catFilterVal;
         }
-        return matchSearch && matchCat;
+        let matchJahr = true;
+        if (jahrFilterVal) {
+            matchJahr = rechnungsJahr(i) === jahrFilterVal;
+        }
+        return matchSearch && matchCat && matchJahr;
     });
     
+    const summeZeile = document.getElementById('invoice-summe');
+
     if (filtered.length === 0) {
         // K4: zu leerem Bestand gehört keine Filterleiste; bei „Keine
         // Treffer" bleibt sie stehen.
         const leiste = document.getElementById('invoice-filter');
         if (leiste) leiste.hidden = invoices.length === 0;
+        if (summeZeile) summeZeile.hidden = true;
         if (invoices.length === 0) {
             container.innerHTML = leerzustand({
                 icon: 'ph-receipt',
@@ -3688,6 +3823,18 @@ function renderInvoices() {
     }
     const leiste = document.getElementById('invoice-filter');
     if (leiste) leiste.hidden = false;
+
+    // Phase 57 (Issue #35): die Summe folgt dem Filter, nicht dem Bestand.
+    // Eine Zeile, die immer die Gesamtsumme nennt, waere schlimmer als
+    // keine -- sie sieht aus wie eine Antwort auf die gestellte Frage.
+    if (summeZeile) {
+        // In Cent summiert: Gleitkomma machte aus Gutschriften sonst „-0,00 €".
+        const summe = filtered.reduce(
+            (zwischen, r) => zwischen + Math.round(Number(r.amount || 0) * 100), 0) / 100;
+        const wieviele = filtered.length === 1 ? '1 Rechnung' : `${filtered.length} Rechnungen`;
+        summeZeile.textContent = `${wieviele}, zusammen ${geldText(summe)}`;
+        summeZeile.hidden = false;
+    }
 
     // Group by property
     const groupedByProp = {};
@@ -5263,6 +5410,8 @@ async function openAddInvoiceModal(editInvoiceId = null, spalte = null) {
         document.getElementById('invoice-amount').value = '';
         document.getElementById('invoice-number').value = '';
         document.getElementById('invoice-description').value = '';
+        // Nicht aus dem Jahresfilter: der zählt nach dem Rechnungsdatum, der
+        // Leistungszeitraum liegt meist ein Jahr davor.
         const year = new Date().getFullYear();
         document.getElementById('invoice-start').value = `${year}-01-01`;
         document.getElementById('invoice-end').value = `${year}-12-31`;
@@ -5302,6 +5451,20 @@ function toggleInvoiceFileUpload() {
         document.getElementById('group-invoice-file').style.display = 'block';
         document.getElementById('group-invoice-pages').style.display = 'none';
     }
+    belegDatumAnbieten();
+}
+
+// Phase 64: hängen weitere Rechnungen am gewählten Beleg, darf das
+// Rechnungsdatum für alle gelten. Freiwillig: der Haken ist nie vorbelegt.
+function belegDatumAnbieten() {
+    const docId = Number(document.getElementById('invoice-document-id').value);
+    const eigene = Number(document.getElementById('invoice-id').value);
+    const weitere = docId
+        ? invoices.filter(i => i.invoice_document_id === docId && i.id !== eigene).length : 0;
+    document.getElementById('invoice-datum-beleg-zeile').hidden = weitere === 0;
+    document.getElementById('invoice-datum-beleg-anzahl').textContent =
+        weitere === 1 ? 'die andere Rechnung' : `die ${weitere} anderen Rechnungen`;
+    document.getElementById('invoice-datum-fuer-beleg').checked = false;
 }
 
 // --- Eingang -----------------------------------------------------
@@ -5903,6 +6066,8 @@ async function saveInvoice() {
     // NK-124: das Ausstellungsdatum des Belegs, freiwillig wie im Modell.
     const rechnungsdatum = document.getElementById('invoice-rechnungsdatum').value;
     if (rechnungsdatum) formData.append('rechnungsdatum', rechnungsdatum);
+    const fuerBeleg = document.getElementById('invoice-datum-fuer-beleg');
+    if (docId && rechnungsdatum && fuerBeleg.checked) formData.append('rechnungsdatum_fuer_beleg', 'true');
     // NK-124: die Tarifpreise wandern nur zusammen (dieselbe Regel wie der
     // CHECK in der Datenbank: ein Preis ohne Partner waere gelogen).
     const preisHt = document.getElementById('invoice-preis-ht').value;
@@ -5966,10 +6131,14 @@ async function saveInvoice() {
             body: formData
         });
         if(!res.ok) throw await serverFehler(res);
+        const gespeichert = await res.json();
         // In „Alle Rechnungen“ bleibt die neue Rechnung gewählt.
         if (!invId && btn.closest('.als-spalte') && kostenAnsicht === 'alle') {
             verwirfNeueDatei();
-            eingangRechnung = (await res.json()).id;
+            eingangRechnung = gespeichert.id;
+        }
+        if (gespeichert.beleg_datum_gesetzt) {
+            showSuccess(`Rechnungsdatum auch bei ${gespeichert.beleg_datum_gesetzt} weiteren Rechnungen des Belegs gesetzt.`);
         }
         closeAddInvoiceModal();
         fetchInvoices();
@@ -6131,6 +6300,7 @@ async function fetchVermieterdaten() {
         document.getElementById('vermieter-name').value = stand.name || '';
         document.getElementById('vermieter-iban').value = stand.iban || '';
         document.getElementById('vermieter-art').value = stand.art || '';
+        document.getElementById('vermieter-anschrift').value = stand.anschrift || '';
         const quelle = [];
         if (stand.name_quelle === 'umgebung') quelle.push('Name aus der Umgebungsvariable VERMIETER_NAME');
         if (stand.iban_quelle === 'umgebung') quelle.push('IBAN aus der Umgebungsvariable VERMIETER_IBAN');
@@ -6190,11 +6360,12 @@ async function saveVermieterdaten() {
     const name = document.getElementById('vermieter-name').value.trim();
     const iban = document.getElementById('vermieter-iban').value.trim();
     const art = document.getElementById('vermieter-art').value;
+    const anschrift = document.getElementById('vermieter-anschrift').value;
     try {
         const res = await fetch('/api/vermieter', {
             method: 'PUT',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ name, iban, art })
+            body: JSON.stringify({ name, iban, art, anschrift })
         });
         if (!res.ok) throw await serverFehler(res);
         showSuccess('Vermieterdaten gespeichert.');
@@ -6823,6 +6994,7 @@ async function oeffneRechnungstabelle() {
     document.getElementById('rt-anbieter').innerHTML = providers.map(a =>
         `<option value="${escapeHtml(a.name)}"></option>`).join('');
     const jahr = document.getElementById('rt-jahr');
+    // Ein schon gewähltes Jahr bleibt; der Jahresfilter (Rechnungsdatum) setzt es nicht.
     if (!jahr.value) jahr.value = new Date().getFullYear() - 1;
     document.getElementById('rt-zeilen').innerHTML = '';
     document.getElementById('rt-meldung').textContent = '';
@@ -7207,6 +7379,11 @@ let jahrAktuell = 1;
 let jahrVorschau = {};
 
 const euroText = betrag => Number(betrag || 0).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
+
+// Ein Schritt ist seit Phase 61 ein Paar [Text, Betrag], in 0.16 war er ein Text.
+function rechenwegText(schritte) {
+    return (schritte || []).map(s => Array.isArray(s) ? `${s[0]} ${euroText(s[1])}` : s).join(' · ');
+}
 // Ortszeit: new Date('2026-10-15') wäre UTC-Mitternacht, also nach heute 0 Uhr.
 const nachHeute = iso => String(iso || '').slice(0, 10) > new Date().toLocaleDateString('sv-SE');
 const datumText = iso => iso ? new Date(`${String(iso).slice(0, 10)}T00:00:00`).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—';
@@ -7419,7 +7596,7 @@ async function jahrVorschauLaden() {
             const daten = await res.json();
             jahrVorschau[m.id] = daten;
             const positionen = daten.line_items.map(zeile => {
-                const weg = (zeile.rechenweg || []).join(' · ');
+                const weg = rechenwegText(zeile.rechenweg);
                 const rechenwegHtml = weg ? '<br><span class="text-muted">' + escapeHtml(weg) + '</span>' : '';
                 return `<li><strong>${escapeHtml(zeile.category)}</strong>: ${escapeHtml(euroText(zeile.tenant_cost))}${rechenwegHtml}</li>`;
             }).join('');
@@ -7427,7 +7604,7 @@ async function jahrVorschauLaden() {
             const warnListe = warnungen ? '<ul class="jahr-warnungen">' + warnungen + '</ul>' : '';
             const erklaerungHtml = mieterErklaerungHtml(daten);
             karten.push(`<div class="jahr-mieter">
-                <label class="haken-zeile"><input type="checkbox" class="jahr-auswahl" data-mieter="${Number(m.id)}" checked> ${mieterKopf}</label>
+                <label class="haken-zeile"><input type="checkbox" class="jahr-auswahl" data-mieter="${Number(m.id)}" checked> <span>${mieterKopf}</span></label>
                 <p class="karten-text">Kosten ${escapeHtml(euroText(daten.total_amount))} · Vorauszahlungen ${escapeHtml(euroText(daten.prepaid_amount))}</p>
                 ${erklaerungHtml}
                 ${warnListe}
@@ -8983,7 +9160,7 @@ function renderConsumptionTrend(timeseries_data) {
     
     const categoryConfig = {
         'Strom': { icon: 'ph-lightning', color: DIAGRAMM_FARBE.gelb, label: 'Strom' },
-        'Gas': { icon: 'ph-flame', color: DIAGRAMM_FARBE.rot, label: 'Gas' },
+        'Wärme': { icon: 'ph-thermometer-simple', color: DIAGRAMM_FARBE.rot, label: 'Wärme' },
         'Wasser': { icon: 'ph-drop', color: DIAGRAMM_FARBE.blau, label: 'Wasser' },
     };
     
@@ -9034,7 +9211,7 @@ function renderConsumptionTrend(timeseries_data) {
     const metricsGrid = document.createElement('div');
     metricsGrid.style.cssText = 'display: flex; flex-direction: column; gap: 12px;';
     
-    ['Strom', 'Gas', 'Wasser'].forEach(cat => {
+    ['Strom', 'Wärme', 'Wasser'].forEach(cat => {
         const cfg = categoryConfig[cat];
         const catData = data[cat];
         
@@ -9330,7 +9507,7 @@ function renderDataQuality(data) {
     const categoryIcons = {
         'Strom': 'ph-lightning',
         'Wasser': 'ph-drop',
-        'Gas': 'ph-flame',
+        'Wärme': 'ph-thermometer-simple',
         'Abwasser': 'ph-pipe',
     };
     
@@ -9661,7 +9838,7 @@ function drawTimeseriesChart(filter) {
     
     const bucketColors = {
         'Strom': DIAGRAMM_FARBE.gelb,
-        'Gas': DIAGRAMM_FARBE.rot,
+        'Wärme': DIAGRAMM_FARBE.rot,
         'Wasser': DIAGRAMM_FARBE.blau,
         'Sonstige Kosten': DIAGRAMM_FARBE.lila
     };
@@ -9785,7 +9962,7 @@ function renderBuildingComparison(apartment_comparison) {
     
     const bucketColors = {
         'Strom': DIAGRAMM_FARBE.gelb,
-        'Gas': DIAGRAMM_FARBE.rot,
+        'Wärme': DIAGRAMM_FARBE.rot,
         'Wasser': DIAGRAMM_FARBE.blau,
         'Sonstige Kosten': DIAGRAMM_FARBE.lila
     };

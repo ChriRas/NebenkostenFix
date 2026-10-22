@@ -95,6 +95,8 @@ global.escapeHtml = s => String(s);
 // echte fetch von Node; so bleiben sie still hängen.
 global.fetch = () => new Promise(() => {});
 global.alert = () => {};
+// Phase 65: auswahlKnoepfe fragt nach base-select; ohne Browser gibt es das nicht.
+global.CSS = { supports: () => false };
 // app.js beobachtet Dialoge und Listen mit MutationObserver (Fokusfalle,
 // Hilfe-Knöpfe). Ohne Browser reicht ein Beobachter, der nichts meldet.
 global.MutationObserver = class {
@@ -827,6 +829,331 @@ async function hausgeldPruefungPruefen() {
     pruefe('Phase 50: ohne Endsumme entfällt die Summenprobe',
         leerKoerper.abrechnungssumme === null
         && ohneSumme.felder['hg-summenprobe'].hidden === true);
+}
+
+// Phase 57 (Issue #35, Punkt 3): Rechnungen nach Jahr. Geprueft wird das
+// Verhalten, nicht nur, dass das Feld da ist: renderInvoices() laeuft gegen
+// einen DOM-Stub und muss filtern, zaehlen und summieren.
+async function rechnungsJahrPruefen() {
+    const funktion = name => {
+        const m = appQuelle.match(new RegExp(`function ${name}\\([^)]*\\) \\{[\\s\\S]*?\\n\\}`));
+        if (!m) throw new Error(`${name} nicht gefunden`);
+        return m[0];
+    };
+    const quelltext = "const OHNE_DATUM = 'ohne';"
+        + funktion('rechnungsJahr') + funktion('rechnungsfilterZuruecksetzen')
+        + funktion('geldText');
+
+    const bestand = [
+        { id: 1, amount: 100, rechnungsdatum: '2024-03-01', category_name: 'Heizung', property_name: 'Haus', invoice_number: 'A', provider_name: 'P' },
+        { id: 2, amount: 250, rechnungsdatum: '2025-06-01', category_name: 'Heizung', property_name: 'Haus', invoice_number: 'B', provider_name: 'P' },
+        { id: 3, amount: 50, rechnungsdatum: '2025-09-01', category_name: 'Wasser', property_name: 'Haus', invoice_number: 'C', provider_name: 'P' },
+        { id: 4, amount: 7, rechnungsdatum: null, category_name: 'Wasser', property_name: 'Haus', invoice_number: 'D', provider_name: 'P' },
+    ];
+
+    const fns = new Function(quelltext + '; return { rechnungsJahr, geldText };')();
+
+    pruefe('Phase 57: das Jahr kommt aus dem Rechnungsdatum, ohne Datum eine eigene Gruppe',
+        fns.rechnungsJahr(bestand[0]) === '2024'
+        && fns.rechnungsJahr(bestand[1]) === '2025'
+        && fns.rechnungsJahr(bestand[3]) === 'ohne'
+        && fns.rechnungsJahr({}) === 'ohne');
+
+    // Den Filterteil von renderInvoices nachbilden -- dieselben Zeilen, die
+    // die Oberflaeche ausfuehrt, aus der Quelle geschnitten.
+    const quelle = appQuelle.match(/function renderInvoices\(\)[\s\S]*?\n\}/)[0];
+    pruefe('Phase 57: renderInvoices filtert nach dem Jahr',
+        /matchJahr = rechnungsJahr\(i\) === jahrFilterVal/.test(quelle)
+        && /return matchSearch && matchCat && matchJahr/.test(quelle));
+
+    pruefe('Phase 57: die Summenzeile folgt dem Filter, nicht dem Bestand',
+        /filtered\.reduce/.test(quelle)
+        && /summeZeile\.textContent/.test(quelle)
+        && !/invoices\.reduce/.test(quelle));
+
+    pruefe('Phase 57: das Auswahlfeld fuellt sich aus dem Bestand, juengstes Jahr zuerst',
+        /invoices\.map\(rechnungsJahr\)/.test(quelle)
+        && /\.sort\(\)\.reverse\(\)/.test(quelle)
+        && /echte\.push\(OHNE_DATUM\)/.test(quelle));
+
+    // Die Summe von Hand nachgerechnet: 2025 sind 250 + 50 = 300.
+    const summe2025 = bestand.filter(r => fns.rechnungsJahr(r) === '2025')
+        .reduce((z, r) => z + Number(r.amount || 0), 0);
+    pruefe('Phase 57: die Jahressumme stimmt (2025: 250 + 50 = 300)',
+        summe2025 === 300 && /300/.test(fns.geldText(summe2025)));
+
+    // Zuruecksetzen muss auch das neue Feld raeumen -- sonst bleibt ein
+    // unsichtbarer Filter stehen und der Nutzer sucht den Fehler bei sich.
+    const geraeumt = {};
+    const dokument = { getElementById(id) { geraeumt[id] = { value: 'x' }; return geraeumt[id]; } };
+    new Function('document', 'renderInvoices',
+        quelltext + '; rechnungsfilterZuruecksetzen();')(dokument, () => {});
+    pruefe('Phase 57: „Filter zuruecksetzen" raeumt auch das Jahr',
+        geraeumt['invoice-jahr-filter'] && geraeumt['invoice-jahr-filter'].value === ''
+        && geraeumt['invoice-search'].value === ''
+        && geraeumt['invoice-category-filter'].value === '');
+
+    // Die Zeitleiste zeigt die Jahressumme, die der Server schon rechnet.
+    const zeitleiste = appQuelle.match(/function renderInvoiceZeitleiste[\s\S]*?\n\}/)[0];
+    pruefe('Phase 57: die Zeitleiste zeigt die Jahressumme des Servers, ohne sie nachzurechnen',
+        /zeitleiste-jahressumme/.test(zeitleiste)
+        && /zeitleisteBetrag\(jahr\.summe\)/.test(zeitleiste));
+
+    // Und die Oberflaeche traegt die Felder, an denen das alles haengt.
+    pruefe('Phase 57: Auswahlfeld und Summenzeile stehen in der Oberflaeche',
+        /id="invoice-jahr-filter"[\s\S]*?Alle Jahre/.test(html)
+        && /id="invoice-summe"/.test(html));
+}
+
+// Phase 62 (Issue #35, Nachtrag): die Zeitleiste folgt der Immobilie aus
+// dem Kopf und den Filtern der Liste. Gefahren wird die Adresse gegen einen
+// DOM-Stub, das Auffuellen der Auswahlfelder gegen ein Schein-<select>.
+// Abwärtskompatibel: Ein Schritt im Rechenweg ist seit Phase 61 ein Paar
+// [Text, Betrag], in 0.16 war er ein Text. Die Vorschau der
+// Jahresabrechnung zeigte das Paar als "Text,23.70".
+async function rechenwegTextPruefen() {
+    const m = appQuelle.match(/function rechenwegText\([^)]*\) \{[\s\S]*?\n\}/);
+    if (!m) throw new Error('rechenwegText nicht gefunden');
+    const euro = appQuelle.match(/const euroText = [^\n]*/)[0];
+    const rechenwegText = new Function(euro + '; ' + m[0] + '; return rechenwegText;')();
+    pruefe('Rechenweg: Paare aus Text und Betrag werden zum Satz mit Euro-Betrag',
+        rechenwegText([['Rechnungsbetrag', '1200.00'], ['anteilig 184 von 366 Tagen', '603.28']])
+            .replace(/\u00a0/g, ' ') === 'Rechnungsbetrag 1.200,00 € · anteilig 184 von 366 Tagen 603,28 €');
+    pruefe('Rechenweg: alte Schritte (reine Texte aus 0.16) bleiben unverändert',
+        rechenwegText(['1.200,00 € Rechnungsbetrag', 'anteilig = 603,28 €'])
+            === '1.200,00 € Rechnungsbetrag · anteilig = 603,28 €'
+        && rechenwegText(undefined) === '');
+    pruefe('Rechenweg: die Vorschau der Jahresabrechnung nutzt rechenwegText',
+        /rechenwegText\(zeile\.rechenweg\)/.test(appQuelle)
+        && !/\(zeile\.rechenweg \|\| \[\]\)\.join/.test(appQuelle));
+}
+
+async function belegDatumPruefen() {
+    const m = appQuelle.match(/function belegDatumAnbieten\([^)]*\) \{[\s\S]*?\n\}/);
+    if (!m) throw new Error('belegDatumAnbieten nicht gefunden');
+    const felder = {
+        'invoice-document-id': { value: '7' }, 'invoice-id': { value: '' },
+        'invoice-datum-beleg-zeile': { hidden: true },
+        'invoice-datum-beleg-anzahl': { textContent: '' },
+        'invoice-datum-fuer-beleg': { checked: true },
+    };
+    const bau = rechnungen => new Function('document', 'invoices', m[0] + '; return belegDatumAnbieten;')(
+        { getElementById: id => felder[id] }, rechnungen);
+    const sammel = [{ id: 1, invoice_document_id: 7 }, { id: 2, invoice_document_id: 7 },
+                    { id: 3, invoice_document_id: 8 }];
+
+    bau(sammel)();
+    pruefe('Phase 64: am Sammelbeleg erscheint der Haken, er ist nie vorbelegt',
+        !felder['invoice-datum-beleg-zeile'].hidden && !felder['invoice-datum-fuer-beleg'].checked
+        && felder['invoice-datum-beleg-anzahl'].textContent.includes('2'));
+    felder['invoice-id'].value = '1';
+    bau(sammel)();
+    pruefe('Phase 64: beim Bearbeiten zählt die eigene Rechnung nicht mit',
+        !felder['invoice-datum-beleg-zeile'].hidden
+        && felder['invoice-datum-beleg-anzahl'].textContent === 'die andere Rechnung');
+    felder['invoice-document-id'].value = '8';
+    felder['invoice-id'].value = '3';
+    bau(sammel)();
+    pruefe('Phase 64: allein auf dem Beleg gibt es keinen Haken',
+        felder['invoice-datum-beleg-zeile'].hidden);
+    felder['invoice-document-id'].value = '';
+    bau(sammel)();
+    pruefe('Phase 64: ohne Beleg gibt es keinen Haken', felder['invoice-datum-beleg-zeile'].hidden);
+
+    const umschalter = appQuelle.match(/function toggleInvoiceFileUpload\(\) \{[\s\S]*?\n\}/)[0];
+    const speichern = appQuelle.match(/async function saveInvoice\(\) \{[\s\S]*?\n\}/)[0];
+    pruefe('Phase 64: der Haken folgt dem gewählten Beleg und geht mit dem Speichern',
+        umschalter.includes('belegDatumAnbieten()')
+        && /rechnungsdatum_fuer_beleg/.test(speichern)
+        && /beleg_datum_gesetzt/.test(speichern));
+}
+
+// Phase 65 (Issue #35, Nachtrag): lange Namen in Auswahlfeldern enden mit „…".
+// Chromium bindet nur das erste <selectedcontent> eines Feldes. Schreibt die App
+// die Optionen per innerHTML neu, muss derselbe Knopf zurück, ein neuer bliebe leer.
+async function auswahlKnoepfePruefen() {
+    const m = appQuelle.match(/function auswahlKnoepfe\(wurzel\) \{[\s\S]*?\n\}/);
+    if (!m) throw new Error('auswahlKnoepfe nicht gefunden');
+    const feld = { kinder: [], style: { display: '' }, offsetHeight: 0,
+        querySelector() { return this.kinder[0] || null; },
+        prepend(k) { this.kinder.unshift(k); } };
+    const dok = { createElement: tag => ({ tag, append() {} }) };
+    const lauf = new Function('CSS', 'document', m[0] + '; return auswahlKnoepfe;')(
+        { supports: () => true }, dok);
+    const wurzel = { querySelectorAll: () => [feld] };
+    lauf(wurzel);
+    const erster = feld.kinder[0];
+    pruefe('Phase 65: das Auswahlfeld bekommt einen Knopf', erster && erster.tag === 'button');
+    feld.kinder = [];   // wie innerHTML = '<option>…'
+    lauf(wurzel);
+    pruefe('Phase 65: nach innerHTML kommt derselbe Knopf zurück, kein neuer',
+        feld.kinder[0] === erster && feld.kinder.length === 1);
+    lauf(wurzel);
+    pruefe('Phase 65: ein vorhandener Knopf wird nicht doppelt eingesetzt', feld.kinder.length === 1);
+    pruefe('Phase 65: der Beobachter setzt die Knöpfe nach',
+        (appQuelle.match(/auswahlKnoepfe\(document\)/g) || []).length >= 2);
+    pruefe('Phase 65: der Knopf kürzt mit „…", die offene Liste bricht um',
+        /select > button\.auswahl-knopf \{[^}]*text-overflow: ellipsis/.test(css)
+        && /::picker\(select\) \{[^}]*max-width:/.test(css)
+        && /\n    option \{[^}]*white-space: normal/.test(css));
+}
+
+async function fluchtPruefen() {
+    // Jede Zeile der Zeitleiste ist ein eigenes Grid: „auto“-Spalten richten sich
+    // nach dem Inhalt der Zeile, und Ort und Symbol springen von Zeile zu Zeile.
+    const spalten = [...css.matchAll(/\.zeitleiste-eintrag \{[^}]*grid-template-columns: ([^;]+);/g)].map(t => t[1]);
+    pruefe('Phase 66: die Zeitleiste hat in jeder Breite feste Spalten für Beleg und Betrag',
+        spalten.length >= 2 && spalten.every(w => !/\bauto\b/.test(w)));
+    pruefe('Phase 66: Jahres- und Gesamtsumme fluchten mit den Karten',
+        /\.zeitleiste-jahr,\s*\.zeitleiste-gesamt \{[^}]*padding-inline:/.test(css));
+    // Eine Haken-Zeile ist flex: lose Textstücke neben einem Element werden zu
+    // eigenen Spalten. Der Text gehört in genau ein Element.
+    const labels = [...(html + appQuelle).matchAll(/<label class="haken-zeile"[^>]*>([\s\S]*?)<\/label>/g)];
+    const krumm = labels.map(t => t[1].replace(/<input[^>]*>/, '').trim())
+        .filter(t => /</.test(t) && !/^<span>[\s\S]*<\/span>$/.test(t));
+    pruefe('Phase 66: der Text einer Haken-Zeile steht in einem Stück', labels.length >= 3 && krumm.length === 0,
+        krumm.join(' | '));
+}
+
+async function zeitleisteBelegPruefen() {
+    const zeile = (appQuelle.match(/function zeitleisteEintragZeile[\s\S]*?\n\}/) || [''])[0];
+    pruefe('Phase 67: das PDF-Symbol der Zeitleiste öffnet den Beleg wie in der Liste',
+        /docUrl = dateiAdresse\('rechnung', e\.id\)/.test(zeile) && /#page=/.test(zeile)
+        && /<a href="\$\{docUrl\}"/.test(zeile));
+}
+
+async function zeitleisteFilterPruefen() {
+    const funktion = name => {
+        const m = appQuelle.match(new RegExp(`function ${name}\\([^)]*\\) \\{[\\s\\S]*?\\n\\}`));
+        if (!m) throw new Error(`${name} nicht gefunden`);
+        return m[0];
+    };
+    const felder = {};
+    const dokument = { getElementById: id => felder[id] };
+    const bau = new Function('document', 'hausFilter',
+        funktion('zeitleisteAdresse') + '; return { zeitleisteAdresse };');
+
+    let fns = bau(dokument, null);
+    pruefe('Phase 62: ohne Filter holt die Zeitleiste den ganzen Bestand',
+        fns.zeitleisteAdresse() === '/api/invoices/zeitleiste');
+
+    Object.assign(felder, {
+        'invoice-jahr-filter': { value: '2024' },
+        'invoice-category-filter': { value: 'Heizung' },
+        'invoice-search': { value: '  Stadtwerke ' },
+    });
+    fns = bau(dokument, { id: 7 });
+    const adresse = new URL(fns.zeitleisteAdresse(), 'http://x');
+    pruefe('Phase 62: die Zeitleiste fragt mit Immobilie, Jahr, Kostenart und Suche',
+        adresse.pathname === '/api/invoices/zeitleiste'
+        && adresse.searchParams.get('property_id') === '7'
+        && adresse.searchParams.get('jahr') === '2024'
+        && adresse.searchParams.get('kategorie') === 'Heizung'
+        && adresse.searchParams.get('suche') === 'Stadtwerke');
+
+    // 0.17.0-Review B2: der Filter zählt nach Rechnungsdatum, der
+    // Leistungszeitraum liegt meist ein Jahr davor -- keine Vorbelegung.
+    pruefe('0.17.0: der Jahresfilter belegt keinen Leistungszeitraum vor',
+        !/invoice-jahr-filter/.test(funktion('openAddInvoiceModal'))
+        && !/invoice-jahr-filter/.test(funktion('oeffneRechnungstabelle')));
+
+    // Ein Schein-<select>: options, remove, appendChild, value.
+    const feld = {
+        options: [{ value: '' }], value: '',
+        remove(i) { this.options.splice(i, 1); },
+        appendChild(o) { this.options.push(o); },
+    };
+    const auffuellen = new Function('document', funktion('auswahlNachBestand') + '; return auswahlNachBestand;')(
+        { createElement: () => ({}) });
+    auffuellen(feld, ['2025', '2024'], j => j);
+    feld.value = '2024';
+    auffuellen(feld, ['2026', '2025', '2024'], j => j);
+    pruefe('Phase 62: ein neues Jahr erscheint, die Wahl bleibt',
+        feld.options.map(o => o.value).join() === ',2026,2025,2024' && feld.value === '2024');
+    auffuellen(feld, ['2023'], j => j);
+    pruefe('Phase 62: eine Wahl ohne Bestand bleibt sichtbar stehen, statt still zu verschwinden',
+        feld.options.map(o => o.value).join() === ',2023,2024' && feld.value === '2024');
+
+    const zeichnen = funktion('renderInvoices');
+    pruefe('Phase 62: renderInvoices zieht die sichtbare Zeitleiste nach',
+        /if \(zeitleisteSichtbar\(\)\) zeitleisteNachladen\(\)/.test(zeichnen));
+    const umschalter = appQuelle.match(/async function zeigeInvoiceZeitleiste\(\) \{[\s\S]*?\n\}/)[0];
+    pruefe('Phase 62: die Filterleiste bleibt in der Zeitleiste stehen',
+        !/invoice-filter'\)\.style\.display = 'none'/.test(umschalter));
+}
+
+// Phase 58 (Issue #35, Punkt 1): die Anschriften im Mieterdialog und in den
+// Einstellungen. Der Fehler, der hier wehtut, ist der Rest aus dem vorigen
+// Mieter: Wer den Dialog fuellt, aber nicht raeumt, schickt die Abrechnung
+// an die Adresse des Vormieters. Deshalb wird der Dialog zweimal gefahren --
+// einmal mit Mieter, einmal ohne.
+async function anschriftenPruefen() {
+    const funktion = name => {
+        const m = appQuelle.match(new RegExp(`function ${name}\\([^)]*\\) \\{[\\s\\S]*?\\n\\}`));
+        if (!m) throw new Error(`${name} nicht gefunden`);
+        return m[0];
+    };
+
+    const feldStube = () => {
+        const felder = {};
+        return {
+            felder,
+            dokument: {
+                getElementById(id) {
+                    if (!felder[id]) felder[id] = { value: '', textContent: '', style: {} };
+                    return felder[id];
+                },
+            },
+        };
+    };
+    const fenster = { classList: { add() {}, remove() {} }, querySelector: () => ({ textContent: '' }) };
+
+    const dialog = funktion('openAddTenantModal');
+    const fahre = mieter => {
+        const stube = feldStube();
+        new Function('document', 'tenantModal', 'setTimeout', 'editingTenantId', 'mieter',
+            dialog + '\nopenAddTenantModal(mieter);')(
+            stube.dokument, fenster, () => {}, null, mieter);
+        return stube.felder;
+    };
+
+    const bestand = fahre({
+        id: 7, name: 'Mieter Muster', apartment_id: 1,
+        move_in_date: '2025-01-01', move_out_date: '2025-12-31',
+        anschrift: 'Musterweg 1\n12345 Musterstadt',
+        zustellanschrift: 'Neue Straße 9\n54321 Anderswo',
+    });
+    pruefe('Phase 58: der Mieterdialog zeigt beide Anschriften des Mieters',
+        bestand['tenant-anschrift'].value === 'Musterweg 1\n12345 Musterstadt'
+        && bestand['tenant-zustellanschrift'].value === 'Neue Straße 9\n54321 Anderswo');
+
+    const leer = fahre(null);
+    pruefe('Phase 58: „Neuer Mieter" raeumt beide Anschriften -- kein Rest vom Vormieter',
+        leer['tenant-anschrift'].value === ''
+        && leer['tenant-zustellanschrift'].value === '');
+
+    // Immer mitschicken: nur so laesst sich eine Anschrift wieder leeren.
+    const speichern = appQuelle.match(/const formData = new FormData\(\);[\s\S]*?fetch\(url/)[0];
+    pruefe('Phase 58: beide Anschriften gehen immer mit, auch leer',
+        /formData\.append\('anschrift', document\.getElementById\('tenant-anschrift'\)\.value\)/.test(speichern)
+        && /formData\.append\('zustellanschrift', document\.getElementById\('tenant-zustellanschrift'\)\.value\)/.test(speichern)
+        && !/if \([a-zA-Z]+\) formData\.append\('anschrift'/.test(speichern));
+
+    const laden = funktion('fetchVermieterdaten');
+    const sichern = funktion('saveVermieterdaten');
+    pruefe('Phase 58: die Einstellungen laden und speichern die eigene Anschrift',
+        /vermieter-anschrift'\)\.value = stand\.anschrift/.test(laden)
+        && /vermieter-anschrift'\)\.value/.test(sichern)
+        && /JSON\.stringify\(\{ name, iban, art, anschrift \}\)/.test(sichern));
+
+    // Die Felder selbst -- mehrzeilig, weil eine Anschrift mehrzeilig ist.
+    pruefe('Phase 58: die drei Felder stehen mehrzeilig in der Oberflaeche',
+        /<textarea id="tenant-anschrift"/.test(html)
+        && /<textarea id="tenant-zustellanschrift"/.test(html)
+        && /<textarea id="vermieter-anschrift"/.test(html));
+
+    pruefe('Phase 58: die Zustelladresse nennt den Grund (§ 556 Abs. 3 BGB)',
+        /Zustelladresse ab Auszug/.test(html) && /556 Abs. 3 BGB/.test(html));
 }
 
 // Phase 54 (Issue #30): eigene Kostenarten — Tabelle, Nummernvorschlag,
@@ -2081,6 +2408,14 @@ async function zaehlerPflegePruefen() {
         ['pruefstandPruefen', 'NK-265: Prüfstand-Prüfung'],
         ['kategorienPruefen', 'Phase 54: Kostenarten-Prüfung'],
         ['hausgeldPruefungPruefen', 'Phase 50: Hausgeld-Prüfung'],
+        ['rechnungsJahrPruefen', 'Phase 57: Jahresfilter-Prüfung'],
+        ['zeitleisteFilterPruefen', 'Phase 62: Zeitleistenfilter-Prüfung'],
+        ['rechenwegTextPruefen', 'Rechenweg-Text-Prüfung'],
+        ['belegDatumPruefen', 'Phase 64: Belegdatum-Prüfung'],
+        ['auswahlKnoepfePruefen', 'Phase 65: Auswahlknopf-Prüfung'],
+        ['fluchtPruefen', 'Phase 66: Fluchtlinien-Prüfung'],
+        ['zeitleisteBelegPruefen', 'Phase 67: Beleg-Link in der Zeitleiste'],
+        ['anschriftenPruefen', 'Phase 58: Anschriften-Prüfung'],
     ];
     for (const [name, label] of schritte) {
         try {

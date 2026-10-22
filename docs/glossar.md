@@ -155,7 +155,7 @@ Zulässige Formen: hinter dem Verb darf in Klammern näher stehen, **welches** v
 gleichen Zielen gemeint ist — „PDF erstellen (detailliert)“, „PDF ansehen (einfach)“.
 
 Keine Aktionsknöpfe und daher nicht an der Verbliste gemessen: Filter und Auswahlpillen
-(Kategorienamen wie „Strom“, „Gas“, „Alle Kosten“) sowie reine Anzeigen („Erste Schritte“,
+(Kategorienamen wie „Strom“, „Wärme“, „Alle Kosten“) sowie reine Anzeigen („Erste Schritte“,
 Kennzahlen).
 
 ## 7. Sperrliste (maschinell geprüft)

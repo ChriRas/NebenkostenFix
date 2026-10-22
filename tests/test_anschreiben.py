@@ -121,16 +121,37 @@ def test_die_aufforderung_steht_nur_bei_nachzahlung():
         vorauszahlungen=Decimal('300.00'))
     nachzahlung = text_fuer(VORGABE, saldo=Decimal('900.00'), **kwargs)
     assert 'Bitte gleichen Sie den ausstehenden Betrag in Höhe von 900,00 € aus.' in nachzahlung
-    assert 'Nachzahlung' in nachzahlung
 
     guthaben = text_fuer(VORGABE, saldo=Decimal('-150.00'), **kwargs)
     assert 'Bitte gleichen' not in guthaben
-    assert 'Guthaben' in guthaben
-    assert '150,00 €' in guthaben
 
     ausgeglichen = text_fuer(VORGABE, saldo=Decimal('0.00'), **kwargs)
     assert 'Bitte gleichen' not in ausgeglichen
-    assert 'Ausgleich' in ausgeglichen
+
+
+def test_saldo_art_und_betrag_stehen_jedem_zur_verfuegung():
+    """Die Platzhalter bleiben -- auch wenn die Vorgabe sie nicht mehr setzt.
+
+    Phase 60: Der Vorgabetext nennt die drei Zahlen nicht mehr; der Block
+    „Ihr Anteil an den Nebenkosten" auf demselben Blatt tut es, einmal und
+    untereinander. Wer sie in einer **eigenen** Vorlage im Flusstext haben
+    will, kann das weiter -- und genau das wird hier geprüft, damit das
+    Streichen aus der Vorgabe die Platzhalter nicht stillschweigend
+    mitnimmt.
+    """
+    eigene = '{saldo_art}: {saldo_betrag} von {gesamtsumme} minus {vorauszahlungen}'
+    kwargs = dict(
+        mieter_name='Anna', wohnung_name='EG links', objekt_name='Haus',
+        zeitraum='2025', gesamtsumme=Decimal('1200.00'),
+        vorauszahlungen=Decimal('300.00'))
+
+    assert (text_fuer(eigene, saldo=Decimal('900.00'), **kwargs)
+            == 'Nachzahlung: 900,00 € von 1.200,00 € minus 300,00 €')
+    # Der Platzhalter traegt das Vorzeichen: ein Guthaben ist negativ.
+    assert text_fuer(eigene, saldo=Decimal('-150.00'), **kwargs).startswith(
+        'Guthaben: -150,00 €')
+    assert text_fuer(eigene, saldo=Decimal('0.00'), **kwargs).startswith(
+        'Ausgleich: 0,00 €')
 
 
 def test_die_vorgabe_benutzt_nur_bekannte_platzhalter():
@@ -267,19 +288,30 @@ def test_die_vorlage_spricht_auf_dem_deckblatt(unkomprimiert):
     blatt = _deckblatt(unkomprimiert, anschreiben)
 
     assert 'GutenTagAnnaMieterin,' in blatt and 'geehrte' not in blatt
-    assert 'DieAbrechnungergibtbeiGesamtkostenvon1200,00€' in blatt
+    assert 'fürdieWohnungEGlinksfürdenZeitraum01.01.2025bis31.12.2025' in blatt
     assert 'BittegleichenSiedenausstehendenBetraginHöhevon900,00€aus.' in blatt
-    # Der feste Gruß der Software ist verdrängt.
-    assert 'ImFolgenden' not in blatt
-    # NK-249: das Ergebnis steht einmal, nicht noch ein zweites Mal im Kasten.
-    assert blatt.count('IhreNachzahlung') == 1
+    # Phase 60: Die drei Zahlen stehen im Block, nicht noch einmal im Satz
+    # darüber. „Zweimal dasselbe hintereinander" (Durchsicht, 2026-10-21).
+    assert 'DieAbrechnungergibtbeiGesamtkosten' not in blatt
+    assert 'IhreNebenkosten:1.200,00€' in blatt
+    assert 'IhreVorauszahlungen:-300,00€' in blatt
+    # Der feste Gruß der Software ist verdrängt. Phase 60: Er lautet jetzt
+    # „Die Einzelheiten entnehmen Sie bitte den folgenden Seiten" (Wortlaut
+    # der Vorlage aus Issue #35); geprüft ist weiter, dass er schweigt,
+    # wenn der Vermieter selbst schreibt.
+    assert 'Einzelheiten' not in blatt
+    # NK-249: das Ergebnis steht einmal. Phase 60: Der Block der Vorlage
+    # beschriftet es „Nachzahlung:" (vorher „Ihre Nachzahlung"). Dass das
+    # Anschreiben des Vermieters das Wort in seinem eigenen Satz nochmal
+    # verwendet, ist seine Sache -- gezählt wird **unser** Block.
+    assert blatt.count('Nachzahlung:') == 1
 
 
 def test_ohne_vorlage_bleibt_es_beim_festen_gruß(unkomprimiert):
     """Kein Anschreiben hinterlegt: der Deckblatt-Gruß wie bisher."""
     blatt = _deckblatt(unkomprimiert)
     assert 'GutenTagAnnaMieterin,' in blatt and 'geehrte' not in blatt
-    assert 'ImFolgenden' in blatt
+    assert 'Einzelheiten' in blatt
 
 
 # --- Die Welt: vom Vermieter bis zum Blatt des Mieters ------------------------
@@ -352,7 +384,13 @@ def test_die_festsetzung_druckt_das_anschreiben_des_objekts(
 
 
 def test_ohne_eigene_vorlage_druckt_die_vorgabe(auth_client, app_ctx, unkomprimiert):
-    """Ohne PUT spricht der Vorgabetext -- mit Gesamtsumme, Vorauszahlung, Saldo."""
+    """Ohne PUT spricht der Vorgabetext -- und die Zahlen stehen einmal.
+
+    Phase 60: Vorher nannte der Vorgabetext Gesamtkosten, Vorauszahlungen
+    und Saldo im Flusstext, und der Block „Ihr Anteil an den Nebenkosten"
+    direkt darunter dieselben drei noch einmal. Jetzt steht jede Zahl
+    genau einmal -- im Block, beschriftet und untereinander.
+    """
     mieter_id, _, _ = _welt(app_ctx)
     report = _finalisiere(auth_client, mieter_id)
 
@@ -360,10 +398,13 @@ def test_ohne_eigene_vorlage_druckt_die_vorgabe(auth_client, app_ctx, unkomprimi
     blatt = _geklebt(pdf)
     assert 'GutenTagAnnaMieterin,' in blatt and 'geehrte' not in blatt
     assert 'WohnungEGlinks' in blatt
-    assert 'Gesamtkostenvon1200,00€' in blatt
-    assert 'Vorauszahlungenvon300,00€' in blatt
-    assert '900,00€(Nachzahlung)' in blatt
     assert 'BittegleichenSiedenausstehendenBetraginHöhevon900,00€aus.' in blatt
+
+    assert 'IhreNebenkosten:1.200,00€' in blatt
+    assert 'IhreVorauszahlungen:-300,00€' in blatt
+    assert 'Nachzahlung:900,00€' in blatt
+    assert 'Gesamtkostenvon1.200,00€' not in blatt
+    assert 'einenSaldoinHöhevon' not in blatt
 
 
 def test_die_korrektur_wickelt_dieselbe_vorlage(auth_client, app_ctx, unkomprimiert):
@@ -416,3 +457,64 @@ def test_die_vorgabe_spricht_ohne_ich_und_wir():
                      vorauszahlungen=Decimal('300.00'), saldo=Decimal('900.00'))
     assert 'Bitte gleichen Sie den ausstehenden Betrag' in text
     assert ICH_WIR.findall(text) == []
+
+
+# --- Review 0.17.0: Anschriften im Anschreiben, Hinweis ohne Zustelladresse ---
+
+
+def test_die_anschriften_platzhalter_werden_im_pdf_gefuellt(
+        auth_client, app_ctx, unkomprimiert):
+    """A5: Die Vorlage bietet {mieter_anschrift} und {vermieter_anschrift}
+    an, ``_anschreiben_fuer`` reichte sie nicht durch -- im Brief stand der
+    Platzhalter wörtlich."""
+    from nebenkostenfix.models import Tenant, Vermieterdaten, db
+
+    mieter_id, objekt_id, _ = _welt(app_ctx)
+    db.session.get(Tenant, mieter_id).anschrift = 'Am Anger 1\n12345 Musterstadt'
+    db.session.add(Vermieterdaten(anschrift='Vermieterweg 2\n54321 Beispielort'))
+    db.session.commit()
+    auth_client.put(
+        f'/api/properties/{objekt_id}/anschreiben',
+        json={'text': 'An {mieter_anschrift}.\n\nVon {vermieter_anschrift}.'})
+
+    report = _finalisiere(auth_client, mieter_id)
+
+    blatt = _geklebt((Path(os.environ['NAS_MOUNT_PATH'])
+                      / report.document_path).read_bytes())
+    assert '{mieter_anschrift}' not in blatt
+    assert '{vermieter_anschrift}' not in blatt
+    assert 'AnAmAnger1' in blatt
+    assert 'VonVermieterweg2' in blatt
+
+
+def _vorschau(auth_client, mieter_id):
+    antwort = auth_client.post('/api/billing/generate', json={
+        'tenant_id': mieter_id, **ZEITRAUM})
+    assert antwort.status_code == 200, antwort.get_data(as_text=True)
+    return antwort.get_json()['warnings']
+
+
+def test_ausgezogen_ohne_zustelladresse_warnt_die_vorschau(auth_client, app_ctx):
+    """A2: ``zustellhinweis`` war gebaut, aber nirgends verdrahtet. Die
+    Release-Notizen versprechen: „die App weist darauf hin“."""
+    from nebenkostenfix.anschrift import HINWEIS_OHNE_ZUSTELLUNG
+    from nebenkostenfix.models import Tenant, db
+
+    mieter_id, _, _ = _welt(app_ctx)
+    mieter = db.session.get(Tenant, mieter_id)
+    mieter.move_out_date = date(2025, 12, 31)
+    mieter.anschrift = 'Am Anger 1\n12345 Musterstadt'
+    db.session.commit()
+
+    assert HINWEIS_OHNE_ZUSTELLUNG in _vorschau(auth_client, mieter_id)
+
+    mieter.zustellanschrift = 'Neue Straße 5\n12345 Musterstadt'
+    db.session.commit()
+    assert HINWEIS_OHNE_ZUSTELLUNG not in _vorschau(auth_client, mieter_id)
+
+
+def test_wer_noch_wohnt_bekommt_keinen_zustellhinweis(auth_client, app_ctx):
+    from nebenkostenfix.anschrift import HINWEIS_OHNE_ZUSTELLUNG
+
+    mieter_id, _, _ = _welt(app_ctx)
+    assert HINWEIS_OHNE_ZUSTELLUNG not in _vorschau(auth_client, mieter_id)

@@ -46,7 +46,11 @@ BASISREVISION = "63738d5329b4"
 # Phase 49: ``f7c2e9a4b6d1`` legt die Tabelle ``kaltmiete_soll`` an (Kaltmiete + Mieterhöhung).
 # Re-Review: ``d5c9f3b7e2a8`` setzt die Katalog-Werte der Verteilung auf die
 # echten Kodes (PER_SQM -> qm, METER_READING -> direkt/qm, nur Daten).
-KOPFREVISION = "e8b4a7c25f91"
+# Phase 55: ``e8b4a7c25f91`` fuegt ``meters.einheit`` hinzu und schreibt die
+# bisher abgeleitete Einheit je Zaehler fest (Nullwechsel fuer den Bestand).
+# Phase 58: ``f2a6c8b4d013`` fuegt ``tenants.anschrift``,
+# ``tenants.zustellanschrift`` und ``vermieterdaten.anschrift`` hinzu (Issue #35).
+KOPFREVISION = "f2a6c8b4d013"
 
 
 def _umgebung(dbdatei: Path, tmp_path: Path) -> dict:
@@ -2798,3 +2802,77 @@ def test_die_allgemeinstromwanderung_benennt_nur_den_standardnamen_um(tmp_path):
     assert stand["zurueck"] == ["Beleuchtung (Allgemeinstrom)"]
     assert stand["eigener"] == ["Hausstrom"]
     assert stand["kollision"] == ["Allgemeinstrom", "Beleuchtung (Allgemeinstrom)"]
+
+
+CODE_ANSCHRIFTEN_WANDERUNG = """
+import json
+from sqlalchemy import text
+from flask_migrate import downgrade, upgrade
+import app as anwendung
+from nebenkostenfix.models import db
+
+
+def spalten(tabelle):
+    return [z[1] for z in db.session.execute(
+        text(f"PRAGMA table_info('{tabelle}')")).all()]
+
+
+with anwendung.app.app_context():
+    downgrade(revision="e8b4a7c25f91")
+    db.session.execute(text(
+        "INSERT INTO properties (id, name, is_standalone) VALUES (1, 'Altbau', 0)"))
+    db.session.execute(text(
+        "INSERT INTO apartments (id, property_id, name, sqm, is_active)"
+        " VALUES (1, 1, 'EG links', 60.0, 1)"))
+    db.session.execute(text(
+        "INSERT INTO tenants (id, apartment_id, name, move_in_date)"
+        " VALUES (1, 1, 'Altmieter', '2024-01-01')"))
+    db.session.execute(text("INSERT INTO vermieterdaten (id, name) VALUES (1, 'Erika')"))
+    db.session.commit()
+    vorher = spalten("tenants") + spalten("vermieterdaten")
+
+    upgrade()
+    nachher = spalten("tenants") + spalten("vermieterdaten")
+    werte = list(db.session.execute(text(
+        "SELECT anschrift, zustellanschrift FROM tenants")).one())
+    werte.append(db.session.execute(text(
+        "SELECT anschrift FROM vermieterdaten")).scalar())
+    stand = db.session.execute(text("SELECT version_num FROM alembic_version")).scalar()
+
+    # Mehrzeilig eintragen und wieder lesen: Text, nicht String(n).
+    db.session.execute(text(
+        "UPDATE tenants SET anschrift = 'Musterweg 1' || char(10) || '12345 Musterstadt'"))
+    db.session.commit()
+    mehrzeilig = db.session.execute(text("SELECT anschrift FROM tenants")).scalar()
+
+    downgrade(revision="e8b4a7c25f91")
+    zurueck = spalten("tenants") + spalten("vermieterdaten")
+    namen = [db.session.execute(text("SELECT name FROM tenants")).scalar(),
+             db.session.execute(text("SELECT name FROM vermieterdaten")).scalar()]
+
+print(json.dumps({"vorher": vorher, "nachher": nachher, "werte": werte,
+                  "stand": stand, "mehrzeilig": mehrzeilig,
+                  "zurueck": zurueck, "namen": namen}))
+"""
+
+
+def test_die_anschriftenwanderung_legt_die_spalten_leer_an(tmp_path):
+    """Phase 58 (Issue #35): drei Spalten kommen leer dazu.
+
+    Leer ist der bisherige Stand: Im Bestand hat kein Mietverhaeltnis eine
+    Anschrift, und eine Pflichtspalte haette jeden vorhandenen Mieter
+    ausgesperrt. Mehrzeilig muss sie sein -- eine Anschrift auf einer Zeile
+    ist keine. Der Rueckweg nimmt die Spalten wieder weg und laesst die
+    Zeilen stehen.
+    """
+    stand = _lauf(CODE_ANSCHRIFTEN_WANDERUNG, tmp_path / "anschrift.db", tmp_path)
+
+    for spalte in ("anschrift", "zustellanschrift"):
+        assert spalte not in stand["vorher"]
+        assert spalte in stand["nachher"]
+    assert stand["werte"] == [None, None, None], (
+        "Die Wanderung traegt Werte ein. Sie soll nur Spalten anlegen.")
+    assert stand["mehrzeilig"] == "Musterweg 1\n12345 Musterstadt"
+    assert stand["stand"] == KOPFREVISION
+    assert "anschrift" not in stand["zurueck"]
+    assert stand["namen"] == ["Altmieter", "Erika"]

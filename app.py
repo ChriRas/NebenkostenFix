@@ -288,6 +288,9 @@ from nebenkostenfix import hausgeld
 from nebenkostenfix import mieter_daten
 from nebenkostenfix import beispielimmobilie
 from nebenkostenfix import zeitleiste
+# Phase 58: `anschrift` als Modulname waere in den Routen zu nah an
+# den gleichnamigen Feldern; der Plural sagt, dass es der Kern ist.
+from nebenkostenfix import anschrift as anschriften
 from nebenkostenfix.zeitraum import ein_jahr_nach, grenze, letzter_tag, tage
 from nebenkostenfix.frist import frist_status, einwendungsfrist, zustellwarnung
 from nebenkostenfix.heizung import (
@@ -1128,6 +1131,11 @@ def get_tenants():
             'property_name': t.apartment.property.name if t.apartment and t.apartment.property else 'Unknown',
             'gesperrt_bis': t.gesperrt_bis.isoformat() if t.gesperrt_bis else None,
             'anrede': t.anrede,
+            # Phase 58 (Issue #35): beide Anschriften roh, wie sie stehen.
+            # Welche gilt, entscheidet der Kern zum Zeitpunkt der Zustellung
+            # -- die Liste soll beide zeigen koennen.
+            'anschrift': t.anschrift,
+            'zustellanschrift': t.zustellanschrift,
             'ist_beispiel': beispielimmobilie.ist_beispiel(
                 t.apartment.property if t.apartment else None),
         })
@@ -1136,6 +1144,43 @@ def get_tenants():
 def _anrede_aus(eingabe):
     """Die eigene Anrede des Mieters (NK-264); leer heißt neutraler Gruß."""
     return eingabe.text('anrede', standard='', maxlaenge=200).strip() or None
+
+
+#: Grosszuegig fuer eine mehrzeilige Anschrift, eng genug, dass niemand
+#: einen Aufsatz in den Briefkopf schreibt.
+ANSCHRIFT_MAXLAENGE = 500
+
+
+def _anschrift_aus(eingabe, feld):
+    """Eine Anschrift aus dem Textfeld (Phase 58); leer heißt keine.
+
+    Der Kern räumt Ränder und Leerzeilen aus, bevor etwas gespeichert
+    wird: eine Leerzeile im Briefkopf hat niemand getippt, und ein Feld,
+    in dem nur ein Umbruch steht, ist keine Anschrift.
+    """
+    # FormData schickt Umbrueche als \r\n, das Textfeld zaehlt sie als ein
+    # Zeichen. Gezaehlt wird darum erst nach dem Angleichen.
+    roh = (eingabe.text(feld, standard='') or '').replace('\r\n', '\n')
+    if len(roh) > ANSCHRIFT_MAXLAENGE:
+        raise EingabeFehler(
+            f'Die Anschrift ist zu lang: {len(roh)} Zeichen, erlaubt sind '
+            f'{ANSCHRIFT_MAXLAENGE}.', feld)
+    return anschriften.saeubern(roh) or None
+
+
+def _zustellanschrift(mieter, stichtag=None):
+    """Die Anschrift, an die eine Abrechnung für diesen Mieter geht.
+
+    Phase 58/59: Die Regel steht im Kern (``anschrift.fuer_zustellung``) --
+    nach dem Auszug die hinterlegte Zustelladresse, sonst die der Wohnung.
+    Hier wird nur der Stichtag gesetzt: der Tag, an dem das Blatt entsteht.
+    Die Frist des § 556 Abs. 3 BGB läuft über den Zugang, deshalb hängt sie
+    am Tag der Zustellung und nicht am Abrechnungszeitraum.
+    """
+    heute = stichtag or date.today()
+    return anschriften.fuer_zustellung(
+        mieter.anschrift, mieter.zustellanschrift,
+        ausgezogen=anschriften.ist_ausgezogen(mieter.move_out_date, heute))
 
 
 @app.route('/api/tenants', methods=['POST'])
@@ -1149,6 +1194,8 @@ def create_tenant():
         move_out_date=eingabe.datum('move_out_date'),
         last_billed_until=eingabe.datum('last_billed_until'),
         anrede=_anrede_aus(eingabe),
+        anschrift=_anschrift_aus(eingabe, 'anschrift'),
+        zustellanschrift=_anschrift_aus(eingabe, 'zustellanschrift'),
     )
     db.session.add(new_tenant)
     db.session.flush() # get id
@@ -1231,6 +1278,13 @@ def update_delete_tenant(id):
         tenant.last_billed_until = eingabe.datum('last_billed_until')
     if eingabe.vorhanden('anrede'):
         tenant.anrede = _anrede_aus(eingabe)
+    # Phase 58: nur wenn geschickt. Eine aeltere Oberflaeche soll die
+    # Anschrift nicht loeschen, weil sie das Feld noch nicht kennt; ein
+    # leer geschicktes Feld soll sie aber wirklich ausraeumen.
+    if eingabe.vorhanden('anschrift'):
+        tenant.anschrift = _anschrift_aus(eingabe, 'anschrift')
+    if eingabe.vorhanden('zustellanschrift'):
+        tenant.zustellanschrift = _anschrift_aus(eingabe, 'zustellanschrift')
 
     vertrag = eingabe.datei('contract_file')
     if vertrag:
@@ -2689,8 +2743,24 @@ def create_invoice():
         co2_emission_kg=felder['co2_emission_kg'],
     )
     db.session.add(invoice)
+    db.session.flush()
+    antwort = {'id': invoice.id}
+    _datum_fuer_den_beleg(eingabe, invoice, antwort)
     db.session.commit()
-    return jsonify({'id': invoice.id}), 201
+    return jsonify(antwort), 201
+
+
+def _datum_fuer_den_beleg(eingabe, invoice, antwort):
+    """Auf Wunsch bekommen alle Rechnungen desselben Belegs dieses
+    Rechnungsdatum (Sammelbeleg, ein Ausstellungsdatum für alle). Ein leeres
+    Datum wird nie auf die anderen übertragen."""
+    if not (eingabe.wahrheit('rechnungsdatum_fuer_beleg')
+            and invoice.invoice_document_id and invoice.rechnungsdatum):
+        return
+    antwort['beleg_datum_gesetzt'] = CostInvoice.query.filter(
+        CostInvoice.invoice_document_id == invoice.invoice_document_id,
+        CostInvoice.id != invoice.id,
+    ).update({'rechnungsdatum': invoice.rechnungsdatum}, synchronize_session=False)
 
 @app.route('/api/invoices/<int:id>', methods=['PUT'])
 def update_invoice(id):
@@ -2742,9 +2812,11 @@ def update_invoice(id):
     invoice.heizkostenart = felder['heizkostenart']
     invoice.co2_kosten = felder['co2_kosten']
     invoice.co2_emission_kg = felder['co2_emission_kg']
-    
+
+    antwort = {'id': invoice.id}
+    _datum_fuer_den_beleg(eingabe, invoice, antwort)
     db.session.commit()
-    return jsonify({'id': invoice.id}), 200
+    return jsonify(antwort), 200
 
 @app.route('/api/invoices/<int:id>', methods=['DELETE'])
 def delete_invoice(id):
@@ -3086,12 +3158,20 @@ def generate_bill():
     spaete = _zahlungen_nach_auszug_warnung(db.session.get(Tenant, tenant_id), e_date)
     if spaete:
         bill_data['warnings'].append(spaete)
+    # Review 0.17.0: ausgezogen und keine Zustelladresse -- die Abrechnung
+    # ginge an die alte Wohnung, die Frist laeuft trotzdem (Phase 58).
+    mieter = db.session.get(Tenant, tenant_id)
+    zustellung = anschriften.zustellhinweis(
+        mieter.anschrift, mieter.zustellanschrift,
+        ausgezogen=anschriften.ist_ausgezogen(mieter.move_out_date, date.today()))
+    if zustellung:
+        bill_data['warnings'].append(zustellung)
     bill_data['vorauszahlung'] = _vorauszahlung_vorschlag(
         db.session.get(Tenant, tenant_id), bill_data, category_ids)
 
     return jsonify(bill_data), 200
 
-from nebenkostenfix.pdf_generator import PDFGenerator
+from nebenkostenfix.pdf_generator import PDFGenerator, vermieter_anschrift
 import zipfile
 from io import BytesIO
 
@@ -3162,6 +3242,7 @@ def finalize_bill():
         end_date=bill_data['end_date'],
         detailliert=is_detailed,
         tenant_anrede=mieter.anrede,
+        tenant_anschrift=_zustellanschrift(mieter),
     )
     
     # Kein eigenes try mehr (NK-030): der zentrale Handler rollt zurueck,
@@ -3292,6 +3373,9 @@ def _vermieter_stand():
         'iban_quelle': quelle(iban_tabelle, iban_umgebung),
         'girocode_bereit': bool(name and iban),
         'art': zeile.art if zeile else None,
+        # Phase 58: ohne Herkunftsangabe -- anders als Name und IBAN hatte
+        # die Anschrift nie einen Rueckfall aus der Umgebung.
+        'anschrift': (zeile.anschrift or '') if zeile else '',
         'logo': vermieter_logo.pfad() is not None,
     }
 
@@ -3513,6 +3597,10 @@ def setze_vermieterdaten():
         if art and art not in ARTEN:
             raise EingabeFehler('Die Art des Vermieters ist „privat“ oder „firma“.', 'art')
         zeile.art = art or None
+    # Phase 58: wie die Art nur auf Zuruf, damit eine aeltere Oberflaeche
+    # die Anschrift stehen laesst statt sie stillschweigend zu leeren.
+    if eingabe.vorhanden('anschrift'):
+        zeile.anschrift = _anschrift_aus(eingabe, 'anschrift')
     zeile.aktualisiert_am = date.today()
     db.session.commit()
     return jsonify(_vermieter_stand())
@@ -3766,6 +3854,8 @@ def _anschreiben_fuer(mieter, bill_data, report=None, vorauszahlung=None):
         vermieter_name=vermieter_ausweis()[0],
         vorauszahlung=vorauszahlung,
         mieter_anrede=mieter.anrede,
+        mieter_anschrift=_zustellanschrift(mieter),
+        vermieter_anschrift=vermieter_anschrift(),
     )
 
 
@@ -4268,6 +4358,7 @@ def korrigiere_billing_report(id):
             end_date=bill_data['end_date'],
             detailliert=detailliert,
             tenant_anrede=tenant.anrede,
+            tenant_anschrift=_zustellanschrift(tenant),
         )
         suffix = ("_Detailliert" if detailliert else "_Einfach") + zusatz
         dateiname = (f"Nebenkostenabrechnung_{tenant.name.replace(' ', '_')}"
@@ -4450,12 +4541,13 @@ def _get_unit(cat_name):
 
 
 def _map_to_bucket(cat_name):
-    # Auch hier der Katalog (NK-121): Strom ist allein die Nr. 11, alles
-    # Brennende (Nr. 4, 5, 6) faellt unter "Gas" -- auch das Warmwasser,
-    # das ein Brennstoffposten ist. Die Stichwortliste hatte es in die
-    # Wasser-Spalte geräumt, waehrend _map_category dasselbe Wort nach
-    # Energie schob. Sie stand in analytics_building und war deshalb
-    # untestbar; jetzt liegt sie neben die anderen beiden.
+    # Auch hier der Katalog (NK-121): Strom ist allein die Nr. 11, die
+    # Nummern 4, 5 und 6 sind "Waerme" -- auch das Warmwasser, das ein
+    # Energieposten ist. Die Stichwortliste hatte es in die Wasser-Spalte
+    # geräumt, waehrend _map_category dasselbe Wort nach Energie schob.
+    # Sie stand in analytics_building und war deshalb untestbar; jetzt
+    # liegt sie neben die anderen beiden. Der Bereich hiess bis 0.16.0
+    # "Gas" (Issue #35): den Energietraeger kennt die Anwendung nicht.
     return betrkv.bereich(betrkv.zuordnung(cat_name))
 
 
@@ -4690,7 +4782,12 @@ def analytics_building(property_id):
     }
     
     # --- Timeseries Data (grouped into 4 clean buckets) ---
-    bucket_units = {'Strom': 'kWh', 'Gas': 'm³', 'Wasser': 'm³', 'Sonstige Kosten': '€'}
+    bucket_units = {'Strom': 'kWh', 'Wärme': 'kWh', 'Wasser': 'm³', 'Sonstige Kosten': '€'}
+
+    def _zaehler_einheit(m):
+        # Die Einheit des Zaehlers selbst: im Bereich "Waerme" stehen
+        # Gas- (m³) und Waermezaehler (kWh) nebeneinander (Review 0.17.0).
+        return m.einheit or einheit_fuer(m.category.name, m.category.betrkv_nr)
     
     # --- Timeseries: costs per year with actual date ranges ---
     cost_timeseries = {}
@@ -4743,6 +4840,7 @@ def analytics_building(property_id):
                 for entry in timeseries_data:
                     if entry['year'] == year_label and entry['category'] == bucket:
                         entry['consumption'] += round(net_consumption, 2)
+                        entry['unit'] = _zaehler_einheit(mm)
                         if period_str not in entry['period']:
                             entry['period'] += ' | ' + period_str
                         found = True
@@ -4756,7 +4854,7 @@ def analytics_building(property_id):
                         'category': bucket,
                         'cost': 0,
                         'consumption': round(net_consumption, 2),
-                        'unit': bucket_units.get(bucket, '€')
+                        'unit': _zaehler_einheit(mm)
                     })
     
     # --- Timeseries: consumption from sub-meters for categories WITHOUT a main meter ---
@@ -4792,6 +4890,7 @@ def analytics_building(property_id):
                     for entry in timeseries_data:
                         if entry['year'] == year_label and entry['category'] == bucket:
                             entry['consumption'] += round(consumption, 2)
+                            entry['unit'] = _zaehler_einheit(sm)
                             if period_str not in entry['period']:
                                 entry['period'] += ' | ' + period_str
                             found = True
@@ -4805,7 +4904,7 @@ def analytics_building(property_id):
                             'category': bucket,
                             'cost': 0,
                             'consumption': round(consumption, 2),
-                            'unit': bucket_units.get(bucket, '€')
+                            'unit': _zaehler_einheit(sm)
                         })
         
     timeseries_data.sort(key=lambda x: (x['year'], x['category']))
@@ -4833,7 +4932,7 @@ def analytics_building(property_id):
                         'apartment': apt.name,
                         'category': bucket,
                         'consumption': round(cons, 2),
-                        'unit': bucket_units.get(bucket, ''),
+                        'unit': _zaehler_einheit(sm),
                         'period': period_str,
                         'year': r_last.reading_date.year
                     })
@@ -5119,8 +5218,17 @@ def beispielimmobilie_entfernen():
 def zeitleiste_route():
     """Die Rechnungen nach Ausstellungsdatum (NK-144, D-57): Jahre und
     Monate absteigend, Altbestand ohne Rechnungsdatum in einer eigenen
-    Gruppe am Ende."""
-    return jsonify(zeitleiste.erstellen()), 200
+    Gruppe am Ende.
+
+    Die Filter der Rechnungsliste gelten hier mit (``property_id``,
+    ``jahr``, ``kategorie``, ``suche``) -- sonst zeigte die Zeitleiste
+    Rechnungen einer Immobilie, die oben gar nicht gewaehlt ist."""
+    return jsonify(zeitleiste.erstellen(
+        property_id=request.args.get('property_id', type=int),
+        jahr=request.args.get('jahr') or None,
+        kategorie=request.args.get('kategorie') or None,
+        suche=(request.args.get('suche') or '').strip() or None,
+    )), 200
 
 
 if __name__ == '__main__':

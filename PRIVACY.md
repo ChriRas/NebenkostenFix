@@ -1,5 +1,8 @@
 # Datenschutz
 
+Die vollständige Datenschutzerklärung mit Verantwortlichem und Ihren Rechten steht auf
+[nebenkostenfix.org/datenschutz.html](https://nebenkostenfix.org/datenschutz.html).
+
 **Kurz: Ihre Daten bleiben bei Ihnen.** NebenkostenFix hat keinen Server, kein Konto beim
 Herausgeber, keine Telemetrie und keine Werbung.
 

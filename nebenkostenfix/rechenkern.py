@@ -144,12 +144,14 @@ import re
 from dataclasses import dataclass, field, replace
 from datetime import date, timedelta
 from decimal import Decimal
-from typing import Mapping, Optional, Sequence
+from typing import Mapping, NamedTuple, Optional, Sequence
 
 from nebenkostenfix.abrechnungsart import VORGABE, aufzaehlung, ist_gueltig
 from nebenkostenfix import betrkv
 from nebenkostenfix import co2
-from nebenkostenfix.geld import NULL, dec, restcent_auf_letzte, runde, runde_einheitspreis, summe
+from nebenkostenfix.geld import (NULL, dec, restcent_auf_letzte, runde,
+                                 runde_einheitspreis, summe,
+                                 text as geld_text)
 from nebenkostenfix import heizung
 from nebenkostenfix import lohnausweis
 from nebenkostenfix.haushalt import Stand as Haushaltsstand
@@ -680,6 +682,12 @@ def pruefe_heizkosten_zuordnung(vorgang: Vorgang) -> list:
     return offen
 
 
+#: Der Anfang der Beschreibung einer Rechnung, die einer Wohnung direkt
+#: zugewiesen ist. ``billing_type`` ist dort 'direkt' wie beim eigenen
+#: Zaehler; das Uebersichtsblatt unterscheidet die beiden an diesem Wort.
+DIREKT_ZUGEWIESEN = 'Direkt zugewiesen'
+
+
 def einheit_fuer(kategorie_name: str, betrkv_nr: Optional[int] = None) -> str:
     """Die Einheit der Menge, die ein Zaehler dieser Kostenart misst.
 
@@ -727,16 +735,24 @@ def rechnungsdatum_angabe(datum: Optional[date]) -> Optional[str]:
     return datum.isoformat() if datum else None
 
 
+#: Der Vorsatz jeder Vermieteranteil-Beschreibung. Das PDF streicht ihn
+#: wieder, weil seine Überschrift dasselbe sagt (Phase 61) -- dafür muss
+#: er an einer Stelle stehen und nicht dreimal als Zeichenkette.
+VERMIETERANTEIL_VORSATZ = 'Nicht auf die Mieter umgelegt: '
+
+
 def euro_text(betrag) -> str:
-    """Ein Betrag als Klartext: "1200,00 €" -- wie die Tabelle ihn zeigt.
+    """Ein Betrag als Klartext: "1.200,00 €" -- wie die Tabelle ihn zeigt.
 
     Der Rechenweg (R-DOC-01 Punkt 6) ist ein Satz, keine Formel: er mischt
     Zahlen und Woerter, und die Betraege darin muessen so aussehen wie die
     in der Betragsspalte, sonst rechnet der Mieter zwei Schriften
-    gegeneinander. Kein Tausendertrennzeichen -- die Betragsspalte des
-    Dokuments hat auch keins.
+    gegeneinander. Genau das war der Grund, hier **kein**
+    Tausendertrennzeichen zu setzen -- und genau deshalb aendert sich das
+    jetzt: Seit Phase 60 setzt die Betragsspalte eines, also setzt der Satz
+    daneben auch eins. Geschrieben wird es an einer Stelle (``geld.text``).
     """
-    return f"{runde(betrag):.2f}".replace('.', ',') + ' €'
+    return geld_text(betrag)
 
 
 def zahl_text(wert) -> str:
@@ -757,23 +773,47 @@ def menge_text(wert) -> str:
     return f"{float(wert):.1f}".replace('.', ',')
 
 
+class Schritt(NamedTuple):
+    """Ein Schritt des Rechenwegs: was gerechnet wird, und was herauskommt.
+
+    Phase 61 (Durchsicht am 2026-10-22). Vorher war ein Schritt **ein Satz** --
+    „36,00 € Rechnungsbetrag, anteilig 30 von 120 Tagen = 9,00 €" --, und
+    der naechste Schritt begann wieder mit 9,00 €. Auf dem Blatt standen
+    dadurch fuenf Geldbetraege, von denen nur drei verschieden waren: das
+    Zwischenergebnis zweimal (als Ergebnis und als Ausgangswert) und das
+    Endergebnis zweimal (im Satz und in der Betragsspalte). Befund: „2x ein =
+    mit Geldbetrag … fuer ein schnelles Ueberfliegen unuebersichtlich."
+
+    Getrennt gehalten kann das Blatt die Betraege **in einer Flucht**
+    untereinander setzen, rechtsbuendig, ohne Gleichheitszeichen:
+
+        Rechnungsbetrag                      36,00 EUR
+        anteilig 30 von 120 Tagen             9,00 EUR
+        nach Wohnflaeche 52,40 von 210,00 m2  2,25 EUR
+
+    Der Wert bleibt ``Decimal`` -- der Kern rechnet, das Blatt schreibt
+    (R-NUM-01). Gerundet wird erst beim Ausweisen, in ``geld.text``.
+    """
+
+    text: str
+    betrag: Decimal
+
+
 def rechenweg_rechnungsbetrag(betrag, anteilige_tage: int,
                               rechnungstage: int,
                               anteiliger_betrag) -> list:
-    """Der erste Schritt des Rechenwegs: die Rechnung in den Zeitraum.
+    """Der Anfang des Rechenwegs: die Rechnung, und ihr Zeitanteil.
 
-    R-DOC-01 Punkt 7 -- bei unterjaehrigem Mietverhaeltnis stehen die Tage
-    im Satz, und das Zwischenergebnis (der zeitanteilige Betrag) ist
-    sichtbar, nicht verschluckt. Bei einer Rechnung, die den ganzen
-    Abrechnungszeitraum deckt, faellt der Schritt nicht an: dann steht die
-    Rechnung schon als Ausgangswert des naechsten Schritts.
+    R-DOC-01 Punkt 7 -- bei unterjaehrigem Mietverhaeltnis steht die
+    Tageszahl als eigener Schritt, und das Zwischenergebnis (der
+    zeitanteilige Betrag) ist sichtbar, nicht verschluckt. Deckt die
+    Rechnung den ganzen Zeitraum, bleibt es beim Ausgangswert.
     """
+    anfang = [Schritt('Rechnungsbetrag', dec(betrag))]
     if anteilige_tage >= rechnungstage:
-        return [f"{euro_text(betrag)} Rechnungsbetrag"]
-    return [
-        f"{euro_text(betrag)} Rechnungsbetrag, anteilig {anteilige_tage} "
-        f"von {rechnungstage} Tagen = {euro_text(anteiliger_betrag)}",
-    ]
+        return anfang
+    return anfang + [Schritt(f"anteilig {anteilige_tage} von "
+                             f"{rechnungstage} Tagen", dec(anteiliger_betrag))]
 
 
 # ---------------------------------------------------------------------------
@@ -1598,7 +1638,7 @@ def _vermieteranteil(vorgang, kategorie_name, rechnung, anteiliger_betrag,
         'eigennutzung_amount': eigen_betrag,
         'amount': leer_betrag + eigen_betrag,
         'units': einheiten,
-        'description': 'Nicht auf die Mieter umgelegt: ' + ', '.join(teile),
+        'description': VERMIETERANTEIL_VORSATZ + ', '.join(teile),
     }
 
 
@@ -1676,7 +1716,7 @@ def _vermieterpersonenanteil(vorgang, kategorie_name, rechnung, bilanz,
         'eigennutzung_amount': eigen_betrag,
         'amount': leer_betrag + eigen_betrag,
         'units': einheiten,
-        'description': 'Nicht auf die Mieter umgelegt: ' + ', '.join(teile),
+        'description': VERMIETERANTEIL_VORSATZ + ', '.join(teile),
     }
 
 
@@ -1838,7 +1878,7 @@ def _vermieterverbrauchsanteil(vorgang: Vorgang, kategorie_name: str,
         'eigennutzung_amount': eigen_betrag,
         'amount': leer_betrag + eigen_betrag,
         'units': einheiten,
-        'description': 'Nicht auf die Mieter umgelegt: ' + ', '.join(teile),
+        'description': VERMIETERANTEIL_VORSATZ + ', '.join(teile),
     }
 
 
@@ -3066,8 +3106,10 @@ def rechne(vorgang: Vorgang) -> dict:
                         vorgang, cat.name, inv, grundpreis * time_fraction, qm,
                         overlap_von, overlap_bis, nur={inv.wohnung_id})
                     if grundanteil:
+                        # Der Vorsatz bleibt vorn, das PDF schneidet ihn dort ab.
                         grundanteil['description'] = (
-                            'Grundpreis/Zählermiete nach Tagen. ' + grundanteil['description'])
+                            VERMIETERANTEIL_VORSATZ + 'Grundpreis/Zählermiete nach Tagen, '
+                            + grundanteil['description'][len(VERMIETERANTEIL_VORSATZ):])
                         vermieter_positionen.append(grundanteil)
                 elif grundpreis is None and vorgang.wohnung.id == inv.wohnung_id:
                     leertage = sum(
@@ -3091,7 +3133,7 @@ def rechne(vorgang: Vorgang) -> dict:
             tenant_cost = prorated_invoice_amount
             billing_type = 'direkt'
             is_apartment_direct = True
-            description = "Direkt zugewiesen (100 % der Rechnung für diese Wohnung)"
+            description = f"{DIREKT_ZUGEWIESEN} (100 % der Rechnung für diese Wohnung)"
 
             # Zaehlerdetails auch bei einer Direktrechnung, der Nachvollziehbarkeit wegen
             if cat.braucht_zaehler or hat_zaehler:
@@ -3114,7 +3156,7 @@ def rechne(vorgang: Vorgang) -> dict:
                         else:
                             verbrauchskosten = verbrauchsteil * anteil
                         tenant_cost = verbrauchskosten
-                        description = (f"Direkt zugewiesen, nach Verbrauch: "
+                        description = (f"{DIREKT_ZUGEWIESEN}, nach Verbrauch: "
                                        f"{zahl_text(round(tenant_consumption, 1))} von "
                                        f"{zahl_text(round(gesamt, 1))} {unit} der Rechnung")
                         if grundpreis:
@@ -3123,22 +3165,32 @@ def rechne(vorgang: Vorgang) -> dict:
                             tenant_cost += grund_kosten
                             description += ", Grundpreis/Zählermiete nach Tagen"
                             rechenweg.append(
-                                f"{euro_text(grundpreis)} Grundpreis/Zählermiete, anteilig "
-                                f"{overlap_days} von {invoice_days} Tagen = "
-                                f"{euro_text(runde(grund_kosten))}")
-                        if preise:
+                                Schritt('Grundpreis/Zählermiete',
+                                        dec(grundpreis)))
                             rechenweg.append(
+                                Schritt(f"anteilig {overlap_days} von "
+                                        f"{invoice_days} Tagen",
+                                        dec(grund_kosten)))
+                        if preise:
+                            rechenweg.append(Schritt(
                                 f"{zahl_text(round(tenant_detail['ht'], 1))} {unit} HT × "
                                 f"{zahl_text(runde_einheitspreis(preise[0]))} €/{unit} + "
                                 f"{zahl_text(round(tenant_detail['nt'], 1))} {unit} NT × "
-                                f"{zahl_text(runde_einheitspreis(preise[1]))} €/{unit} "
-                                f"= {euro_text(runde(verbrauchskosten))}")
+                                f"{zahl_text(runde_einheitspreis(preise[1]))} €/{unit}",
+                                dec(verbrauchskosten)))
                         else:
-                            rechenweg.append(
-                                f"{euro_text(verbrauchsteil)} "
-                                f"{'übriger Betrag' if grundpreis else 'Rechnungsbetrag'} × "
-                                f"{zahl_text(round(tenant_consumption, 1))} / {zahl_text(round(gesamt, 1))} {unit} "
-                                f"= {euro_text(runde(verbrauchskosten))}")
+                            rechenweg.append(Schritt(
+                                'übriger Betrag' if grundpreis else 'Rechnungsbetrag',
+                                dec(verbrauchsteil)))
+                            rechenweg.append(Schritt(
+                                f"nach Verbrauch "
+                                f"{zahl_text(round(tenant_consumption, 1))} von "
+                                f"{zahl_text(round(gesamt, 1))} {unit}",
+                                dec(verbrauchskosten)))
+                        if grundpreis:
+                            # Grundpreis und Verbrauch zusammen, damit der
+                            # letzte Schritt den Betrag der Zeile trägt.
+                            rechenweg.append(Schritt('zusammen', dec(tenant_cost)))
 
         elif billing_type == 'qm':
             # Erst hier abbrechen, nicht schon oben: eine Abrechnung ohne
@@ -3151,15 +3203,12 @@ def rechne(vorgang: Vorgang) -> dict:
             # erst der Zeitanteil mit Tagen (Punkt 7), dann der Schluessel.
             # Ohne Zeitanteil faellt der erste Schritt weg -- die Rechnung
             # steht schon als Ausgangswert des Schluesselschritts.
-            if overlap_days < invoice_days:
-                rechenweg.append(
-                    f"{euro_text(inv.betrag)} Rechnungsbetrag, anteilig "
-                    f"{overlap_days} von {invoice_days} Tagen = "
-                    f"{euro_text(prorated_invoice_amount)}")
-            rechenweg.append(
-                f"{euro_text(prorated_invoice_amount)} nach Wohnfläche "
-                f"{zahl_text(vorgang.wohnung.qm)} von "
-                f"{zahl_text(property_sqm)} m² = {euro_text(tenant_cost)}")
+            rechenweg.extend(rechenweg_rechnungsbetrag(
+                inv.betrag, overlap_days, invoice_days,
+                prorated_invoice_amount))
+            rechenweg.append(Schritt(
+                f"nach Wohnfläche {zahl_text(vorgang.wohnung.qm)} von "
+                f"{zahl_text(property_sqm)} m²", dec(tenant_cost)))
 
             # Der Rest dieser Rechnung faellt auf Flaeche, die im Zeitraum
             # niemand gemietet hatte. Er bleibt beim Vermieter -- und steht
@@ -3201,10 +3250,10 @@ def rechne(vorgang: Vorgang) -> dict:
                 # der Rechenweg kennt deshalb keinen zweiten, zeitlichen
                 # Schritt. Der volle Rechnungsbetrag mal der Personentag-
                 # anteil ergibt die Zeile.
-                rechenweg.append(
-                    f"{euro_text(inv.betrag)} nach Personentagen "
-                    f"{this_tenant_days} von {nenner} = "
-                    f"{euro_text(tenant_cost)}")
+                rechenweg.append(Schritt('Rechnungsbetrag', dec(inv.betrag)))
+                rechenweg.append(Schritt(
+                    f"nach Personentagen {this_tenant_days} von {nenner}",
+                    dec(tenant_cost)))
                 # F-128: ausgewiesen wird nur der Leerstand im Zeitraum dieser
                 # Abrechnung, wie beim qm-Schluessel -- der Nenner bleibt der
                 # der ganzen Rechnung, wie bei den Mietern.

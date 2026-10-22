@@ -18,7 +18,7 @@
     <link rel="stylesheet" href="/static/vendor/fonts/geist-mono/geist-mono.css">
     <link rel="stylesheet" href="/static/vendor/phosphor/regular/style.css">
     <link rel="stylesheet" href="/static/vendor/phosphor/fill/style.css">
-    <link rel="stylesheet" href="/static/style.css?v=14">
+    <link rel="stylesheet" href="/static/style.css?v=18">
     <!-- Einflug: kommt die Seite frisch von der Anmeldung
          (formular.js, höchstens 15 s alt), zieht style.css die Indigo-Fläche weg. -->
     <script>try { if (Date.now() - Number(sessionStorage.getItem('nk-einflug')) < 15000) document.documentElement.classList.add('einflug'); sessionStorage.removeItem('nk-einflug'); } catch (e) { /* ohne Speicher kein Einflug */ }</script>
@@ -283,7 +283,19 @@
                             <!-- populated dynamically in js -->
                         </select>
                     </div>
+                    <!-- Phase 57 (Issue #35): die Jahre kommen aus dem Bestand,
+                         nach dem Rechnungsdatum (D-57), nicht nach dem Tag der
+                         Erfassung. -->
+                    <div class="form-group">
+                        <select id="invoice-jahr-filter" onchange="renderInvoices()"
+                                aria-label="Jahr des Rechnungsdatums"
+                                title="Gefiltert wird nach dem Rechnungsdatum, nicht nach dem Leistungszeitraum.">
+                            <option value="">Alle Jahre</option>
+                            <!-- populated dynamically in js -->
+                        </select>
+                    </div>
                 </div>
+                <p class="rechnungen-summe" id="invoice-summe" hidden></p>
                 <div class="spalte" id="invoices-container">
                     <div class="skelett" role="status" aria-label="Wird geladen"><span></span><span></span><span></span></div>
                 </div>
@@ -443,6 +455,14 @@
                         <div class="form-group">
                             <label for="vermieter-name">Name (Empfänger)</label>
                             <input type="text" id="vermieter-name" maxlength="200" placeholder="z. B. Max Mustermann">
+                        </div>
+                        <!-- Phase 58 (Issue #35): die eigene Anschrift für den
+                             Briefkopf. Ohne Rückfall aus der Umgebung. -->
+                        <div class="form-group">
+                            <label for="vermieter-anschrift">Eigene Anschrift</label>
+                            <textarea id="vermieter-anschrift" rows="3" maxlength="500"
+                                placeholder="Musterweg 1&#10;12345 Musterstadt"></textarea>
+                            <small class="feld-hilfe">Steht als Absender im Briefkopf der Abrechnung.</small>
                         </div>
                         <div class="form-group">
                             <label for="vermieter-iban">IBAN</label>
@@ -1003,7 +1023,7 @@
                         </p>
                     </div>
                     <div class="form-group" id="analytics-auswahl" style="display: flex; gap: 8px; margin: 0;">
-                        <select id="analytics-property-select" class="form-control" style="width: 250px;"
+                        <select id="analytics-property-select" class="form-control"
                             onchange="fetchAnalytics()"></select>
                     </div>
                 </div>
@@ -1213,7 +1233,7 @@
                                 <button class="filter-pill" data-filter="Sonstige Kosten">Sonstige
                                     Kosten</button>
                                 <button class="filter-pill" data-filter="Strom">Strom</button>
-                                <button class="filter-pill" data-filter="Gas">Gas</button>
+                                <button class="filter-pill" data-filter="Wärme">Wärme</button>
                                 <button class="filter-pill" data-filter="Wasser">Wasser</button>
                             </div>
                         </div>
@@ -1770,6 +1790,21 @@
                     <label for="tenant-anrede">Anrede im Anschreiben (optional)</label>
                     <input type="text" id="tenant-anrede" maxlength="200" placeholder="z. B. Sehr geehrte Frau Muster">
                     <small class="feld-hilfe">Leer lassen für „Guten Tag“ mit dem Namen des Mieters.</small>
+                </div>
+                <!-- Phase 58 (Issue #35): Anschrift der Wohnung und, ab dem
+                     Auszug, die Zustelladresse. Mehrzeilig, weil eine
+                     Anschrift mehrzeilig ist. -->
+                <div class="form-group">
+                    <label for="tenant-anschrift">Anschrift (optional)</label>
+                    <textarea id="tenant-anschrift" rows="3" maxlength="500"
+                        placeholder="Musterweg 1&#10;12345 Musterstadt"></textarea>
+                    <small class="feld-hilfe">Steht im Briefkopf der Abrechnung. Straße, Hausnummer, PLZ und Ort — eine Angabe pro Zeile.</small>
+                </div>
+                <div class="form-group">
+                    <label for="tenant-zustellanschrift">Zustelladresse ab Auszug (optional)</label>
+                    <textarea id="tenant-zustellanschrift" rows="3" maxlength="500"
+                        placeholder="Neue Straße 9&#10;54321 Anderswo"></textarea>
+                    <small class="feld-hilfe">Gilt erst ab dem Tag nach dem Auszug. Die Abrechnungsfrist (§ 556 Abs. 3 BGB) läuft über den Zugang beim Mieter — eine Abrechnung an die alte Wohnung erreicht ihn nicht.</small>
                 </div>
                 <div class="form-group">
                     <label for="tenant-apartment">Zugeordnete Wohnung</label>
@@ -2519,6 +2554,11 @@
                     <div class="form-group">
                         <label>Rechnungsdatum (Ausstellungsdatum auf dem Beleg)</label>
                         <input type="date" id="invoice-rechnungsdatum">
+                        <!-- Phase 64: auf einem Sammelbeleg gilt ein Datum oft für alle. -->
+                        <label class="haken-zeile" id="invoice-datum-beleg-zeile" hidden>
+                            <input type="checkbox" id="invoice-datum-fuer-beleg">
+                            <span>Datum auch für <span id="invoice-datum-beleg-anzahl"></span> dieses Belegs übernehmen</span>
+                        </label>
                     </div>
                     <!-- NK-124: die Tarifpreise (NK-055). Sie gehören zusammen:
                          entweder beide oder keine — so rechnet der Kern es. -->
@@ -2994,7 +3034,7 @@
     </div>
     <script src="/static/formular.js?v=2"></script>
     <script src="/static/umzug.js?v=1"></script>
-    <script src="/static/app.js?v=39"></script>
+    <script src="/static/app.js?v=47"></script>
 </body>
 
 </html>

@@ -61,8 +61,12 @@ def test_rechnungen_zeigen_den_alltagsnamen():
     BetrKV-Namen."""
     liste = _funktionsrumpf('renderInvoices')
     assert '<span>${escapeHtml(zaehlerArtName(catName))}</span>' in liste
-    assert 'opt.textContent = zaehlerArtName(c)' in liste
-    assert 'opt.value = c;' in liste
+    # Phase 62: die Optionen baut auswahlNachBestand -- Wert ist der
+    # Originalname, die Beschriftung der Alltagsname.
+    assert 'category_name))].sort(),\n        zaehlerArtName)' in liste
+    helfer = _funktionsrumpf('auswahlNachBestand')
+    assert 'opt.value = w;' in helfer
+    assert 'opt.textContent = beschriftung(w);' in helfer
     dialog = _funktionsrumpf('openAddInvoiceModal')
     assert 'escapeHtml(zaehlerArtName(c.name))' in dialog
     assert 'escapeHtml(c.name)' not in dialog

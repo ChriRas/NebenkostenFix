@@ -29,6 +29,7 @@ from datetime import date
 from decimal import Decimal, InvalidOperation
 
 from nebenkostenfix.abrechnungsart import ARTEN as ARTTEXT
+from nebenkostenfix.geld import text as geld_text
 
 SPALTEN = (
     'Zeile', 'Art', 'Kostenart', 'Anbieter', 'Rechnungsnummer',
@@ -74,6 +75,18 @@ def _datum(iso) -> str:
         return _text(iso)
 
 
+def _rechenweg(schritte) -> str:
+    """Die Schritte als ein Satz. Seit Phase 61 ist ein Schritt ein Paar
+    (Text, Betrag), aeltere Schnappschuesse haben reine Texte."""
+    if not schritte:
+        return ''
+    if isinstance(schritte, str):
+        return schritte
+    return ' · '.join(
+        schritt if isinstance(schritt, str) else f'{schritt[0]} {geld_text(schritt[1])}'
+        for schritt in schritte)
+
+
 def _umlageart(schluessel) -> str:
     if not schluessel:
         return ''
@@ -101,7 +114,7 @@ def positionen_csv(ergebnis: dict) -> str:
             _zahl(zeile.get('overlap_days')),
             _zahl(zeile.get('invoice_days')),
             _betrag(zeile.get('tenant_cost')),
-            _text(zeile.get('rechenweg') or zeile.get('description')),
+            _text(_rechenweg(zeile.get('rechenweg')) or zeile.get('description')),
         ])
         for teil in zeile.get('sub_items') or []:
             schreiber.writerow([

@@ -47,6 +47,7 @@ from nebenkostenfix.rechenkern import (
     Zaehler,
     rechne,
 )
+from nebenkostenfix.rechenkern import Schritt
 
 JAHR_BEGINN = date(2024, 1, 1)
 JAHR_ENDE = date(2024, 12, 31)
@@ -224,10 +225,10 @@ def test_der_abschnitt_zeigt_verteilung_und_ausweis(unkomprimiert, detailliert):
     assert 'EmissiondesGebäudes:2200,0kgCO2imAbrechnungszeitraum—22,0kg/m²a.' \
         in text
     assert 'Einstufung:Stufe4—Mieteranteil70%,Vermieteranteil30%.' in text
-    assert ('CO2-KostendesGebäudes:2000,00€—davon798,00€aufdieses'
+    assert ('CO2-KostendesGebäudes:2.000,00€—davon798,00€aufdieses'
             'Mietverhältnis;derVermieteranteilbeträgt600,00€.') in text
     assert ('HerkunftderEmissionsdaten:RechnungR-2024-777vom15.01.2025'
-            '—2200,0kg,2000,00€.') in text
+            '—2200,0kg,2.000,00€.') in text
 
 
 def test_der_vermieteranteil_steht_auf_dem_blatt(unkomprimiert):
@@ -240,9 +241,15 @@ def test_der_vermieteranteil_steht_auf_dem_blatt(unkomprimiert):
     text = _geklebt(_erzeuge(ergebnis))
 
     assert 'Vermieteranteil(nichtaufdieMieterumgelegt)' in text
+    # Phase 61: Der Abschnitt ist eine Tabelle, kein Fließtext -- links die
+    # Position mit ihrem Grund, rechts der Betrag. Der Vorsatz „Nicht auf
+    # die Mieter umgelegt:" fällt an jeder Zeile weg, weil die Überschrift
+    # darüber genau das sagt; der Grund selbst bleibt. Geprüft ist
+    # unverändert R-NUM-05: Position, Grund und Betrag stehen da.
     assert ('CO2-Kosten(Zentralheizung)—VermieteranteilandenCO2-Kostennach'
-            '§6CO2KostAufG(Stufe4:30%Vermieter,70%Mieter):600,00€.') in text
-    assert 'InsgesamtbeimVermieter:600,00€(Leerstand0,00€,Eigennutzung0,00€).' \
+            '§6CO2KostAufG(Stufe4:30%Vermieter,70%Mieter)600,00€') in text
+    assert 'NichtaufdieMieterumgelegt:' not in text
+    assert 'InsgesamtbeimVermieter(Leerstand0,00€,Eigennutzung0,00€)600,00€' \
         in text
 
 
@@ -361,7 +368,7 @@ def _heizzeile() -> dict:
         'invoice_total_amount': Decimal('10000.00'),
         'prorated_amount': Decimal('10000.00'),
         'sub_items': [],
-        'rechenweg': ['10000,00 € Rechnungsbetrag'],
+        'rechenweg': [Schritt('Rechnungsbetrag', Decimal('10000.00'))],
         'heizung_details': {
             'anlage_id': 1,
             'anlage': 'Zentralheizung',

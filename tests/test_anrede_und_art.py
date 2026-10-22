@@ -172,7 +172,11 @@ def test_name_und_anrede_werden_maskiert(unkomprimiert):
     """„&“ und „<“ sind Text, kein Markup -- vorher fiel der Name im Kopf aus."""
     blatt = _deckblatt(tenant_name='Anna & Bert <GbR>',
                        tenant_anrede='Hallo Anna & Bert <GbR>')
-    assert 'An:Anna&Bert<GbR>' in blatt
+    # Phase 60: Das Deckblatt ist der Brief aus der Vorlage (Issue #35) --
+    # die Anschrift steht ohne Beschriftung oben links, wie in jedem Brief.
+    # Geprüft bleibt die Sache: Der Name steht als **Text** da, „&" und „<"
+    # sind nicht als Markup gelesen worden. Sie fielen sonst stumm aus.
+    assert blatt.startswith('Anna&Bert<GbR>'), blatt[:40]
     assert 'HalloAnna&Bert<GbR>,' in blatt
 
 
@@ -326,6 +330,11 @@ def test_die_oberflaeche_fuehrt_beide_felder():
     assert "formData.append('anrede'" in _funktion(js, 'saveTenant')
     oeffnen = _funktion(js, 'openAddTenantModal')
     assert oeffnen.count("getElementById('tenant-anrede').value") == 2
-    assert 'art })' in _funktion(js, 'saveVermieterdaten')
+    # Die Absicht ist „die Art geht mit", nicht „sie steht als Letztes im
+    # Rumpf": Phase 58 hat `anschrift` dahinter gesetzt, und der Test fiel
+    # um, obwohl die Art unverändert mitging.
+    sichern = _funktion(js, 'saveVermieterdaten')
+    rumpf = re.search(r'JSON\.stringify\(\{([^}]*)\}\)', sichern)
+    assert rumpf and 'art' in [w.strip() for w in rumpf.group(1).split(',')]
     assert "getElementById('vermieter-art').value = stand.art" in _funktion(
         js, 'fetchVermieterdaten')
