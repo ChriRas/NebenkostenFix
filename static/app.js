@@ -7585,7 +7585,7 @@ async function jahrVorschauLaden() {
             const warnListe = warnungen ? '<ul class="jahr-warnungen">' + warnungen + '</ul>' : '';
             const erklaerungHtml = mieterErklaerungHtml(daten);
             karten.push(`<div class="jahr-mieter">
-                <label class="haken-zeile"><input type="checkbox" class="jahr-auswahl" data-mieter="${Number(m.id)}" checked> ${mieterKopf}</label>
+                <label class="haken-zeile"><input type="checkbox" class="jahr-auswahl" data-mieter="${Number(m.id)}" checked> <span>${mieterKopf}</span></label>
                 <p class="karten-text">Kosten ${escapeHtml(euroText(daten.total_amount))} · Vorauszahlungen ${escapeHtml(euroText(daten.prepaid_amount))}</p>
                 ${erklaerungHtml}
                 ${warnListe}

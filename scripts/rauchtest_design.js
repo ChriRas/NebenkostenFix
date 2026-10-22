@@ -998,6 +998,23 @@ async function auswahlKnoepfePruefen() {
         && /\n    option \{[^}]*white-space: normal/.test(css));
 }
 
+async function fluchtPruefen() {
+    // Jede Zeile der Zeitleiste ist ein eigenes Grid: „auto“-Spalten richten sich
+    // nach dem Inhalt der Zeile, und Ort und Symbol springen von Zeile zu Zeile.
+    const spalten = [...css.matchAll(/\.zeitleiste-eintrag \{[^}]*grid-template-columns: ([^;]+);/g)].map(t => t[1]);
+    pruefe('Phase 66: die Zeitleiste hat in jeder Breite feste Spalten für Beleg und Betrag',
+        spalten.length >= 2 && spalten.every(w => !/\bauto\b/.test(w)));
+    pruefe('Phase 66: Jahres- und Gesamtsumme fluchten mit den Karten',
+        /\.zeitleiste-jahr,\s*\.zeitleiste-gesamt \{[^}]*padding-inline:/.test(css));
+    // Eine Haken-Zeile ist flex: lose Textstücke neben einem Element werden zu
+    // eigenen Spalten. Der Text gehört in genau ein Element.
+    const labels = [...(html + appQuelle).matchAll(/<label class="haken-zeile"[^>]*>([\s\S]*?)<\/label>/g)];
+    const krumm = labels.map(t => t[1].replace(/<input[^>]*>/, '').trim())
+        .filter(t => /</.test(t) && !/^<span>[\s\S]*<\/span>$/.test(t));
+    pruefe('Phase 66: der Text einer Haken-Zeile steht in einem Stück', labels.length >= 3 && krumm.length === 0,
+        krumm.join(' | '));
+}
+
 async function zeitleisteFilterPruefen() {
     const funktion = name => {
         const m = appQuelle.match(new RegExp(`function ${name}\\([^)]*\\) \\{[\\s\\S]*?\\n\\}`));
@@ -2392,6 +2409,7 @@ async function zaehlerPflegePruefen() {
         ['rechenwegTextPruefen', 'Rechenweg-Text-Prüfung'],
         ['belegDatumPruefen', 'Phase 64: Belegdatum-Prüfung'],
         ['auswahlKnoepfePruefen', 'Phase 65: Auswahlknopf-Prüfung'],
+        ['fluchtPruefen', 'Phase 66: Fluchtlinien-Prüfung'],
         ['anschriftenPruefen', 'Phase 58: Anschriften-Prüfung'],
     ];
     for (const [name, label] of schritte) {

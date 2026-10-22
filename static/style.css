@@ -2369,6 +2369,19 @@ i.feld-hilfe:hover {
     margin-top: 0;
 }
 
+/* Jahres- und Gesamtsumme fluchten mit den Beträgen in den Karten. */
+.zeitleiste-jahr,
+.zeitleiste-gesamt {
+    padding-inline: var(--space-5);
+}
+
+@media (max-width: 720px) {
+    .zeitleiste-jahr,
+    .zeitleiste-gesamt {
+        padding-inline: var(--space-4);
+    }
+}
+
 .zeitleiste-gruppe .zeitleiste-kopf {
     align-items: baseline;
     display: flex;
@@ -2393,7 +2406,9 @@ i.feld-hilfe:hover {
     border-top: 1px solid var(--divider);
     display: grid;
     gap: var(--space-3);
-    grid-template-columns: 96px minmax(0, 3fr) minmax(0, 2fr) auto auto;
+    /* Feste Breiten für Beleg und Betrag: jede Zeile ist ein eigenes Grid,
+       mit „auto“ verschob ein breiter Betrag Ort und Symbol seiner Zeile. */
+    grid-template-columns: 96px minmax(0, 3fr) minmax(0, 2fr) 1.25em 9rem;
     min-height: var(--knopf-hoehe);
     padding: var(--space-2) 0;
 }
@@ -2408,7 +2423,7 @@ i.feld-hilfe:hover {
 @media (max-width: 720px) {
     .zeitleiste-eintrag {
         grid-template-areas: "datum beleg betrag" "wer wer wer" "ort ort ort";
-        grid-template-columns: minmax(0, 1fr) auto auto;
+        grid-template-columns: minmax(0, 1fr) 1.25em 9rem;
         row-gap: var(--space-1);
     }
     .zeitleiste-datum { grid-area: datum; }
