@@ -231,6 +231,34 @@ jobs:
             --title "NebenkostenFix ${VERSION}" --notes-file notizen.md
           echo "- Release: v${VERSION}" >> "$GITHUB_STEP_SUMMARY"
 
+  # Die Website liest Version und Neuerungen beim Deploy aus den Releases.
+  # Ohne Anstoss kaeme die neue Version erst mit ihrem taeglichen Lauf
+  # (04:17 UTC), der als Rueckfallnetz bleibt. WEBSITE_TOKEN: Fine-grained
+  # Token nur fuer NebenkostenFix-Website, "Actions: Read and write"; der
+  # GITHUB_TOKEN darf nicht in andere Repos. Fehlt das Token oder ist es
+  # abgelaufen, gibt es nur eine Warnung, der Release bleibt gruen.
+  website:
+    name: Website aktualisieren
+    needs: release
+    if: github.repository == 'Nerbry72/NebenkostenFix'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Deploy der Website anstossen
+        env:
+          GH_TOKEN: ${{ secrets.WEBSITE_TOKEN }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::warning::WEBSITE_TOKEN fehlt, die Website folgt mit dem taeglichen Lauf."
+            exit 0
+          fi
+          if gh workflow run deploy.yml --repo Nerbry72/NebenkostenFix-Website; then
+            echo "- Website: Deploy angestossen" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning::Website-Anstoss gescheitert (Token abgelaufen?), die Website folgt mit dem taeglichen Lauf."
+          fi
+
   # Die MSIX aus dem Bau geht als neue Einreichung in den Microsoft Store.
   # Die Zugangsdaten (Entra-App mit Manager-Rolle) liegen nur im Environment
   # "store", das nur main zulaesst. Danach zertifiziert der Store, das dauert
