@@ -183,7 +183,8 @@ def loeschen(tenant, heute: date | None = None) -> dict:
     (Dateien und Zeilen, D-82 fuer Zaehler und Lesungen).
 
     Mit Aufbewahrungspflicht (D-89): sofort weg sind der Mietvertrag (Datei
-    und Verweis) und die Kostenprofile. Die Zeile bleibt als Anker fuer
+    und Verweis), die Kostenprofile und die Zustellanschrift (die neue
+    Adresse nach dem Auszug braucht keine Aufbewahrung, Review 0.17.0). Die Zeile bleibt als Anker fuer
     Abrechnungen, Zahlungen und Haushaltsgroessen stehen (die tragen auch
     die Abrechnungen der Mitmieter im Personenschluessel), wird aus allen
     Listen ausgeblendet und am Tag nach ``gesperrt_bis`` beim Start ganz
@@ -206,6 +207,7 @@ def loeschen(tenant, heute: date | None = None) -> dict:
         tenant.contract_path = None
     for profil in list(tenant.cost_profiles):
         db.session.delete(profil)
+    tenant.zustellanschrift = None
     tenant.gesperrt_bis = frist
     name = tenant.name
     wohnung = tenant.apartment.name if tenant.apartment else '?'

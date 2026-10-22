@@ -287,7 +287,9 @@
                          nach dem Rechnungsdatum (D-57), nicht nach dem Tag der
                          Erfassung. -->
                     <div class="form-group">
-                        <select id="invoice-jahr-filter" onchange="renderInvoices()">
+                        <select id="invoice-jahr-filter" onchange="renderInvoices()"
+                                aria-label="Jahr des Rechnungsdatums"
+                                title="Gefiltert wird nach dem Rechnungsdatum, nicht nach dem Leistungszeitraum.">
                             <option value="">Alle Jahre</option>
                             <!-- populated dynamically in js -->
                         </select>
@@ -1231,7 +1233,7 @@
                                 <button class="filter-pill" data-filter="Sonstige Kosten">Sonstige
                                     Kosten</button>
                                 <button class="filter-pill" data-filter="Strom">Strom</button>
-                                <button class="filter-pill" data-filter="Gas">Gas</button>
+                                <button class="filter-pill" data-filter="Wärme">Wärme</button>
                                 <button class="filter-pill" data-filter="Wasser">Wasser</button>
                             </div>
                         </div>

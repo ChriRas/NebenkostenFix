@@ -457,3 +457,64 @@ def test_die_vorgabe_spricht_ohne_ich_und_wir():
                      vorauszahlungen=Decimal('300.00'), saldo=Decimal('900.00'))
     assert 'Bitte gleichen Sie den ausstehenden Betrag' in text
     assert ICH_WIR.findall(text) == []
+
+
+# --- Review 0.17.0: Anschriften im Anschreiben, Hinweis ohne Zustelladresse ---
+
+
+def test_die_anschriften_platzhalter_werden_im_pdf_gefuellt(
+        auth_client, app_ctx, unkomprimiert):
+    """A5: Die Vorlage bietet {mieter_anschrift} und {vermieter_anschrift}
+    an, ``_anschreiben_fuer`` reichte sie nicht durch -- im Brief stand der
+    Platzhalter wörtlich."""
+    from nebenkostenfix.models import Tenant, Vermieterdaten, db
+
+    mieter_id, objekt_id, _ = _welt(app_ctx)
+    db.session.get(Tenant, mieter_id).anschrift = 'Am Anger 1\n12345 Musterstadt'
+    db.session.add(Vermieterdaten(anschrift='Vermieterweg 2\n54321 Beispielort'))
+    db.session.commit()
+    auth_client.put(
+        f'/api/properties/{objekt_id}/anschreiben',
+        json={'text': 'An {mieter_anschrift}.\n\nVon {vermieter_anschrift}.'})
+
+    report = _finalisiere(auth_client, mieter_id)
+
+    blatt = _geklebt((Path(os.environ['NAS_MOUNT_PATH'])
+                      / report.document_path).read_bytes())
+    assert '{mieter_anschrift}' not in blatt
+    assert '{vermieter_anschrift}' not in blatt
+    assert 'AnAmAnger1' in blatt
+    assert 'VonVermieterweg2' in blatt
+
+
+def _vorschau(auth_client, mieter_id):
+    antwort = auth_client.post('/api/billing/generate', json={
+        'tenant_id': mieter_id, **ZEITRAUM})
+    assert antwort.status_code == 200, antwort.get_data(as_text=True)
+    return antwort.get_json()['warnings']
+
+
+def test_ausgezogen_ohne_zustelladresse_warnt_die_vorschau(auth_client, app_ctx):
+    """A2: ``zustellhinweis`` war gebaut, aber nirgends verdrahtet. Die
+    Release-Notizen versprechen: „die App weist darauf hin“."""
+    from nebenkostenfix.anschrift import HINWEIS_OHNE_ZUSTELLUNG
+    from nebenkostenfix.models import Tenant, db
+
+    mieter_id, _, _ = _welt(app_ctx)
+    mieter = db.session.get(Tenant, mieter_id)
+    mieter.move_out_date = date(2025, 12, 31)
+    mieter.anschrift = 'Am Anger 1\n12345 Musterstadt'
+    db.session.commit()
+
+    assert HINWEIS_OHNE_ZUSTELLUNG in _vorschau(auth_client, mieter_id)
+
+    mieter.zustellanschrift = 'Neue Straße 5\n12345 Musterstadt'
+    db.session.commit()
+    assert HINWEIS_OHNE_ZUSTELLUNG not in _vorschau(auth_client, mieter_id)
+
+
+def test_wer_noch_wohnt_bekommt_keinen_zustellhinweis(auth_client, app_ctx):
+    from nebenkostenfix.anschrift import HINWEIS_OHNE_ZUSTELLUNG
+
+    mieter_id, _, _ = _welt(app_ctx)
+    assert HINWEIS_OHNE_ZUSTELLUNG not in _vorschau(auth_client, mieter_id)

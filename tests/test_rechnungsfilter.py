@@ -137,3 +137,23 @@ def test_der_cache_buster_steigt_mit_der_aenderung(html):
         'Der Cache-Buster von app.js steht noch unter 40 (Phase 57).')
     assert css_version and int(css_version.group(1)) >= 15, (
         'Der Cache-Buster von style.css steht noch unter 15 (Phase 57).')
+
+
+@pytest.mark.parametrize('name', ['openAddInvoiceModal', 'oeffneRechnungstabelle'])
+def test_der_jahresfilter_belegt_keinen_leistungszeitraum_vor(js, name):
+    """Der Filter zählt nach dem Rechnungsdatum (D-57). Die Rechnung vom
+    Februar 2025 gehört meist zum Jahr 2024: wer 2025 filtert und dann
+    erfasst, bekäme den falschen Zeitraum vorgeschlagen -- und in der
+    Rechnungstabelle sein schon gewähltes Jahr überschrieben."""
+    funktion = re.search(rf'function {name}\(.*?\n\}}', js, re.S)
+    assert funktion, f'{name}() ist nicht auffindbar.'
+
+    assert 'invoice-jahr-filter' not in funktion.group(0)
+    assert 'gefiltertesJahr' not in funktion.group(0)
+
+
+def test_die_jahre_im_filter_nennen_das_rechnungsdatum(html, js):
+    """Damit niemand das Jahr für das Abrechnungsjahr hält."""
+    feld = re.search(r'<select id="invoice-jahr-filter"[^>]*>', html)
+    assert 'Rechnungsdatum' in feld.group(0)
+    assert '`Rechnungsdatum ${j}`' in js

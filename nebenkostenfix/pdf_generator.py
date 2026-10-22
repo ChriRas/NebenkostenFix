@@ -15,7 +15,7 @@ from nebenkostenfix.pdf_cover_page import (
 from nebenkostenfix.anschreiben import saetze as anschreiben_saetze
 from nebenkostenfix.girocode_generator import (
     _format_iban_display, build_girocode_elements, vermieter_art, vermieter_ausweis)
-from nebenkostenfix.geld import NULL
+from nebenkostenfix.geld import NULL, text as geld_text
 from nebenkostenfix import betrkv
 from nebenkostenfix import pdf_stil
 from nebenkostenfix import pdf_uebersicht
@@ -258,7 +258,7 @@ class PDFGenerator:
                         'position': position,
                         'nummer': r['invoice_number'],
                         'datum': self._format_datum(r.get('rechnungsdatum')),
-                        'anbieter': r.get('provider_name') or '-',
+                        'anbieter': r.get('provider_name'),
                         'dokument': r.get('doc_name') or None,
                         'rechnungsbetrag': r.get('rechnungsbetrag'),
                         # Nach Verbrauch verteilt passt der Tagesanteil nicht
@@ -274,7 +274,7 @@ class PDFGenerator:
                 'position': item['category'],
                 'nummer': item['invoice_number'],
                 'datum': self._format_datum(item.get('rechnungsdatum')),
-                'anbieter': item.get('provider_name') or '-',
+                'anbieter': item.get('provider_name'),
                 'dokument': item.get('doc_name') or None,
                 'rechnungsbetrag': item.get('invoice_total_amount'),
                 # Nach Zaehler gerechnet ist der Tagesanteil nicht der
@@ -308,7 +308,7 @@ class PDFGenerator:
             ]
         data = [kopf]
         for z in zeilen:
-            rechnung = f"Nr. {z['nummer']}"
+            rechnung = f"Nr. {escape(z['nummer'])}"
             if z['datum']:
                 rechnung += f"<br/>vom {z['datum']}"
             herkunft = ' · '.join(
@@ -375,8 +375,9 @@ class PDFGenerator:
         """Zahl im Sprachbild des Dokuments: Komma statt Punkt.
 
         Die Werte kommen gerundet aus dem Kern (R-NUM-01) -- hier wird nur
-        angezeigt, nichts gerundet. Kein Tausenderpunkt: die Betragsspalte
-        hat auch keinen.
+        angezeigt, nichts gerundet. Nur fuer Mengen und Prozente: ein
+        Geldbetrag geht durch ``geld.text`` und bekommt den Tausenderpunkt
+        wie die Betragsspalte.
         """
         if wert is None:
             return None
@@ -475,12 +476,12 @@ class PDFGenerator:
                     self.styles['TableCell']))
                 elemente.append(Paragraph(
                     f"CO2-Kosten des Gebäudes: "
-                    f"{self._deutsch(co2_ausweis.get('kosten'))} € — "
+                    f"{geld_text(co2_ausweis.get('kosten'))} — "
                     f"davon "
-                    f"{self._deutsch(co2_ausweis.get('mieter_anteil_euro'))} € "
+                    f"{geld_text(co2_ausweis.get('mieter_anteil_euro'))} "
                     f"auf dieses Mietverhältnis; der Vermieteranteil "
                     f"beträgt "
-                    f"{self._deutsch(co2_ausweis.get('vermieter_anteil_euro'))} €.",
+                    f"{geld_text(co2_ausweis.get('vermieter_anteil_euro'))}.",
                     self.styles['TableCell']))
                 for q in co2_ausweis.get('quellen') or []:
                     herkunft = "Herkunft der Emissionsdaten: Rechnung "
@@ -491,7 +492,7 @@ class PDFGenerator:
                             f"{self._format_datum(q.get('rechnungsdatum'))}")
                     herkunft += (
                         f" — {self._deutsch(q.get('emission_kg'), 1)} kg, "
-                        f"{self._deutsch(q.get('kosten'))} €.")
+                        f"{geld_text(q.get('kosten'))}.")
                     elemente.append(Paragraph(
                         herkunft, self.styles['TableCell']))
             else:
@@ -556,10 +557,10 @@ class PDFGenerator:
             daten = [[Paragraph(f"<b>{gruppe['art_text']}</b>", self.styles['TableCell']),
                       Paragraph("<b>Ihr Anteil</b>", self.styles['TableCellRight'])]]
             daten += [[Paragraph(escape(z['kostenart']), self.styles['TableCell']),
-                       Paragraph(f"{self._deutsch(z['betrag'])} €", self.styles['TableCellRight'])]
+                       Paragraph(geld_text(z['betrag']), self.styles['TableCellRight'])]
                       for z in gruppe['zeilen']]
             daten.append([Paragraph("Summe", self.styles['TotalCell']),
-                          Paragraph(f"{self._deutsch(gruppe['summe'])} €",
+                          Paragraph(geld_text(gruppe['summe']),
                                     self.styles['TotalCellRight'])])
             # 480 pt ragten 5 pt aus dem Satzspiegel (siehe SATZBREITE).
             tabelle = Table(daten, colWidths=[370, 100])

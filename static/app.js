@@ -1689,6 +1689,8 @@ function auswahlKnoepfe(wurzel) {
         // Knopf nach innerHTML bliebe leer. Darum immer denselben wieder einsetzen.
         if (!feld._auswahlKnopf) {
             feld._auswahlKnopf = document.createElement('button');
+            // Ohne type wäre er in einem Formular ein Absendeknopf.
+            feld._auswahlKnopf.type = 'button';
             feld._auswahlKnopf.className = 'auswahl-knopf';
             feld._auswahlKnopf.append(document.createElement('selectedcontent'));
         }
@@ -3162,6 +3164,14 @@ function zeitleisteAdresse() {
 // Zählt jede Anfrage mit: beim Tippen in der Suche gilt nur die jüngste.
 let zeitleisteLauf = 0;
 
+// Jeder Tastendruck in der Suche zeichnet die Liste neu; die Zeitleiste
+// lädt erst, wenn die Eingabe kurz ruht (Review 0.17.0).
+let zeitleisteWartet = null;
+function zeitleisteNachladen() {
+    clearTimeout(zeitleisteWartet);
+    zeitleisteWartet = setTimeout(ladeInvoiceZeitleiste, 250);
+}
+
 async function ladeInvoiceZeitleiste() {
     const lauf = ++zeitleisteLauf;
     const ziel = document.getElementById('invoices-zeitleiste');
@@ -3247,12 +3257,18 @@ function renderInvoiceZeitleiste(daten, ziel) {
             daten.ohne_datum.summe, daten.ohne_datum.rechnungen));
     }
     if (teile.length === 0) {
-        ziel.innerHTML = leerzustand({
+        // Wie in der Liste: ein Filter ohne Treffer ist kein leerer Bestand.
+        ziel.innerHTML = invoices.length === 0 ? leerzustand({
             icon: 'ph-receipt',
             titel: 'Noch keine Rechnungen erfasst',
             text: 'Sobald Sie Rechnungen erfassen, erscheinen sie hier '
                 + 'chronologisch nach Ausstellungsdatum.',
             aktion: { label: 'Rechnung erfassen', fn: 'openAddInvoiceModal()', icon: 'ph-plus' },
+        }) : leerzustand({
+            icon: 'ph-magnifying-glass',
+            titel: 'Keine Rechnungen gefunden',
+            text: 'Für diese Suche oder diesen Filter gibt es keine Treffer.',
+            aktion: { label: 'Filter zurücksetzen', fn: 'rechnungsfilterZuruecksetzen()', icon: 'ph-x-circle' },
         });
         return;
     }
@@ -3730,18 +3746,12 @@ function auswahlNachBestand(feld, werte, beschriftung) {
     feld.value = gewaehlt;
 }
 
-// Das Jahr, das der Filter gerade zeigt -- oder null (alle, ohne Datum).
-function gefiltertesJahr() {
-    const wert = (document.getElementById('invoice-jahr-filter') || {}).value || '';
-    return /^\d{4}$/.test(wert) ? Number(wert) : null;
-}
-
 function renderInvoices() {
     const container = document.getElementById('invoices-container');
     if (!container) return;
     container.replaceChildren();
     // Filter und Immobilienwahl rufen hierher; die Zeitleiste zieht mit.
-    if (zeitleisteSichtbar()) ladeInvoiceZeitleiste();
+    if (zeitleisteSichtbar()) zeitleisteNachladen();
     
     // Die Auswahlfelder folgen dem Bestand bei jedem Zeichnen: ein neues
     // Jahr erscheint sofort, nach einem Immobilienwechsel stehen nur deren
@@ -3757,7 +3767,9 @@ function renderInvoices() {
     const echte = jahre.filter(j => j !== OHNE_DATUM).sort().reverse();
     if (jahre.includes(OHNE_DATUM)) echte.push(OHNE_DATUM);
     auswahlNachBestand(jahrSelect, echte,
-        j => j === OHNE_DATUM ? 'Ohne Rechnungsdatum' : j);
+        // Das Wort steht dabei: der Filter geht nach dem Rechnungsdatum, und
+        // die Rechnung vom Februar 2025 gehört meist zum Abrechnungsjahr 2024.
+        j => j === OHNE_DATUM ? 'Ohne Rechnungsdatum' : `Rechnungsdatum ${j}`);
 
     // Read filters
     const searchInput = document.getElementById('invoice-search');
@@ -3816,7 +3828,9 @@ function renderInvoices() {
     // Eine Zeile, die immer die Gesamtsumme nennt, waere schlimmer als
     // keine -- sie sieht aus wie eine Antwort auf die gestellte Frage.
     if (summeZeile) {
-        const summe = filtered.reduce((zwischen, r) => zwischen + Number(r.amount || 0), 0);
+        // In Cent summiert: Gleitkomma machte aus Gutschriften sonst „-0,00 €".
+        const summe = filtered.reduce(
+            (zwischen, r) => zwischen + Math.round(Number(r.amount || 0) * 100), 0) / 100;
         const wieviele = filtered.length === 1 ? '1 Rechnung' : `${filtered.length} Rechnungen`;
         summeZeile.textContent = `${wieviele}, zusammen ${geldText(summe)}`;
         summeZeile.hidden = false;
@@ -5396,8 +5410,9 @@ async function openAddInvoiceModal(editInvoiceId = null, spalte = null) {
         document.getElementById('invoice-amount').value = '';
         document.getElementById('invoice-number').value = '';
         document.getElementById('invoice-description').value = '';
-        // Issue #35: wer sich ein Jahr ansieht, erfasst meist auch für dieses.
-        const year = gefiltertesJahr() || new Date().getFullYear();
+        // Nicht aus dem Jahresfilter: der zählt nach dem Rechnungsdatum, der
+        // Leistungszeitraum liegt meist ein Jahr davor.
+        const year = new Date().getFullYear();
         document.getElementById('invoice-start').value = `${year}-01-01`;
         document.getElementById('invoice-end').value = `${year}-12-31`;
         document.getElementById('invoice-rechnungsdatum').value = '';
@@ -6979,8 +6994,8 @@ async function oeffneRechnungstabelle() {
     document.getElementById('rt-anbieter').innerHTML = providers.map(a =>
         `<option value="${escapeHtml(a.name)}"></option>`).join('');
     const jahr = document.getElementById('rt-jahr');
-    if (gefiltertesJahr()) jahr.value = gefiltertesJahr();
-    else if (!jahr.value) jahr.value = new Date().getFullYear() - 1;
+    // Ein schon gewähltes Jahr bleibt; der Jahresfilter (Rechnungsdatum) setzt es nicht.
+    if (!jahr.value) jahr.value = new Date().getFullYear() - 1;
     document.getElementById('rt-zeilen').innerHTML = '';
     document.getElementById('rt-meldung').textContent = '';
     rtImmobilieGewaehlt();

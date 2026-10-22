@@ -27,11 +27,15 @@ from __future__ import annotations
 
 from datetime import date
 
+KENNUNG_OHNE_ZUSTELLUNG = 'W-ZUSTELLADRESSE-FEHLT'
+
 #: Der Hinweis, wenn nach dem Auszug keine Zustellanschrift bekannt ist.
+#: Kennung vorn wie bei den anderen Warnungen der Abrechnung (frist.py).
 HINWEIS_OHNE_ZUSTELLUNG = (
-    'Der Mieter ist ausgezogen und es ist keine Zustelladresse hinterlegt. '
-    'Die Abrechnungsfrist des § 556 Abs. 3 BGB läuft über den Zugang beim '
-    'Mieter — eine Abrechnung an die alte Wohnung erreicht ihn nicht.'
+    KENNUNG_OHNE_ZUSTELLUNG + ' · Der Mieter ist ausgezogen und es ist keine '
+    'Zustelladresse hinterlegt. Die Abrechnungsfrist des § 556 Abs. 3 BGB läuft '
+    'über den Zugang beim Mieter — eine Abrechnung an die alte Wohnung erreicht '
+    'ihn nicht. Tragen Sie die neue Anschrift beim Mieter als Zustelladresse ein.'
 )
 
 

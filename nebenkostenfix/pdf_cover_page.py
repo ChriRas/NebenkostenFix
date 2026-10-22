@@ -111,7 +111,9 @@ def build_cover_page_elements(
         vermieter_name: Name des Vermieters (NK-210); leer zeigt die Rolle
         mieter_anschrift: die Anschrift, an die dieses Blatt geht (Phase 58)
         vermieter_anschrift: die eigene Anschrift als Absender
-            drei gleich aus, es ist der Brief der Vorlage
+
+    Returns:
+        Liste von Flowables, mit einem PageBreak am Ende
     """
     s = pdf_stil.STIL
     saetze = pdf_stil.stile(s)

@@ -682,6 +682,12 @@ def pruefe_heizkosten_zuordnung(vorgang: Vorgang) -> list:
     return offen
 
 
+#: Der Anfang der Beschreibung einer Rechnung, die einer Wohnung direkt
+#: zugewiesen ist. ``billing_type`` ist dort 'direkt' wie beim eigenen
+#: Zaehler; das Uebersichtsblatt unterscheidet die beiden an diesem Wort.
+DIREKT_ZUGEWIESEN = 'Direkt zugewiesen'
+
+
 def einheit_fuer(kategorie_name: str, betrkv_nr: Optional[int] = None) -> str:
     """Die Einheit der Menge, die ein Zaehler dieser Kostenart misst.
 
@@ -3100,8 +3106,10 @@ def rechne(vorgang: Vorgang) -> dict:
                         vorgang, cat.name, inv, grundpreis * time_fraction, qm,
                         overlap_von, overlap_bis, nur={inv.wohnung_id})
                     if grundanteil:
+                        # Der Vorsatz bleibt vorn, das PDF schneidet ihn dort ab.
                         grundanteil['description'] = (
-                            'Grundpreis/Zählermiete nach Tagen. ' + grundanteil['description'])
+                            VERMIETERANTEIL_VORSATZ + 'Grundpreis/Zählermiete nach Tagen, '
+                            + grundanteil['description'][len(VERMIETERANTEIL_VORSATZ):])
                         vermieter_positionen.append(grundanteil)
                 elif grundpreis is None and vorgang.wohnung.id == inv.wohnung_id:
                     leertage = sum(
@@ -3125,7 +3133,7 @@ def rechne(vorgang: Vorgang) -> dict:
             tenant_cost = prorated_invoice_amount
             billing_type = 'direkt'
             is_apartment_direct = True
-            description = "Direkt zugewiesen (100 % der Rechnung für diese Wohnung)"
+            description = f"{DIREKT_ZUGEWIESEN} (100 % der Rechnung für diese Wohnung)"
 
             # Zaehlerdetails auch bei einer Direktrechnung, der Nachvollziehbarkeit wegen
             if cat.braucht_zaehler or hat_zaehler:
@@ -3148,7 +3156,7 @@ def rechne(vorgang: Vorgang) -> dict:
                         else:
                             verbrauchskosten = verbrauchsteil * anteil
                         tenant_cost = verbrauchskosten
-                        description = (f"Direkt zugewiesen, nach Verbrauch: "
+                        description = (f"{DIREKT_ZUGEWIESEN}, nach Verbrauch: "
                                        f"{zahl_text(round(tenant_consumption, 1))} von "
                                        f"{zahl_text(round(gesamt, 1))} {unit} der Rechnung")
                         if grundpreis:
@@ -3179,6 +3187,10 @@ def rechne(vorgang: Vorgang) -> dict:
                                 f"{zahl_text(round(tenant_consumption, 1))} von "
                                 f"{zahl_text(round(gesamt, 1))} {unit}",
                                 dec(verbrauchskosten)))
+                        if grundpreis:
+                            # Grundpreis und Verbrauch zusammen, damit der
+                            # letzte Schritt den Betrag der Zeile trägt.
+                            rechenweg.append(Schritt('zusammen', dec(tenant_cost)))
 
         elif billing_type == 'qm':
             # Erst hier abbrechen, nicht schon oben: eine Abrechnung ohne

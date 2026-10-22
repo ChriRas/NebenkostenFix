@@ -295,3 +295,18 @@ def test_frueherer_name_als_eigene_kostenart_bleibt_eine_aenderung(auth_client, 
     assert gleich_gerechnet(
         {'line_items': [{'category': 'Allgemeinstrom', 'tenant_cost': '1.00'}]},
         {'line_items': [{'category': 'Beleuchtung (Allgemeinstrom)', 'tenant_cost': '1.00'}]}) is False
+
+
+def test_ein_anders_geschriebener_hinweis_ist_keine_aenderung():
+    """0.16 schrieb „1200,00 €“ in den Heizkosten-Hinweis, 0.17 „1.200,00 €“.
+    Die Zahlen sind dieselben; eine gespeicherte Abrechnung gilt deshalb
+    nicht als geändert. Ein anderer Betrag in den Zeilen bleibt es."""
+    from nebenkostenfix.abrechnung_version import gleich_gerechnet
+    zeilen = [{'category': 'Heizung', 'tenant_cost': '1200.00'}]
+    alt = {'line_items': zeilen, 'warnings': ['Heizung über 1200,00 € ohne Zuordnung']}
+    neu = {'line_items': zeilen, 'warnings': ['Heizung über 1.200,00 € ohne Zuordnung',
+                                               'Zustellanschrift fehlt']}
+
+    assert gleich_gerechnet(alt, neu) is True
+    assert gleich_gerechnet(
+        alt, {**neu, 'line_items': [{'category': 'Heizung', 'tenant_cost': '1200.01'}]}) is False

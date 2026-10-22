@@ -225,10 +225,10 @@ def test_der_abschnitt_zeigt_verteilung_und_ausweis(unkomprimiert, detailliert):
     assert 'EmissiondesGebäudes:2200,0kgCO2imAbrechnungszeitraum—22,0kg/m²a.' \
         in text
     assert 'Einstufung:Stufe4—Mieteranteil70%,Vermieteranteil30%.' in text
-    assert ('CO2-KostendesGebäudes:2000,00€—davon798,00€aufdieses'
+    assert ('CO2-KostendesGebäudes:2.000,00€—davon798,00€aufdieses'
             'Mietverhältnis;derVermieteranteilbeträgt600,00€.') in text
     assert ('HerkunftderEmissionsdaten:RechnungR-2024-777vom15.01.2025'
-            '—2200,0kg,2000,00€.') in text
+            '—2200,0kg,2.000,00€.') in text
 
 
 def test_der_vermieteranteil_steht_auf_dem_blatt(unkomprimiert):

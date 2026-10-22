@@ -1158,7 +1158,13 @@ def _anschrift_aus(eingabe, feld):
     wird: eine Leerzeile im Briefkopf hat niemand getippt, und ein Feld,
     in dem nur ein Umbruch steht, ist keine Anschrift.
     """
-    roh = eingabe.text(feld, standard='', maxlaenge=ANSCHRIFT_MAXLAENGE)
+    # FormData schickt Umbrueche als \r\n, das Textfeld zaehlt sie als ein
+    # Zeichen. Gezaehlt wird darum erst nach dem Angleichen.
+    roh = (eingabe.text(feld, standard='') or '').replace('\r\n', '\n')
+    if len(roh) > ANSCHRIFT_MAXLAENGE:
+        raise EingabeFehler(
+            f'Die Anschrift ist zu lang: {len(roh)} Zeichen, erlaubt sind '
+            f'{ANSCHRIFT_MAXLAENGE}.', feld)
     return anschriften.saeubern(roh) or None
 
 
@@ -3152,12 +3158,20 @@ def generate_bill():
     spaete = _zahlungen_nach_auszug_warnung(db.session.get(Tenant, tenant_id), e_date)
     if spaete:
         bill_data['warnings'].append(spaete)
+    # Review 0.17.0: ausgezogen und keine Zustelladresse -- die Abrechnung
+    # ginge an die alte Wohnung, die Frist laeuft trotzdem (Phase 58).
+    mieter = db.session.get(Tenant, tenant_id)
+    zustellung = anschriften.zustellhinweis(
+        mieter.anschrift, mieter.zustellanschrift,
+        ausgezogen=anschriften.ist_ausgezogen(mieter.move_out_date, date.today()))
+    if zustellung:
+        bill_data['warnings'].append(zustellung)
     bill_data['vorauszahlung'] = _vorauszahlung_vorschlag(
         db.session.get(Tenant, tenant_id), bill_data, category_ids)
 
     return jsonify(bill_data), 200
 
-from nebenkostenfix.pdf_generator import PDFGenerator
+from nebenkostenfix.pdf_generator import PDFGenerator, vermieter_anschrift
 import zipfile
 from io import BytesIO
 
@@ -3840,6 +3854,8 @@ def _anschreiben_fuer(mieter, bill_data, report=None, vorauszahlung=None):
         vermieter_name=vermieter_ausweis()[0],
         vorauszahlung=vorauszahlung,
         mieter_anrede=mieter.anrede,
+        mieter_anschrift=_zustellanschrift(mieter),
+        vermieter_anschrift=vermieter_anschrift(),
     )
 
 
@@ -4766,7 +4782,12 @@ def analytics_building(property_id):
     }
     
     # --- Timeseries Data (grouped into 4 clean buckets) ---
-    bucket_units = {'Strom': 'kWh', 'Gas': 'm³', 'Wasser': 'm³', 'Sonstige Kosten': '€'}
+    bucket_units = {'Strom': 'kWh', 'Wärme': 'kWh', 'Wasser': 'm³', 'Sonstige Kosten': '€'}
+
+    def _zaehler_einheit(m):
+        # Die Einheit des Zaehlers selbst: im Bereich "Waerme" stehen
+        # Gas- (m³) und Waermezaehler (kWh) nebeneinander (Review 0.17.0).
+        return m.einheit or einheit_fuer(m.category.name, m.category.betrkv_nr)
     
     # --- Timeseries: costs per year with actual date ranges ---
     cost_timeseries = {}
@@ -4819,6 +4840,7 @@ def analytics_building(property_id):
                 for entry in timeseries_data:
                     if entry['year'] == year_label and entry['category'] == bucket:
                         entry['consumption'] += round(net_consumption, 2)
+                        entry['unit'] = _zaehler_einheit(mm)
                         if period_str not in entry['period']:
                             entry['period'] += ' | ' + period_str
                         found = True
@@ -4832,7 +4854,7 @@ def analytics_building(property_id):
                         'category': bucket,
                         'cost': 0,
                         'consumption': round(net_consumption, 2),
-                        'unit': bucket_units.get(bucket, '€')
+                        'unit': _zaehler_einheit(mm)
                     })
     
     # --- Timeseries: consumption from sub-meters for categories WITHOUT a main meter ---
@@ -4868,6 +4890,7 @@ def analytics_building(property_id):
                     for entry in timeseries_data:
                         if entry['year'] == year_label and entry['category'] == bucket:
                             entry['consumption'] += round(consumption, 2)
+                            entry['unit'] = _zaehler_einheit(sm)
                             if period_str not in entry['period']:
                                 entry['period'] += ' | ' + period_str
                             found = True
@@ -4881,7 +4904,7 @@ def analytics_building(property_id):
                             'category': bucket,
                             'cost': 0,
                             'consumption': round(consumption, 2),
-                            'unit': bucket_units.get(bucket, '€')
+                            'unit': _zaehler_einheit(sm)
                         })
         
     timeseries_data.sort(key=lambda x: (x['year'], x['category']))
@@ -4909,7 +4932,7 @@ def analytics_building(property_id):
                         'apartment': apt.name,
                         'category': bucket,
                         'consumption': round(cons, 2),
-                        'unit': bucket_units.get(bucket, ''),
+                        'unit': _zaehler_einheit(sm),
                         'period': period_str,
                         'year': r_last.reading_date.year
                     })

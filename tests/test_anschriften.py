@@ -158,6 +158,28 @@ def test_die_mieterroute_nimmt_und_gibt_beide_anschriften(auth_client, app_ctx):
     assert mieter['zustellanschrift'] == DORT
 
 
+def test_ein_umbruch_zaehlt_ein_zeichen_wie_im_textfeld(auth_client, app_ctx):
+    """Review 0.17.0: FormData schickt \\r\\n, das Textfeld (maxlength 500) zaehlt \\n.
+
+    Eine Anschrift, die im Feld gerade passt, kam beim Server zu lang an.
+    """
+    wohnung = f.apt(f.house(), 'W1', 60.0)
+    zeilen = ['x' * 99] * 5
+    im_feld = '\n'.join(zeilen)
+    assert len(im_feld) == 499
+    antwort = auth_client.post('/api/tenants', data={
+        'apartment_id': wohnung.id, 'name': 'Mieter Muster',
+        'move_in_date': '2025-01-01', 'anschrift': im_feld.replace('\n', '\r\n'),
+    })
+    assert antwort.status_code == 201, antwort.get_data(as_text=True)
+
+    zu_lang = auth_client.post('/api/tenants', data={
+        'apartment_id': wohnung.id, 'name': 'Mieter Zwei',
+        'move_in_date': '2025-01-01', 'anschrift': 'x' * 501,
+    })
+    assert zu_lang.status_code == 400
+
+
 def test_ein_geleertes_feld_raeumt_die_anschrift_wirklich_aus(auth_client, app_ctx):
     """Sonst klebt eine falsche Adresse am Mietverhaeltnis fest."""
     mieter = f.tenant(f.apt(f.house(), 'W1', 60.0), 'Mieter Muster', date(2025, 1, 1))

@@ -256,5 +256,5 @@ def test_die_ansicht_reicht_die_filter_weiter():
         'Die Zeitleiste blendet die Filterleiste aus.')
 
     zeichnen = re.search(r'function renderInvoices\(\) \{[\s\S]*?\n\}', skript)
-    assert zeichnen and 'ladeInvoiceZeitleiste()' in zeichnen.group(0), (
+    assert zeichnen and 'zeitleisteNachladen()' in zeichnen.group(0), (
         'renderInvoices laedt die sichtbare Zeitleiste nicht nach.')

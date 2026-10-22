@@ -255,14 +255,22 @@ def test_die_summe_wird_nicht_nachgerechnet_sondern_uebernommen():
     assert stand['nebenkosten'] == Decimal('123.45')
 
 
-def test_abweichende_summen_brechen_ab():
-    """Der wichtigste Test: zwei Zahlen für eine Forderung gehen nicht raus."""
-    stand = uebersichtsblatt.uebersicht(_posten())
+def test_abweichende_summen_brechen_ab(app_ctx):
+    """Zwei Zahlen für eine Forderung gehen nicht raus.
+
+    Ein Schutznetz: im Betrieb kommt die Gesamtsumme aus denselben Posten,
+    die Abweichung entsteht nur durch einen künftigen Fehler im Rechenkern.
+    Darum über den Generator, nicht über ``pruefe_summe`` allein (Review
+    0.17.0): Geprüft ist, dass das PDF dann wirklich nicht entsteht -- ein
+    Cent Abweichung reicht."""
+    erzeuger = PDFGenerator(property_name='Haus am Anger', apartment_name='EG links',
+                            tenant_name='Anna Mieterin', start_date='2025-01-01',
+                            end_date='2025-12-31')
 
     with pytest.raises(uebersichtsblatt.UebersichtFehler) as fehler:
-        uebersichtsblatt.pruefe_summe(stand, GESAMT + Decimal('1.63'))
+        erzeuger.generate(_posten(), GESAMT + Decimal('0.01'), VORAUS)
 
-    assert '880,00' in str(fehler.value) and '881,63' in str(fehler.value)
+    assert '880,00' in str(fehler.value) and '880,01' in str(fehler.value)
 
 
 def test_gleiche_summen_gehen_durch():
@@ -425,3 +433,107 @@ def test_ohne_anschrift_bleibt_das_blatt_wie_bisher(pdf):
     # nur der Name da: keine leere Zeile, keine erfundene Adresse.
     assert 'AnnaMieterin' in text
     assert 'Empfänger' not in text
+
+
+# --- Review 0.17.0 (A6): der Umbruch bei vielen Positionen ---------------
+
+def _viele_posten(anzahl: int) -> list[dict]:
+    vorlage = _posten()[0]
+    return [dict(vorlage, category=f'Position{nummer:02d}',
+                 tenant_cost=Decimal('10.00'), prorated_amount=Decimal('20.00'))
+            for nummer in range(anzahl)]
+
+
+@pytest.mark.parametrize('anzahl', [*range(8, 17), 25, 40])
+def test_bei_vielen_positionen_bleibt_das_blatt_beieinander(
+        app_ctx, unkomprimiert, anzahl):
+    """Tabelle, Summen und Fußnote steckten in einem ``KeepTogether``: Ab
+    rund zehn Positionen passte das nicht mehr unter die Kopfdaten, und das
+    Blatt trug nur Titel und Mieterdaten, die Tabelle stand eine Seite
+    weiter. Bei neun Positionen stand die Fußnote allein auf einer Seite."""
+    posten = _viele_posten(anzahl)
+    pdf = PDFGenerator(
+        property_name='Haus am Anger', apartment_name='EG links',
+        tenant_name='Anna Mieterin', start_date='2025-01-01',
+        end_date='2025-12-31',
+    ).generate(posten, Decimal('10.00') * anzahl, Decimal('0'))
+    blaetter = [b for b in _blaetter(pdf) if b]
+
+    def blatt(text):
+        # Das erste Vorkommen: Die Positionen stehen danach auch im Detailteil.
+        return min(i for i, b in enumerate(blaetter) if text in b)
+
+    assert blatt('Mieterdaten') == blatt('Position00'), \
+        'Die Tabelle beginnt nicht auf dem Blatt mit den Kopfdaten.'
+    letzte = blatt(f'Position{anzahl - 1:02d}')
+    assert blatt('Nebenkostengesamt') == letzte, \
+        'Die Summen stehen getrennt von den letzten Zeilen.'
+    assert blatt('WiesichjedePosition') == letzte, \
+        'Die Fußnote steht allein.'
+
+
+# --- Review 0.17.0: Direktzuweisung, Katalognummer, Spaltenbreiten ------
+
+def _direkt(beschreibung, kosten):
+    return dict(_posten()[1], description=beschreibung,
+                tenant_cost=Decimal(kosten), prorated_amount=Decimal('240.00'))
+
+
+def test_eine_direkt_zugewiesene_rechnung_heisst_auch_so():
+    """B4: Der Detailteil sagt „Direkt zugewiesen", das Blatt sagte „eigener
+    Zähler" und ließ Gesamtkosten und Anteil leer -- obwohl die ganze
+    Rechnung dieser Wohnung gehört."""
+    posten = _direkt('Direkt zugewiesen (100 % der Rechnung für diese Wohnung)',
+                     '240.00')
+
+    assert uebersichtsblatt.schluessel_text(posten) == 'Direkt zugewiesen'
+    assert uebersichtsblatt.gesamtkosten(posten) == Decimal('240.00')
+    assert uebersichtsblatt.anteil_text(posten) == '100,0 %'
+
+
+def test_eine_direktrechnung_nach_zaehler_nennt_keine_quote():
+    """Teilt der Zähler eine überstehende Rechnung, kommt der Betrag aus der
+    Ablesung -- dann wie beim eigenen Zähler keine Gesamtsumme."""
+    posten = _direkt('Direkt zugewiesen, nach Verbrauch: 80 von 240 kWh der '
+                     'Rechnung', '80.00')
+
+    assert uebersichtsblatt.schluessel_text(posten) == 'Direkt zugewiesen'
+    assert uebersichtsblatt.gesamtkosten(posten) is None
+    assert uebersichtsblatt.anteil_text(posten) == uebersichtsblatt.OHNE_ANTEIL
+
+
+def test_die_heizkostentrennung_liest_die_nummer_aus_dem_bestand(app_ctx):
+    """C: „Nahwärme" mit Nr. 4 ist eine Heizkostenposition, auch wenn der
+    Name allein nach Nr. 17 klingt."""
+    from nebenkostenfix.models import CostCategory, db
+
+    db.session.add(CostCategory(name='Nahwärme', allocation_method='qm',
+                                betrkv_nr=4))
+    db.session.commit()
+    posten = dict(_posten()[0], category='Nahwärme')
+
+    assert uebersichtsblatt.ist_heizkosten(posten)
+
+
+def test_die_spalten_fassen_ihre_laengsten_werte():
+    """C: „100,0 %" brach in der Spalte Anteil um, der Heizkostenschlüssel
+    in jeder Zeile. Gemessen an der Tabelle, die das Blatt wirklich setzt."""
+    from reportlab.pdfbase.pdfmetrics import stringWidth
+    from reportlab.platypus import Table
+    from nebenkostenfix import pdf_stil
+
+    elemente = uebersichtsblatt.build_uebersicht_elements(
+        _posten(), gesamtsumme=GESAMT, end_date='2025-12-31')
+    [tabelle] = [e for e in elemente
+                 if isinstance(e, Table) and len(e._colWidths) == 5]
+    zelle = pdf_stil.stile(pdf_stil.STIL)['Zelle']
+    polster = 16
+
+    def breite(text):
+        return stringWidth(text, zelle.fontName, zelle.fontSize) + polster
+
+    schluessel = [*abrechnungsart.ARTEN.values(),
+                  uebersichtsblatt.SCHLUESSEL_HEIZKOSTEN, 'Direkt zugewiesen']
+    assert max(map(breite, schluessel)) <= tabelle._colWidths[2]
+    assert breite('100,0 %') <= tabelle._colWidths[3]
+    assert sum(tabelle._colWidths) == 470

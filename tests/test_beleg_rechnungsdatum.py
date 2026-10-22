@@ -84,3 +84,26 @@ def test_ohne_datum_wird_nichts_geloescht(auth_client):
         rechnungsdatum_fuer_beleg=True))
     assert antwort.status_code == 200
     assert _daten(ids) == [None, date(2025, 1, 5), None, None]
+
+
+def test_eine_festgesetzte_abrechnung_bleibt_unberuehrt(auth_client):
+    """Review 0.17.0: das Datum geht auch in Rechnungen, die schon in einer
+    festgesetzten Abrechnung stehen. Die bleibt trotzdem, wie sie war -- sie
+    ist ein Schnappschuss (R-DOC-02), wie bei jeder anderen Rechnungsänderung."""
+    from nebenkostenfix.models import BillingReportVersion
+    haus, kat, beleg, ids = _sammelbeleg()
+    mieter = f.tenant(f.apt(haus, 'EG', 50.0), 'Mieter Test', move_in=date(2024, 1, 1))
+    f.profile(mieter, kat, 'qm')
+    db.session.commit()
+    assert auth_client.post('/api/billing/finalize', json={
+        'tenant_id': mieter.id, 'start_date': '2025-01-01',
+        'end_date': '2025-12-31'}).status_code == 201
+    vorher = [(v.eingangsdaten, v.ergebnis) for v in BillingReportVersion.query.all()]
+    assert vorher
+
+    antwort = auth_client.put(f'/api/invoices/{ids[0]}', json=_felder(
+        haus, kat, beleg, invoice_number='A', rechnungsdatum_fuer_beleg=True))
+    assert antwort.get_json()['beleg_datum_gesetzt'] == 2
+
+    db.session.expire_all()
+    assert [(v.eingangsdaten, v.ergebnis) for v in BillingReportVersion.query.all()] == vorher

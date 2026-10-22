@@ -1,6 +1,6 @@
 """Ein Satz Marken und Bausteine für das ganze PDF (Phase 60).
 
-Bis 0.17.0 hatte dasselbe Dokument **zwei Designsprachen**: Deckblatt und
+Bis 0.16.0 hatte dasselbe Dokument **zwei Designsprachen**: Deckblatt und
 Übersichtsblatt hell mit grauen Tabellenköpfen, der Detailteil mit violetten
 Vollbalken als Rubriküberschriften. Wer beides sieht, hält es für zwei
 Dokumente. Dazu kamen Abstände, die jede Datei für sich erfunden hat -- 30 pt

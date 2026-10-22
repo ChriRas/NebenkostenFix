@@ -18,8 +18,10 @@ from datetime import date
 from decimal import Decimal
 
 from nebenkostenfix.rechenkern import (
-    Kategorie, Mieter, Rechnung, Stand, Vorgang, Wohnung, Zaehler, rechne)
+    VERMIETERANTEIL_VORSATZ, Kategorie, Mieter, Rechnung, Stand, Vorgang, Wohnung,
+    Zaehler, rechne)
 from billing_factories import apt, house, tenant
+from nebenkostenfix.geld import runde
 
 BEGINN = date(2025, 1, 1)
 EINZUG = date(2025, 4, 1)
@@ -180,3 +182,22 @@ def test_lader_reicht_den_grundpreis_durch(auth_client, app_ctx):
     from nebenkostenfix.models import CostInvoice
     neu = _gas_rechnung(auth_client, grundpreis='120.00').get_json()['id']
     assert _rechnung(CostInvoice.query.get(neu)).grundpreis == Decimal('120.00')
+
+
+def test_der_vorsatz_steht_vorn():
+    """Review 0.17.0: „Grundpreis … nach Tagen. Nicht auf die Mieter umgelegt: …“.
+
+    Das PDF schneidet den Vorsatz nur am Anfang ab; mitten im Satz blieb er stehen.
+    """
+    positionen = rechne(_nachbar(Decimal('120.00')))['landlord_share']['positions']
+    grund = [p['description'] for p in positionen if 'Grundpreis' in p['description']]
+    assert grund
+    for text in grund:
+        assert text.startswith(VERMIETERANTEIL_VORSATZ)
+        assert text.count(VERMIETERANTEIL_VORSATZ.strip()) == 1
+
+
+def test_der_letzte_schritt_traegt_den_betrag():
+    """Review 0.17.0: der Rechenweg endete bei 810,00, die Zeile sagt 900,41."""
+    posten = rechne(_vorgang(Decimal('120.00')))['line_items'][0]
+    assert runde(posten['rechenweg'][-1].betrag) == posten['tenant_cost']

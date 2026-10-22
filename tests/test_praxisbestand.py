@@ -52,7 +52,8 @@ ERWARTUNG = {
         kosten={'Wasserversorgung': 107.04, 'Heizung': 580.51,
                 'Allgemeinstrom': 109.29, 'Sach- und Haftpflichtversicherung': 57.37},
         gesamt=854.21, voraus=330.0, saldo=524.21,
-        meldungen=[(PREISWARNUNG, 'HS-1')],
+        # Am HEUTE des Bestands ausgezogen, ohne Zustelladresse (Phase 58).
+        meldungen=[(PREISWARNUNG, 'HS-1'), ('W-ZUSTELLADRESSE-FEHLT', '§ 556')],
         gruende=['WMZ-W3', 'Den Rest bis zum Auszug (01.01.2034–31.07.2034)'],
         pdf=['01.10.2033 bis 31.12.2033', 'Nachzahlung:', GESCHAETZT]),
     'Mieter 5': dict(

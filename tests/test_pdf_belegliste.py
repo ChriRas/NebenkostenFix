@@ -433,6 +433,21 @@ def test_ohne_anbieter_keine_anbieterzeile(unkomprimiert, detailliert):
     mit = _geklebt(_pdf(detailliert, [_posten()]))
     assert 'StadtwerkeMusterstadt' in mit
     assert '··' not in geklebt
+    # 0.17.0-Review: der Ersatzstrich „-“ stand als „- · rechnung-wasser.pdf“ da.
+    assert '-·rechnung-wasser.pdf' not in geklebt
+    assert 'rechnung-wasser.pdf' in geklebt
+
+
+@pytest.mark.parametrize('detailliert', [False, True], ids=['einfach', 'detailliert'])
+def test_die_rechnungsnummer_steht_wie_erfasst(unkomprimiert, detailliert):
+    """Ein „&“ oder „<“ in der Nummer ist Text, kein Satzbefehl: vorher
+    druckte die Belegliste „R&D;<7>“. Sie steht zweimal da -- bei der
+    Position und in der Belegliste --, beide Male wie erfasst."""
+    posten = _posten()
+    posten['invoice_number'] = 'R&D<7>-2024'
+    geklebt = _geklebt(_pdf(detailliert, [posten]))
+    assert geklebt.count('Nr.R&D<7>-2024') == 2
+    assert 'R&D;' not in geklebt
 
 
 # --- Die Schlusssätze (NK-248) ---------------------------------------------

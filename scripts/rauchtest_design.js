@@ -1031,8 +1031,7 @@ async function zeitleisteFilterPruefen() {
     const felder = {};
     const dokument = { getElementById: id => felder[id] };
     const bau = new Function('document', 'hausFilter',
-        funktion('zeitleisteAdresse') + funktion('gefiltertesJahr')
-        + '; return { zeitleisteAdresse, gefiltertesJahr };');
+        funktion('zeitleisteAdresse') + '; return { zeitleisteAdresse };');
 
     let fns = bau(dokument, null);
     pruefe('Phase 62: ohne Filter holt die Zeitleiste den ganzen Bestand',
@@ -1052,13 +1051,11 @@ async function zeitleisteFilterPruefen() {
         && adresse.searchParams.get('kategorie') === 'Heizung'
         && adresse.searchParams.get('suche') === 'Stadtwerke');
 
-    pruefe('Phase 62: das gefilterte Jahr wird beim Erfassen vorbelegt',
-        fns.gefiltertesJahr() === 2024
-        && /gefiltertesJahr\(\) \|\| new Date\(\)\.getFullYear\(\)/.test(funktion('openAddInvoiceModal'))
-        && /if \(gefiltertesJahr\(\)\) jahr\.value = gefiltertesJahr\(\)/.test(appQuelle));
-    felder['invoice-jahr-filter'].value = 'ohne';
-    pruefe('Phase 62: „Ohne Rechnungsdatum" belegt kein Jahr vor',
-        fns.gefiltertesJahr() === null);
+    // 0.17.0-Review B2: der Filter zählt nach Rechnungsdatum, der
+    // Leistungszeitraum liegt meist ein Jahr davor -- keine Vorbelegung.
+    pruefe('0.17.0: der Jahresfilter belegt keinen Leistungszeitraum vor',
+        !/invoice-jahr-filter/.test(funktion('openAddInvoiceModal'))
+        && !/invoice-jahr-filter/.test(funktion('oeffneRechnungstabelle')));
 
     // Ein Schein-<select>: options, remove, appendChild, value.
     const feld = {
@@ -1079,7 +1076,7 @@ async function zeitleisteFilterPruefen() {
 
     const zeichnen = funktion('renderInvoices');
     pruefe('Phase 62: renderInvoices zieht die sichtbare Zeitleiste nach',
-        /if \(zeitleisteSichtbar\(\)\) ladeInvoiceZeitleiste\(\)/.test(zeichnen));
+        /if \(zeitleisteSichtbar\(\)\) zeitleisteNachladen\(\)/.test(zeichnen));
     const umschalter = appQuelle.match(/async function zeigeInvoiceZeitleiste\(\) \{[\s\S]*?\n\}/)[0];
     pruefe('Phase 62: die Filterleiste bleibt in der Zeitleiste stehen',
         !/invoice-filter'\)\.style\.display = 'none'/.test(umschalter));

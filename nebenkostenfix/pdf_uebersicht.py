@@ -41,7 +41,7 @@ from xml.sax.saxutils import escape  # nosec B406
 from nebenkostenfix import (abrechnungsart, anschrift as anschriften, betrkv,
                             heizung, pdf_stil, zeit)
 from nebenkostenfix.geld import NULL
-from nebenkostenfix.rechenkern import euro_text
+from nebenkostenfix.rechenkern import DIREKT_ZUGEWIESEN, euro_text
 
 #: Die Nummern des § 2 BetrKV, die unter die HeizkostenV fallen -- aus dem
 #: Kern, nicht aus einer eigenen Liste.
@@ -59,9 +59,52 @@ OHNE_ANTEIL = '—'
 #: eigenen Zaehler, nicht aus einem Anteil an einer Masse.
 OHNE_QUOTE = frozenset({'direkt'})
 
+#: Die Spaltenbreiten in pt, gemessen an den laengsten Werten bei 8,5 pt
+#: plus 16 pt Polsterung: „Verbrauch und Fläche (HeizkostenV)" braucht 155,
+#: „100,0 %" 47, ein fünfstelliger Betrag 61. Vorher brach der Anteil bei
+#: 100 % um und der Heizkostenschlüssel in jeder Zeile (Review 0.17.0).
+SPALTEN = (118, 76, 156, 48, 72)
+
+#: So viele Zeilen der Tabelle bleiben bei den Summen, wenn die Seite
+#: umbricht -- eine Summe ohne eine Zeile darueber hat keine Rechnung.
+ZEILEN_BEI_DEN_SUMMEN = 2
+
 
 class UebersichtFehler(ValueError):
     """Übersichtsblatt und Detailteil nennen verschiedene Summen."""
+
+
+def _katalognummer(kategorie) -> int:
+    """Die BetrKV-Nummer der Kostenart, wie sie im Bestand steht.
+
+    Der Name verrät sie nicht verlässlich: Eine „Nahwärme" mit Nr. 4 hielt
+    ``zuordnung`` für Nr. 17 (Review 0.17.0). Ohne
+    Anwendungskontext oder für einen Namen, den es nicht mehr gibt (alte
+    Fassung), bleibt die Vermutung aus dem Namen.
+    """
+    try:
+        from nebenkostenfix.models import CostCategory
+        zeile = CostCategory.query.filter_by(name=kategorie).first()
+    except RuntimeError:  # kein Anwendungskontext
+        zeile = None
+    return zeile.betrkv_nr if zeile else betrkv.zuordnung(kategorie)
+
+
+def ist_direkt_zugewiesen(posten: dict) -> bool:
+    """Ist die Rechnung der Wohnung direkt zugewiesen statt gezählt?"""
+    return (posten.get('description') or '').startswith(DIREKT_ZUGEWIESEN)
+
+
+def _aus_der_ablesung(posten: dict) -> bool:
+    """Kommt der Betrag aus einem Zähler statt aus einem Anteil?
+
+    Eine direkt zugewiesene Rechnung ohne Zählerteilung trägt die ganze
+    verteilte Masse: Dort sagen Gesamtkosten und 100 % etwas.
+    """
+    if posten.get('billing_type') not in OHNE_QUOTE:
+        return False
+    return not (ist_direkt_zugewiesen(posten)
+                and posten['tenant_cost'] == posten.get('prorated_amount'))
 
 
 def ist_heizkosten(posten: dict) -> bool:
@@ -75,7 +118,7 @@ def ist_heizkosten(posten: dict) -> bool:
     """
     if posten.get('billing_type') == 'heizkosten':
         return True
-    return betrkv.zuordnung(posten.get('category')) in HEIZKOSTENNUMMERN
+    return _katalognummer(posten.get('category')) in HEIZKOSTENNUMMERN
 
 
 def schluessel_text(posten: dict) -> str:
@@ -83,6 +126,8 @@ def schluessel_text(posten: dict) -> str:
     art = posten.get('billing_type')
     if art == 'heizkosten':
         return SCHLUESSEL_HEIZKOSTEN
+    if ist_direkt_zugewiesen(posten):
+        return DIREKT_ZUGEWIESEN
     return abrechnungsart.ARTEN.get(art, OHNE_ANTEIL)
 
 
@@ -97,7 +142,7 @@ def anteil_text(posten: dict) -> str:
     ``—`` steht, wo ein Prozentsatz nichts erklärt: beim eigenen Zähler
     und wo keine Masse da ist, durch die man teilen könnte.
     """
-    if posten.get('billing_type') in OHNE_QUOTE:
+    if _aus_der_ablesung(posten):
         return OHNE_ANTEIL
     masse = posten.get('prorated_amount')
     if not masse:
@@ -118,7 +163,7 @@ def gesamtkosten(posten: dict):
     dieselbe Zahl aus demselben Grund nie gezeigt
     (``tests/test_praxisbestand.py``).
     """
-    if posten.get('billing_type') in OHNE_QUOTE:
+    if _aus_der_ablesung(posten):
         return None
     return posten.get('prorated_amount')
 
@@ -268,12 +313,16 @@ def build_uebersicht_elements(
             Paragraph(zeile['anteil'], saetze['ZelleRechts']),
             Paragraph(pdf_stil.geld(zeile['kosten']), saetze['ZelleFettRechts']),
         ])
-    # Gemessen an den laengsten Werten, die vorkommen: „Nach Verbrauch
-    # (eigener Zähler)" braucht 141 pt, „Kosten Mieter" 73, die Beträge 57.
-    # Vorher brach der Verteilerschlüssel in jeder zweiten Zeile um, und die
-    # Tabelle bekam dadurch Zeilen von drei verschiedenen Höhen.
-    tabelle = Table(daten, colWidths=[130, 78, 144, 44, 74], repeatRows=1)
-    tabelle.setStyle(TableStyle(pdf_stil.tabellenstil(s, len(daten))))
+    breiten = list(SPALTEN)
+    # Die Tabelle darf über die Seite laufen, nur ihre letzten Zeilen
+    # bleiben bei den Summen (unten). Alles in ein ``KeepTogether`` zu
+    # stecken schob ab zehn Positionen die ganze Tabelle auf die nächste
+    # Seite, und das Blatt trug nur noch die Kopfdaten (Review 0.17.0).
+    rumpf, schluss = daten[:-ZEILEN_BEI_DEN_SUMMEN], daten[-ZEILEN_BEI_DEN_SUMMEN:]
+    if len(rumpf) < 2:
+        rumpf, schluss = daten, []
+    tabelle = Table(rumpf, colWidths=breiten, repeatRows=1)
+    tabelle.setStyle(TableStyle(pdf_stil.tabellenstil(s, len(rumpf))))
 
     # --- Die Summen, rechtsbuendig unter der Betragsspalte ---
     saldo = stand['saldo']
@@ -292,15 +341,23 @@ def build_uebersicht_elements(
         (bezeichnung, pdf_stil.geld(abs(saldo)), True, farbe),
     ], s, saetze, breite=296)
 
-    # Tabelle und Summen gehoeren zusammen: Ein Summenblock, der allein auf
-    # der naechsten Seite landet, ist von seiner Rechnung abgeschnitten.
-    elemente.append(KeepTogether([tabelle, Spacer(1, pdf_stil.L), summen]))
-    elemente.append(Spacer(1, pdf_stil.L))
-
-    elemente.append(Paragraph(
-        'Wie sich jede Position errechnet, mit Rechenweg und Belegen, steht '
-        'auf den folgenden Seiten. Bei Positionen mit eigenem Zähler bleiben '
-        'Gesamtkosten und Anteil leer: Der Betrag kommt aus der Ablesung, '
-        'nicht aus einem Anteil an einer Summe.', saetze['Fuss']))
+    # Die letzten Zeilen, die Summen und die Fussnote gehoeren zusammen:
+    # Ein Summenblock allein auf der naechsten Seite ist von seiner Rechnung
+    # abgeschnitten, eine Fussnote allein erklaert nichts.
+    zusammen = []
+    if schluss:
+        # Ohne Kopf, die Streifen laufen weiter, als waere es eine Tabelle.
+        rest = Table(schluss, colWidths=breiten)
+        rest.setStyle(TableStyle(pdf_stil.tabellenstil(
+            s, len(schluss), kopfzeilen=0, zebra_ab=1 if len(rumpf) % 2 else 2)))
+        zusammen.append(rest)
+    elemente.append(tabelle)
+    elemente.append(KeepTogether(zusammen + [
+        Spacer(1, pdf_stil.L), summen, Spacer(1, pdf_stil.L),
+        Paragraph(
+            'Wie sich jede Position errechnet, mit Rechenweg und Belegen, steht '
+            'auf den folgenden Seiten. Bei Positionen mit eigenem Zähler bleiben '
+            'Gesamtkosten und Anteil leer: Der Betrag kommt aus der Ablesung, '
+            'nicht aus einem Anteil an einer Summe.', saetze['Fuss'])]))
     elemente.append(PageBreak())
     return elemente

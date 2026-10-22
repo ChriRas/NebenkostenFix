@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from datetime import date
 
+from nebenkostenfix.models import db
 from tests import billing_factories as f
 
 VORJAHR = date.today().year - 1
@@ -74,3 +75,45 @@ def test_zwei_bereiche_eines_jahres_bleiben_getrennt(auth_client):
     jahr = [z for z in zeiten if z["year"] == VORJAHR]
     stehende = {z["category"]: z["cost"] for z in jahr}
     assert stehende == {"Sonstige Kosten": 150.0, "Wärme": 90.0}
+
+
+def _verbrauch(client, haus, bereich):
+    return [z for z in _zeitenreihe(client, haus)
+            if z["year"] == VORJAHR and z["category"] == bereich
+            and z["consumption"]]
+
+
+def test_waermezaehler_nennt_kilowattstunden(auth_client):
+    """Review 0.17.0 (A4): der Bereich heißt seit #35 „Wärme“, die
+    Einheitentabelle kannte nur „Gas“ -- der Verbrauch stand in „€“.
+
+    Die Einheit kommt jetzt vom Zähler selbst: ein Wärmezähler misst kWh.
+    """
+    haus = f.house()
+    heizung = f.category("Heizung")
+    z = f.meter(haus, heizung, "W-1", is_main=True)
+    f.reading(z, date(VORJAHR, 1, 1), 1000.0)
+    f.reading(z, date(VORJAHR, 12, 31), 4500.0)
+
+    [eintrag] = _verbrauch(auth_client, haus, "Wärme")
+    assert eintrag["consumption"] == 3500.0
+    assert eintrag["unit"] == "kWh"
+
+
+def test_gaszaehler_bleibt_in_kubikmetern(auth_client):
+    """Derselbe Bereich, ein Gaszähler in m³: die Einheit des Zählers gilt,
+    auch wenn im selben Jahr schon eine Rechnung den Eintrag angelegt hat."""
+    haus = f.house()
+    gas = f.category("Gas")
+    f.invoice(haus, gas, 800.0, start=date(VORJAHR, 1, 1),
+              end=date(VORJAHR, 12, 31), invoice_number="INV-GAS")
+    z = f.meter(haus, gas, "G-1", is_main=True)
+    # Die Nr. 4 misst laut Katalog kWh; der Gaszaehler traegt m³ selbst (Phase 55).
+    z.einheit = "m³"
+    db.session.commit()
+    f.reading(z, date(VORJAHR, 1, 1), 100.0)
+    f.reading(z, date(VORJAHR, 12, 31), 1300.0)
+
+    [eintrag] = _verbrauch(auth_client, haus, "Wärme")
+    assert eintrag["cost"] == 800.0
+    assert eintrag["unit"] == "m³"
