@@ -263,6 +263,7 @@ docker compose pull && docker compose up -d    # Update auf die neueste Version
 
 Nach einem Update passt die Anwendung das Datenbankschema beim Start selbst an und sichert
 vorher automatisch. Eine bestimmte Version starten Sie mit `NK_VERSION=0.17.0` in der `.env`.
+Mit `NK_VERSION=0.17` bleiben Sie bei der Reihe 0.17 und erhalten trotzdem deren Fehlerbehebungen.
 
 Tritt ein unerwarteter Fehler auf, zeigt die Anwendung eine **Vorgangsnummer**. Unter dieser
 Nummer steht im Protokoll, was passiert ist:
@@ -466,7 +467,7 @@ Die Versionsnummer steht an genau einer Stelle: `SOFTWARE_VERSION` in `nebenkost
 2. Windows-App bauen (PyInstaller und Inno Setup), still installieren, über eine Vorversion
    aktualisieren und wieder deinstallieren.
 3. Docker-Abbild bauen, Rauchtest, dann für amd64 und arm64 nach
-   `ghcr.io/nerbry72/nebenkostenfix:<version>` und `:latest` schieben.
+   `ghcr.io/nerbry72/nebenkostenfix:<version>`, `:<major.minor>` (z. B. `:0.17`) und `:latest` schieben.
 4. GitHub-Release `v<version>` mit `NebenkostenFix-<version>-Setup.exe`, `SHA256SUMS.txt`,
    `THIRD_PARTY_LICENSES.txt` und dem signierten `update.json` anlegen. Aus dem `update.json`
    erfahren die installierten Apps von der neuen Version. Der Release-Text besteht aus der
