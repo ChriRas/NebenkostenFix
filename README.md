@@ -26,6 +26,7 @@
 </p>
 
 <p align="center">
+  <a href="https://nebenkostenfix.org"><strong>Website</strong></a> ·
   <a href="https://github.com/Nerbry72/NebenkostenFix/releases/latest"><strong>Herunterladen</strong></a> ·
   <a href="https://apps.microsoft.com/detail/9pjqssqgbnz8">Microsoft Store</a> ·
   <a href="#docker">Docker</a> ·
@@ -42,7 +43,8 @@
 
 Immobilien, Wohnungen, Mieter, Zählerstände und Rechnungen liegen an einer Stelle. Am Ende
 steht eine fertige Abrechnung als PDF. Die Regeln folgen BetrKV, HeizkostenV und CO2KostAufG.
-Gedacht für private Vermieter mit ein bis fünfzehn Wohnungen.
+Gedacht für private Vermieter mit ein bis fünfzehn Wohnungen. Einen Überblick mit Bildern
+gibt die Website [nebenkostenfix.org](https://nebenkostenfix.org).
 
 Wie Sie Ihre erste Abrechnung erstellen, erklärt das [Handbuch](docs/handbuch/handbuch.md).
 Kurze Antworten stehen in den [häufigen Fragen](docs/handbuch/faq.md).
