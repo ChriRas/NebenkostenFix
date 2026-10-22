@@ -1015,6 +1015,13 @@ async function fluchtPruefen() {
         krumm.join(' | '));
 }
 
+async function zeitleisteBelegPruefen() {
+    const zeile = (appQuelle.match(/function zeitleisteEintragZeile[\s\S]*?\n\}/) || [''])[0];
+    pruefe('Phase 67: das PDF-Symbol der Zeitleiste öffnet den Beleg wie in der Liste',
+        /docUrl = dateiAdresse\('rechnung', e\.id\)/.test(zeile) && /#page=/.test(zeile)
+        && /<a href="\$\{docUrl\}"/.test(zeile));
+}
+
 async function zeitleisteFilterPruefen() {
     const funktion = name => {
         const m = appQuelle.match(new RegExp(`function ${name}\\([^)]*\\) \\{[\\s\\S]*?\\n\\}`));
@@ -2410,6 +2417,7 @@ async function zaehlerPflegePruefen() {
         ['belegDatumPruefen', 'Phase 64: Belegdatum-Prüfung'],
         ['auswahlKnoepfePruefen', 'Phase 65: Auswahlknopf-Prüfung'],
         ['fluchtPruefen', 'Phase 66: Fluchtlinien-Prüfung'],
+        ['zeitleisteBelegPruefen', 'Phase 67: Beleg-Link in der Zeitleiste'],
         ['anschriftenPruefen', 'Phase 58: Anschriften-Prüfung'],
     ];
     for (const [name, label] of schritte) {

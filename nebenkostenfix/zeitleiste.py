@@ -35,6 +35,7 @@ def _eintrag(rechnung: CostInvoice) -> dict:
         'amount': rechnung.amount,
         'property_name': rechnung.property.name,
         'hat_beleg': bool(rechnung.document),
+        'seiten': rechnung.document_pages,
     }
 
 

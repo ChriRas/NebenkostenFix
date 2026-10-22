@@ -3200,8 +3200,12 @@ function zeitleisteBetrag(zahl) {
 function zeitleisteEintragZeile(e) {
     const wer = [e.provider_name, e.kategorie_name]
         .filter(Boolean).join(' · ');
+    // Wie in der Liste: öffnet den Beleg, bei Sammelbelegen auf der ersten Seite der Rechnung.
+    const seite = String(e.seiten || '').match(/\d+/);
+    let docUrl = dateiAdresse('rechnung', e.id);
+    if (seite) docUrl += `#page=${seite[0]}`;
     const beleg = e.hat_beleg
-        ? '<i class="ph ph-file-pdf" title="Beleg vorhanden"></i>'
+        ? `<a href="${docUrl}" target="_blank" rel="noopener" title="Beleg ansehen" aria-label="Beleg ansehen"><i class="ph ph-file-pdf" aria-hidden="true"></i></a>`
         : `<i class="ph ph-file-x" title="Kein Beleg erfasst"></i>`;
     return '<div class="zeitleiste-eintrag">' +
         `<span class="zeitleiste-datum">${escapeHtml(zeitleisteDatum(e.rechnungsdatum))}</span>` +

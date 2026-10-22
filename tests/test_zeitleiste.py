@@ -122,6 +122,8 @@ def test_eintraege_tragen_die_ansichtsfelder(app_ctx, auth_client,
     assert eintrag['kategorie_name'] == kategorie_name()
     assert eintrag['property_name'] == 'Zeitleistenhof'
     assert eintrag['hat_beleg'] is False
+    # Phase 67: die Seite im Sammelbeleg, damit der Link dort aufschlägt.
+    assert 'seiten' in eintrag
 
 
 def test_ohne_anmeldung_gesperrt(app_ctx, anon_client):

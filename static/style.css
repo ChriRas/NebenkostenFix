@@ -2449,6 +2449,10 @@ i.feld-hilfe:hover {
     color: var(--text-muted);
 }
 
+.zeitleiste-beleg a {
+    color: var(--primary-text);
+}
+
 .zeitleiste-betrag {
     font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
