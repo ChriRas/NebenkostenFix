@@ -855,6 +855,12 @@ def update_delete_property(id):
     from nebenkostenfix.zeitraumvorschlag import jahresbeginn_aus_text
     prop = Property.query.get_or_404(id)
     if request.method == 'DELETE':
+        # Dieselbe Frist wie beim Loeschen eines Mieters (NK-153).
+        mieter = [t for wohnung in prop.apartments for t in wohnung.tenants]
+        sperre = mieter_daten.sperrmeldung(f'Die Immobilie „{prop.name}“', mieter)
+        if sperre:
+            return jsonify({'error': sperre}), 409
+        mieter_daten.alle_endgueltig_loeschen(mieter)
         db.session.delete(prop)
         db.session.commit()
         return jsonify({'message': 'Property deleted'}), 200
@@ -1087,6 +1093,13 @@ def create_apartment():
 def update_delete_apartment(id):
     apt = Apartment.query.get_or_404(id)
     if request.method == 'DELETE':
+        # Dieselbe Frist wie beim Loeschen eines Mieters (NK-153); das
+        # Beispielhaus hat erfundene Mieter und keine Sperre (NK-159).
+        if not beispielimmobilie.ist_beispiel(apt.property):
+            sperre = mieter_daten.sperrmeldung(f'Die Wohnung „{apt.name}“', apt.tenants)
+            if sperre:
+                return jsonify({'error': sperre}), 409
+        mieter_daten.alle_endgueltig_loeschen(apt.tenants)
         db.session.delete(apt)
         db.session.commit()
         return jsonify({'message': 'Apartment deleted'}), 200

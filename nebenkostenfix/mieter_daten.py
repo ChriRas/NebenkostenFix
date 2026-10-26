@@ -176,6 +176,52 @@ def aufbewahrung_bis(tenant) -> date | None:
     return date(max(jahre) + AUFBEWAHRUNG_JAHRE, 12, 31)
 
 
+def laufende_frist(mieter, heute: date | None = None) -> date | None:
+    """Die spaeteste noch laufende Frist unter diesen Mietern, sonst None.
+
+    Fuer das Loeschen von Wohnung und Immobilie: deren Kaskade nimmt die
+    Mieter samt Abrechnungen und Zahlungen mit. Gesperrte Mietverhaeltnisse
+    zaehlen mit -- sie sind nur ausgeblendet, ihre Frist laeuft weiter.
+    """
+    heute = heute or date.today()
+    fristen = [f for f in map(aufbewahrung_bis, mieter) if f is not None and f >= heute]
+    return max(fristen, default=None)
+
+
+def sperrmeldung(einheit: str, mieter, heute: date | None = None) -> str | None:
+    """Der Satz, wenn Wohnung oder Immobilie wegen ``laufende_frist`` bleiben,
+    sonst None.
+
+    Haelt ein schon geloeschter Mieter die Einheit fest, sieht der Vermieter
+    an ihr keinen -- dann nennt der Satz, wo die gesperrten stehen.
+    """
+    frist = laufende_frist(mieter, heute)
+    if frist is None:
+        return None
+    satz = (f'{einheit} kann nicht gelöscht werden: Festgesetzte Abrechnungen und '
+            'Zahlungen ihrer Mieter unterliegen der Aufbewahrungspflicht '
+            f'(§ 147 AO, § 257 HGB) bis {frist.strftime("%d.%m.%Y")}. '
+            'Erst danach lässt sie sich löschen.')
+    if any(t.gesperrt_bis for t in mieter):
+        satz += (' Das gilt auch für bereits gelöschte Mieter; Sie finden sie '
+                 'unter Einstellungen → Datenschutz.')
+    return satz
+
+
+def alle_endgueltig_loeschen(mieter) -> None:
+    """Mietverhaeltnisse samt Dateien entfernen, bevor Wohnung oder Haus gehen.
+
+    Ohne diesen Schritt loescht die Kaskade nur die Zeilen, und Mietvertrag
+    und Abrechnungs-PDF bleiben als Waisen im Belegordner. Nur aufrufen, wenn
+    ``laufende_frist`` nichts meldet -- oder fuer das Beispielhaus, dessen
+    Mieter erfunden sind (NK-159). Committet je Mieter; bricht danach etwas
+    ab (etwa eine gesperrte Datenbank), laeuft ein zweiter Versuch durch,
+    weil fehlende Dateien nichts abbrechen.
+    """
+    for tenant in list(mieter):
+        _endgueltig_loeschen(tenant)
+
+
 def loeschen(tenant, heute: date | None = None) -> dict:
     """Mietverhaeltnis loeschen -- oder sperren, solange eine Frist laeuft.
 
