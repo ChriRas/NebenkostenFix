@@ -231,6 +231,37 @@ def test_ohne_frist_geht_alles_samt_dateien(app_ctx, auth_client, was):
         assert not (Path(nas_handler.nas_mount_path) / pfad).exists()
 
 
+@pytest.mark.parametrize('beleg', ['rechnung', 'zaehler', 'heizungsanlage', 'beleg'])
+def test_immobilie_mit_belegen_antwortet_mit_erklaerung_statt_500(app_ctx, auth_client, beleg):
+    """Rechnungen, Belege, Zaehler und Anlagen haengen am Haus ohne Kaskade.
+    Frueher endete das in einem IntegrityError (500) oder in verwaisten Zeilen."""
+    from billing_factories import category, house
+    from nebenkostenfix.models import (CostInvoice, Heizungsanlage, InvoiceDocument, Meter,
+                                       Property, db)
+    haus = house('Haus mit Belegen')
+    kat = category('Grundsteuer')
+    db.session.add({
+        'rechnung': lambda: CostInvoice(category_id=kat.id, property_id=haus.id,
+                                        start_date=date(2024, 1, 1),
+                                        end_date=date(2024, 12, 31), amount=500),
+        'zaehler': lambda: Meter(category_id=kat.id, property_id=haus.id,
+                                 is_main_meter=True, meter_number='HZ-1'),
+        'heizungsanlage': lambda: Heizungsanlage(property_id=haus.id, name='Gastherme'),
+        'beleg': lambda: InvoiceDocument(property_id=haus.id, filename='beleg.pdf',
+                                         document_path=_datei('2024/' + 'e' * 32 + '.pdf')),
+    }[beleg]())
+    db.session.commit()
+    antwort = auth_client.delete(f'/api/properties/{haus.id}')
+    assert antwort.status_code == 409
+    meldung = antwort.get_json()['error']
+    assert '„Haus mit Belegen“' in meldung
+    assert meldung.endswith({'rechnung': ': 1 Rechnung.', 'zaehler': ': 1 Zähler.',
+                             'heizungsanlage': ': 1 Heizungsanlage.',
+                             'beleg': ': 1 Beleg.'}[beleg])
+    db.session.expire_all()
+    assert db.session.get(Property, haus.id) is not None
+
+
 def test_wohnung_im_beispielhaus_bleibt_loeschbar(app_ctx, auth_client):
     """NK-159: Anna und Ben sind erfunden -- keine Sperre fuer das Beispiel."""
     from nebenkostenfix import beispielimmobilie
@@ -277,3 +308,33 @@ def test_eine_frist_haelt_das_haus_aber_nicht_die_nachbarwohnung(mieter, auth_cl
     assert db.session.get(Apartment, mieter.apartment_id) is not None
     assert not (Path(nas_handler.nas_mount_path) / vertraege[1]).exists()
 
+
+def test_die_meldung_zaehlt_alles_auf_was_am_haus_haengt(app_ctx, auth_client):
+    from billing_factories import category, house
+    from nebenkostenfix.models import CostInvoice, Heizungsanlage, Meter, db
+    haus = house('Volles Haus')
+    kat = category('Grundsteuer')
+    for _ in range(2):
+        db.session.add(CostInvoice(category_id=kat.id, property_id=haus.id,
+                                   start_date=date(2024, 1, 1),
+                                   end_date=date(2024, 12, 31), amount=100))
+    db.session.add(Meter(category_id=kat.id, property_id=haus.id, is_main_meter=True,
+                         meter_number='HZ-1'))
+    db.session.add(Heizungsanlage(property_id=haus.id, name='Gastherme'))
+    db.session.commit()
+    meldung = auth_client.delete(f'/api/properties/{haus.id}').get_json()['error']
+    assert meldung.endswith(': 2 Rechnungen, 1 Zähler und 1 Heizungsanlage.')
+
+
+def test_die_frist_steht_vor_den_belegen_am_haus(mieter, auth_client):
+    """Review R2-2: erst die Sperre, die niemand beheben kann. Sonst loescht der
+    Vermieter die Rechnung -- einen Buchungsbeleg -- und scheitert danach doch."""
+    from billing_factories import category
+    from nebenkostenfix.models import CostInvoice, db
+    haus = mieter.apartment.property
+    db.session.add(CostInvoice(category_id=category('Grundsteuer').id, property_id=haus.id,
+                               start_date=date(2024, 1, 1), end_date=date(2024, 12, 31),
+                               amount=500))
+    db.session.commit()
+    meldung = auth_client.delete(f'/api/properties/{haus.id}').get_json()['error']
+    assert '31.12.2035' in meldung and 'Rechnung' not in meldung

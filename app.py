@@ -850,16 +850,38 @@ def create_property():
     db.session.commit()
     return jsonify({'message': 'Property created successfully', 'id': new_prop.id}), 201
 
+def _was_am_haus_haengt(prop) -> str:
+    """„2 Rechnungen und 1 Zähler“ -- oder leer, wenn nichts mehr am Haus haengt."""
+    teile = []
+    for modell, eins, viele in ((CostInvoice, 'Rechnung', 'Rechnungen'),
+                                (InvoiceDocument, 'Beleg', 'Belege'),
+                                (Meter, 'Zähler', 'Zähler'),
+                                (Heizungsanlage, 'Heizungsanlage', 'Heizungsanlagen')):
+        anzahl = modell.query.filter_by(property_id=prop.id).count()
+        if anzahl:
+            teile.append(f'{anzahl} {eins if anzahl == 1 else viele}')
+    if len(teile) < 2:
+        return ''.join(teile)
+    return ', '.join(teile[:-1]) + ' und ' + teile[-1]
+
+
 @app.route('/api/properties/<int:id>', methods=['PUT', 'DELETE'])
 def update_delete_property(id):
     from nebenkostenfix.zeitraumvorschlag import jahresbeginn_aus_text
     prop = Property.query.get_or_404(id)
     if request.method == 'DELETE':
-        # Dieselbe Frist wie beim Loeschen eines Mieters (NK-153).
+        # Dieselbe Frist wie beim Loeschen eines Mieters (NK-153). Sie zuerst:
+        # sonst loescht der Vermieter eine Rechnung und scheitert danach doch.
         mieter = [t for wohnung in prop.apartments for t in wohnung.tenants]
         sperre = mieter_daten.sperrmeldung(f'Die Immobilie „{prop.name}“', mieter)
         if sperre:
             return jsonify({'error': sperre}), 409
+        # Rechnungen, Belege, Zaehler und Anlagen haengen ohne Kaskade am Haus:
+        # das endete in einem IntegrityError (500) oder in verwaisten Zeilen.
+        haengt = _was_am_haus_haengt(prop)
+        if haengt:
+            return jsonify({'error': f'Die Immobilie „{prop.name}“ kann nicht gelöscht '
+                                     f'werden, solange noch Folgendes zu ihr gehört: {haengt}.'}), 409
         mieter_daten.alle_endgueltig_loeschen(mieter)
         db.session.delete(prop)
         db.session.commit()
