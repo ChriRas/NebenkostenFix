@@ -64,3 +64,28 @@ def test_der_dialog_oeffnet_mit_vorgabe_und_platzhaltern(auth_client, app_ctx):
     assert ergebnis['text'] == antwort['text']
     # jsonify sortiert die Schluessel; es zaehlt, dass jeder Platzhalter erscheint.
     assert sorted(ergebnis['platzhalter'].split()) == sorted(f'{{{name}}}' for name in PLATZHALTER)
+
+
+@braucht_node
+def test_vorlage_loeschen_setzt_ein_geaendertes_feld_zurueck(auth_client, app_ctx):
+    """Steht noch der Vorschlag gespeichert, aber im Feld ist schon getippt:
+    „Vorlage löschen“ meldete Erfolg und ließ den getippten Text stehen."""
+    from billing_factories import house
+    objekt = house()
+    antwort = auth_client.delete(f'/api/properties/{objekt.id}/anschreiben').get_json()
+
+    code = (
+        'const felder = { "anschreiben-text": { value: "angefangen", textContent: "" } };\n'
+        'const document = { getElementById: id => (felder[id] = felder[id] || '
+        '{ value: "", textContent: "" }) };\n'
+        'const serverFehler = async () => new Error("server"); const meldungZu = (e, t) => t;\n'
+        'const fehler = []; const showError = t => fehler.push(t); const showSuccess = () => {};\n'
+        f'let anschreibenPropertyId = {objekt.id}; let anschreibenIstVorgabe = true;\n'
+        f'const fetch = async () => ({{ ok: true, json: async () => ({json.dumps(antwort)}) }});\n'
+        + _funktionsrumpf('loescheAnschreibenVorlage') + '\n'
+        + '(async () => { await loescheAnschreibenVorlage();\n'
+        '  console.log(JSON.stringify({ fehler, text: felder["anschreiben-text"].value })); })();'
+    )
+    ergebnis = _node(code)
+    assert ergebnis['fehler'] == []
+    assert ergebnis['text'] == antwort['text']

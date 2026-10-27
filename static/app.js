@@ -7761,7 +7761,8 @@ async function saveAnschreibenVorlage() {
 }
 
 async function loescheAnschreibenVorlage() {
-    if (anschreibenIstVorgabe) { showSuccess('Es steht bereits der Vorschlagstext der Software.'); return; }
+    // Kein Frühausstieg bei Vorgabe: im Feld kann schon getippter Text stehen.
+    const warVorgabe = anschreibenIstVorgabe;
     try {
         const res = await fetch(`/api/properties/${anschreibenPropertyId}/anschreiben`, { method: 'DELETE' });
         if (!res.ok) throw await serverFehler(res);
@@ -7769,7 +7770,7 @@ async function loescheAnschreibenVorlage() {
         document.getElementById('anschreiben-text').value = vorlage.text || '';
         document.getElementById('anschreiben-status').textContent = 'Sie sehen den Vorschlagstext der Software. Speichern Sie eigenen Text, um ihn zu überschreiben.';
         anschreibenIstVorgabe = true;
-        showSuccess('Eigener Text gelöscht — wieder der Vorschlagstext.');
+        showSuccess(warVorgabe ? 'Wieder der Vorschlagstext der Software.' : 'Eigener Text gelöscht — wieder der Vorschlagstext.');
     } catch (e) {
         showError(meldungZu(e, 'Die Anschreiben-Vorlage konnte nicht gelöscht werden.'));
     }
