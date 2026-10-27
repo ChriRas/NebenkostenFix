@@ -209,6 +209,11 @@ Die **Einstellungen** sind in Gruppen geteilt:
   [Umzug auf einen anderen Rechner](../../README.md#umzug-auf-einen-anderen-rechner).
 - **Konto**: Darstellung (Schrift und Knöpfe in 100, 115 oder 130 %, gilt für diesen
   Browser), **Passwort ändern** und **Zweites Konto anlegen**, etwa für den Partner.
+  Unter **Zugriffsschlüssel (API-Key)** legen Sie Schlüssel für Programme ohne Browser an, etwa
+  einen MCP-Server für einen KI-Assistenten. „Nur lesen“ erlaubt Abfragen und Prüfungen,
+  „Lesen und erfassen“ zusätzlich neue Rechnungen mit Beleg, Zählerstände und Zahlungen. Der
+  Schlüssel wird nur einmal angezeigt. Ein Programm mit Schlüssel sieht alle Daten;
+  bei einem KI-Assistenten gehen sie an dessen Anbieter.
 - **Updates**: **Automatisch nach Updates suchen**, siehe
   [Updates](../../README.md#updates).
 - **Datenschutz**: **Gesperrte Mietverhältnisse** sind gelöschte Mieter, deren

@@ -31,6 +31,9 @@ Anmeldung, Ersteinrichtung und Konto -- alles in auth.py, nicht hier
   POST        /api/konten                                  -> konto_anlegen
   PUT         /api/konto/passwort                          -> konto_passwort_aendern
   POST        /api/anmeldung/aus                           -> anmeldung_ausschalten
+  GET         /api/zugriffsschluessel                      -> zugriffsschluessel_auflisten
+  POST        /api/zugriffsschluessel                      -> zugriffsschluessel_anlegen
+  DELETE      /api/zugriffsschluessel/<int:id>             -> zugriffsschluessel_widerrufen
   GET,POST    /huelle/passwort                             -> huelle_passwort
 
 Oberflaeche und Betrieb
@@ -3725,11 +3728,13 @@ def export_data():
                 for name, wert in zeile.items()}
 
     # NK-269: jede Tabelle, damit eine neue nicht wieder fehlt (Zahlungen,
-    # Soll und Versionen fehlten); die Konten bleiben draussen (Passwort-Hash).
+    # Soll und Versionen fehlten); die Konten bleiben draussen (Passwort-Hash),
+    # die Zugriffsschluessel auch (ihr Hash oeffnet die API).
     data = {
         tabelle.name: [to_dict(z) for z in db.session.execute(
             tabelle.select().order_by(*tabelle.primary_key.columns)).mappings()]
-        for tabelle in db.metadata.sorted_tables if tabelle.name != 'users'
+        for tabelle in db.metadata.sorted_tables
+        if tabelle.name not in ('users', 'api_schluessel')
     }
     if request.method == 'GET':
         return jsonify(data)
