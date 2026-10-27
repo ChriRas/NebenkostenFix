@@ -850,19 +850,32 @@ def create_property():
     db.session.commit()
     return jsonify({'message': 'Property created successfully', 'id': new_prop.id}), 201
 
-def _was_am_haus_haengt(prop) -> str:
-    """„2 Rechnungen und 1 Zähler“ -- oder leer, wenn nichts mehr am Haus haengt."""
+# Was ohne Kaskade an Immobilie bzw. Wohnung haengt: Rechnungen und Belege
+# sind Buchungsbelege, Zaehler samt Lesungen Messhistorie (D-82). Beides
+# loescht man bewusst, nicht nebenbei mit dem Haus oder der Wohnung.
+_AM_HAUS = ((CostInvoice, 'Rechnung', 'Rechnungen'),
+            (InvoiceDocument, 'Beleg', 'Belege'),
+            (Meter, 'Zähler', 'Zähler'),
+            (Heizungsanlage, 'Heizungsanlage', 'Heizungsanlagen'))
+_AN_DER_WOHNUNG = ((CostInvoice, 'Rechnung', 'Rechnungen'),
+                   (Meter, 'Zähler', 'Zähler'))
+
+
+def _loeschhindernis(einheit: str, arten, **bezug) -> str | None:
+    """Der Satz, wenn noch etwas ohne Kaskade dazugehoert, sonst None.
+
+    Zaehlt je Art, was ``bezug`` (``property_id=`` oder ``apartment_id=``)
+    traegt: „… solange noch Folgendes zu ihr gehört: 2 Rechnungen und 1 Zähler.“
+    """
     teile = []
-    for modell, eins, viele in ((CostInvoice, 'Rechnung', 'Rechnungen'),
-                                (InvoiceDocument, 'Beleg', 'Belege'),
-                                (Meter, 'Zähler', 'Zähler'),
-                                (Heizungsanlage, 'Heizungsanlage', 'Heizungsanlagen')):
-        anzahl = modell.query.filter_by(property_id=prop.id).count()
+    for modell, eins, viele in arten:
+        anzahl = modell.query.filter_by(**bezug).count()
         if anzahl:
             teile.append(f'{anzahl} {eins if anzahl == 1 else viele}')
-    if len(teile) < 2:
-        return ''.join(teile)
-    return ', '.join(teile[:-1]) + ' und ' + teile[-1]
+    if not teile:
+        return None
+    was = teile[0] if len(teile) == 1 else ', '.join(teile[:-1]) + ' und ' + teile[-1]
+    return f'{einheit} kann nicht gelöscht werden, solange noch Folgendes zu ihr gehört: {was}.'
 
 
 @app.route('/api/properties/<int:id>', methods=['PUT', 'DELETE'])
@@ -876,13 +889,16 @@ def update_delete_property(id):
         sperre = mieter_daten.sperrmeldung(f'Die Immobilie „{prop.name}“', mieter)
         if sperre:
             return jsonify({'error': sperre}), 409
-        # Rechnungen, Belege, Zaehler und Anlagen haengen ohne Kaskade am Haus:
-        # das endete in einem IntegrityError (500) oder in verwaisten Zeilen.
-        haengt = _was_am_haus_haengt(prop)
-        if haengt:
-            return jsonify({'error': f'Die Immobilie „{prop.name}“ kann nicht gelöscht '
-                                     f'werden, solange noch Folgendes zu ihr gehört: {haengt}.'}), 409
+        # Ohne diese Pruefung endete das in einem IntegrityError (500) oder
+        # in verwaisten Zeilen, die eine neue Immobilie ueber die ID erbte.
+        hindernis = _loeschhindernis(f'Die Immobilie „{prop.name}“', _AM_HAUS,
+                                     property_id=prop.id)
+        if hindernis:
+            return jsonify({'error': hindernis}), 409
         mieter_daten.alle_endgueltig_loeschen(mieter)
+        # Die Vorlage ist Text, kein Beleg: sie geht mit, statt liegen zu
+        # bleiben und der naechsten Immobilie mit derselben ID zu gehoeren.
+        AnschreibenVorlage.query.filter_by(property_id=prop.id).delete()
         db.session.delete(prop)
         db.session.commit()
         return jsonify({'message': 'Property deleted'}), 200
@@ -1116,11 +1132,18 @@ def update_delete_apartment(id):
     apt = Apartment.query.get_or_404(id)
     if request.method == 'DELETE':
         # Dieselbe Frist wie beim Loeschen eines Mieters (NK-153); das
-        # Beispielhaus hat erfundene Mieter und keine Sperre (NK-159).
+        # Beispielhaus hat erfundene Mieter und keine Sperre (NK-159). Die
+        # Frist zuerst, wie bei der Immobilie.
         if not beispielimmobilie.ist_beispiel(apt.property):
             sperre = mieter_daten.sperrmeldung(f'Die Wohnung „{apt.name}“', apt.tenants)
             if sperre:
                 return jsonify({'error': sperre}), 409
+        # Sonst wurde der Zaehler still zum Unterzaehler ohne Wohnung, und die
+        # Rechnung erbte die naechste neue Wohnung ueber die ID.
+        hindernis = _loeschhindernis(f'Die Wohnung „{apt.name}“', _AN_DER_WOHNUNG,
+                                     apartment_id=apt.id)
+        if hindernis:
+            return jsonify({'error': hindernis}), 409
         mieter_daten.alle_endgueltig_loeschen(apt.tenants)
         db.session.delete(apt)
         db.session.commit()

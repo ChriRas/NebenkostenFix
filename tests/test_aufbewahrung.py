@@ -275,6 +275,9 @@ def test_wohnung_im_beispielhaus_bleibt_loeschbar(app_ctx, auth_client):
     pdfs = [pfad for bericht in anna.billing_reports
             for pfad in (bericht.document_path, bericht.document_path_detailed) if pfad]
     assert pdfs
+    # Annas Unterzaehler haelt die Wohnung (test_loeschen_waisen) -- erst er, dann sie.
+    for zaehler in wohnung.meters:
+        assert auth_client.delete(f'/api/meters/{zaehler.id}').status_code == 200
     assert auth_client.delete(f'/api/apartments/{wohnung.id}').status_code == 200
     db.session.expire_all()
     assert Tenant.query.filter_by(name=beispielimmobilie.MIETER[0]).count() == 0
