@@ -841,8 +841,11 @@ def get_properties():
 def create_property():
     from nebenkostenfix.zeitraumvorschlag import jahresbeginn_aus_text
     eingabe = Eingabe.aus_request()
+    name = eingabe.text('name', pflicht=True, maxlaenge=200)
+    if name == beispielimmobilie.NAME:
+        return jsonify({'error': beispielimmobilie.NAME_VERGEBEN}), 400
     new_prop = Property(
-        name=eingabe.text('name', pflicht=True, maxlaenge=200),
+        name=name,
         is_standalone=eingabe.wahrheit('is_standalone'),
         abrechnungsjahr_beginn=jahresbeginn_aus_text(eingabe.text('abrechnungsjahr_beginn', maxlaenge=10)),
     )
@@ -905,7 +908,10 @@ def update_delete_property(id):
     
     eingabe = Eingabe.aus_request()
     if eingabe.vorhanden('name'):
-        prop.name = eingabe.text('name', pflicht=True, maxlaenge=200)
+        name = eingabe.text('name', pflicht=True, maxlaenge=200)
+        if name == beispielimmobilie.NAME and not beispielimmobilie.ist_beispiel(prop):
+            return jsonify({'error': beispielimmobilie.NAME_VERGEBEN}), 400
+        prop.name = name
     if eingabe.vorhanden('is_standalone'):
         prop.is_standalone = eingabe.wahrheit('is_standalone')
     if eingabe.vorhanden('abrechnungsjahr_beginn'):

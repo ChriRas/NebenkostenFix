@@ -523,6 +523,9 @@ class _Aufloeser:
         from nebenkostenfix.models import Property, db
         treffer = self.haeuser.get(normiert(name))
         if treffer is None and anlegen:
+            from nebenkostenfix import beispielimmobilie
+            if name[:100] == beispielimmobilie.NAME:
+                raise ZeilenFehler(f'Immobilie: {beispielimmobilie.NAME_VERGEBEN}')
             treffer = Property(name=name[:100], is_standalone=False)
             db.session.add(treffer)
             db.session.flush()
