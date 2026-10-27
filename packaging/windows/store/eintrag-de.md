@@ -25,16 +25,14 @@ Die Nebenkostenabrechnung für private Vermieter. Kostenlos, und Ihre Daten blei
 
 ## Neuerungen in dieser Version
 
-Version 0.17.0: Anschriften im Brief, ein neu aufgebautes PDF und Rechnungen nach Jahr. Die Rechenregeln sind unverändert.
+Version 0.17.1: Fehlerbehebungen beim Löschen und im Anschreiben. Die Rechenregeln sind unverändert.
 
-- Mieter haben eine Wohnungsanschrift und eine Zustellanschrift für die Zeit nach dem Auszug, der Vermieter eine Anschrift für den Briefkopf. Welche gilt, entscheidet die App nach dem Auszugsdatum.
-- Die Abrechnung beginnt mit dem Brief, danach folgt ein Übersichtsblatt mit allen Kostenpositionen und den Summen bis zum Ergebnis. Erst dahinter stehen die einzelnen Berechnungen.
-- Das ganze PDF hat ein Erscheinungsbild. Der Rechenweg steht als Tabelle, Beträge überall mit Tausenderpunkt.
-- Unter Kosten wählen Sie ein Jahr und sehen die Summe der Auswahl. Die Zeitleiste folgt dem Filter und zeigt die Summe je Jahr.
-- Bei Sammelbelegen übernehmen Sie das Rechnungsdatum auf Wunsch für alle Rechnungen des Belegs.
-- Behoben: Die Statistik nannte jede Heizung „Gas“, auch eine Wärmepumpe. Der Bereich heißt jetzt „Wärme“.
-- Behoben: Die IBAN brach im Zahlungshinweis mitten durch, und der Brief nannte das Ergebnis zweimal.
-- Behoben: In schmalen Fenstern liefen Texte über ihren Rand.
+- Behoben: Wer eine Wohnung oder Immobilie löschte, löschte auch Abrechnungen, deren Aufbewahrungsfrist noch lief. Jetzt gilt die Frist auch dort.
+- Behoben: Eine Immobilie mit Rechnungen ließ sich nicht löschen, und es kam keine Erklärung. Jetzt sagt die App, was noch dazugehört.
+- Behoben: Gelöschte Wohnungen und Immobilien hinterließen Rechnungen, Belege und Zähler ohne Bezug.
+- Behoben: Eine gelöschte Kostenart konnte in einer alten Abrechnung unter fremdem Namen wieder auftauchen.
+- Behoben: Der Dialog „Anschreiben bearbeiten“ ging nicht auf.
+- Behoben: „Vorlage löschen“ ließ angefangenen Text im Anschreiben stehen.
 
 ## Produktmerkmale
 
