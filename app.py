@@ -1863,6 +1863,11 @@ def delete_category(id):
         return _kostenart_ablehnen(
             'An dieser Kostenart hängt ein Zähler. Zähler gehören zu einer '
             'Kostenart und können nicht mitgelöscht werden.')
+    # Sonst erbte die naechste neue Kostenart die ID samt alter Abrechnung.
+    if BillingReportCategory.query.filter_by(category_id=kat.id).first():
+        return _kostenart_ablehnen(
+            'Diese Kostenart steht in einer festgesetzten Abrechnung und bleibt '
+            'deshalb erhalten. Sie können den Namen ändern.')
     if any(e['name'] == kat.name for e in betrkv.KATALOG):
         return _kostenart_ablehnen(
             '„%s“ gehört zum Katalog aus § 2 BetrKV und bleibt erhalten. '
