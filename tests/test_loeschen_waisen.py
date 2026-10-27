@@ -60,7 +60,8 @@ def test_wohnung_mit_eigener_rechnung_wird_nicht_geloescht(auth_client):
     rechnung = _rechnung(haus, og)
     antwort = auth_client.delete(f'/api/apartments/{og.id}')
     assert antwort.status_code == 409
-    assert antwort.get_json()['error'].endswith(': 1 Rechnung.')
+    meldung = antwort.get_json()['error']
+    assert ': 1 Rechnung.' in meldung and 'Aufbewahrungspflicht' in meldung
     db.session.expire_all()
     assert db.session.get(Apartment, og.id) is not None
     assert db.session.get(CostInvoice, rechnung.id).apartment_id == og.id
@@ -73,7 +74,7 @@ def test_die_meldung_der_wohnung_zaehlt_alles_auf(auth_client):
     _rechnung(haus, eg)
     _zaehler(haus, eg)
     meldung = auth_client.delete(f'/api/apartments/{eg.id}').get_json()['error']
-    assert meldung.endswith(': 2 Rechnungen und 1 Zähler.')
+    assert ': 2 Rechnungen und 1 Zähler.' in meldung
 
 
 def test_zaehler_und_rechnungen_anderer_haelt_die_wohnung_nicht(auth_client):

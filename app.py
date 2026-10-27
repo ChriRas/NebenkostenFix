@@ -870,15 +870,21 @@ def _loeschhindernis(einheit: str, arten, **bezug) -> str | None:
     Zaehlt je Art, was ``bezug`` (``property_id=`` oder ``apartment_id=``)
     traegt: „… solange noch Folgendes zu ihr gehört: 2 Rechnungen und 1 Zähler.“
     """
-    teile = []
+    teile, belege = [], False
     for modell, eins, viele in arten:
         anzahl = modell.query.filter_by(**bezug).count()
         if anzahl:
             teile.append(f'{anzahl} {eins if anzahl == 1 else viele}')
+            belege = belege or modell in (CostInvoice, InvoiceDocument)
     if not teile:
         return None
     was = teile[0] if len(teile) == 1 else ', '.join(teile[:-1]) + ' und ' + teile[-1]
-    return f'{einheit} kann nicht gelöscht werden, solange noch Folgendes zu ihr gehört: {was}.'
+    satz = f'{einheit} kann nicht gelöscht werden, solange noch Folgendes zu ihr gehört: {was}.'
+    if belege:
+        # Sonst loescht man Buchungsbelege, nur um das Haus loszuwerden.
+        satz += (' Rechnungen und Belege unterliegen selbst der Aufbewahrungspflicht '
+                 '(§ 147 AO, § 257 HGB). Löschen Sie sie erst, wenn deren Frist abgelaufen ist.')
+    return satz
 
 
 @app.route('/api/properties/<int:id>', methods=['PUT', 'DELETE'])

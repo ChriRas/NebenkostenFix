@@ -255,9 +255,10 @@ def test_immobilie_mit_belegen_antwortet_mit_erklaerung_statt_500(app_ctx, auth_
     assert antwort.status_code == 409
     meldung = antwort.get_json()['error']
     assert '„Haus mit Belegen“' in meldung
-    assert meldung.endswith({'rechnung': ': 1 Rechnung.', 'zaehler': ': 1 Zähler.',
-                             'heizungsanlage': ': 1 Heizungsanlage.',
-                             'beleg': ': 1 Beleg.'}[beleg])
+    assert {'rechnung': ': 1 Rechnung.', 'zaehler': ': 1 Zähler.',
+            'heizungsanlage': ': 1 Heizungsanlage.', 'beleg': ': 1 Beleg.'}[beleg] in meldung
+    # Wer Buchungsbelege loescht, nur um das Haus loszuwerden, verliert sie.
+    assert ('Aufbewahrungspflicht' in meldung) == (beleg in ('rechnung', 'beleg'))
     db.session.expire_all()
     assert db.session.get(Property, haus.id) is not None
 
@@ -326,7 +327,8 @@ def test_die_meldung_zaehlt_alles_auf_was_am_haus_haengt(app_ctx, auth_client):
     db.session.add(Heizungsanlage(property_id=haus.id, name='Gastherme'))
     db.session.commit()
     meldung = auth_client.delete(f'/api/properties/{haus.id}').get_json()['error']
-    assert meldung.endswith(': 2 Rechnungen, 1 Zähler und 1 Heizungsanlage.')
+    assert ': 2 Rechnungen, 1 Zähler und 1 Heizungsanlage.' in meldung
+    assert 'Aufbewahrungspflicht' in meldung
 
 
 def test_die_frist_steht_vor_den_belegen_am_haus(mieter, auth_client):
