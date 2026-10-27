@@ -7735,7 +7735,8 @@ async function openAnschreibenModal(propertyId) {
             : 'Dies ist der eigene Text dieses Objekts.';
         anschreibenIstVorgabe = !!vorlage.ist_vorgabe;
         const platzhalter = document.getElementById('anschreiben-platzhalter');
-        platzhalter.textContent = (vorlage.platzhalter || []).map(p => `{${p}}`).join('  ');
+        // Die Route liefert {Name: Erklärung}; gezeigt werden die Namen.
+        platzhalter.textContent = Object.keys(vorlage.platzhalter || {}).map(p => `{${p}}`).join('  ');
         document.getElementById('anschreiben-modal').classList.add('active');
     } catch (e) {
         showError(meldungZu(e, 'Die Anschreiben-Vorlage konnte nicht geladen werden.'));

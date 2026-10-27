@@ -3960,7 +3960,8 @@ def get_anschreiben_vorlage(property_id):
     Ohne eigenen Eintrag antwortet die Route mit dem Vorgabetext aus
     ``anschreiben.py`` und der Marke ``ist_vorgabe`` -- der Vermieter
     sieht, dass er noch nichts Eigenes hinterlegt hat, und bekommt mit
-    ``platzhalter`` dieselbe Liste, die die Renderfunktion füllt.
+    ``platzhalter`` die Marken, die die Renderfunktion füllt -- als
+    {Name: Erklärung}, keine Liste.
     """
     objekt = db.session.get(Property, property_id)
     if objekt is None:
