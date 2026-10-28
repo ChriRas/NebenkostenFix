@@ -19,6 +19,11 @@ Zweiter Einstieg neben gunicorn (Docker). Ablauf:
      Öffnen und Ordnerwahl (NK-152).
   6. Fenster zu → Server anhalten, WAL-Checkpoint, Sperre frei.
 
+Unter macOS (#44) dieselbe Hülle mit WKWebView: Daten in Application
+Support, Meldungen über ``osascript``, ``open`` statt ``os.startfile``,
+Cmd-Q hält den Server über das Ereignis ``closing`` an, und die CSP erlaubt
+``'unsafe-eval'`` für die Brücke von pywebview.
+
 ``--selbsttest`` fährt dieselben Schritte ohne Fenster gegen einen frischen
 Datenordner und prüft Einrichtung, eine Abrechnung und das PDF -- für die CI
 und für das gebaute Paket (NK-150, NK-135).
@@ -35,6 +40,8 @@ import json
 import logging
 import os
 import secrets
+# Bandit-Ausnahme: nur osascript und open unter macOS, fester Pfad, keine Shell
+import subprocess  # nosec B404
 import sys
 import tempfile
 import threading
@@ -53,6 +60,13 @@ protokoll = logging.getLogger(__name__)
 
 COOKIE = 'nk_huelle'
 TITEL = marke.PRODUKT
+
+# pywebview baut window.pywebview.api mit new Function und evaluate_js mit
+# eval. WKWebView (macOS) sperrt beides ohne 'unsafe-eval'; ohne Brücke
+# scheitern Speichern, Ordnerwahl, Umzug, Drucken und „Über“ (#44).
+# 'unsafe-inline' ist ohnehin erlaubt, und das Fenster lädt nur 127.0.0.1.
+SKRIPT_REGEL = "script-src 'self' 'unsafe-inline';"
+SKRIPT_REGEL_WEBKIT = "script-src 'self' 'unsafe-inline' 'unsafe-eval';"
 
 
 # --- Start-Token (Zugriff nur aus dem Fenster) -------------------------------
@@ -99,6 +113,8 @@ class HuellenSchutz:
             cookies[name] = wert
         if not self._passt(cookies.get(COOKIE)):
             return self._verboten(antworten)
+        if aktualisierung.betriebssystem() == 'darwin':
+            return self.anwendung(umgebung, _csp_fuer_webkit(antworten))
         return self.anwendung(umgebung, antworten)
 
     @staticmethod
@@ -106,6 +122,17 @@ class HuellenSchutz:
         text = f'Nur aus dem Programmfenster von {TITEL} erreichbar.'
         antworten('403 Forbidden', [('Content-Type', 'text/plain; charset=utf-8')])
         return [text.encode('utf-8')]
+
+
+def _csp_fuer_webkit(antworten):
+    """Ergänzt die CSP der Anwendung um 'unsafe-eval'; strengere Regeln
+    (Dateiauslieferung, NK-129) bleiben, wie sie sind."""
+    def weiter(status, koepfe, *rest):
+        koepfe = [(name, wert.replace(SKRIPT_REGEL, SKRIPT_REGEL_WEBKIT)
+                   if name.lower() == 'content-security-policy' else wert)
+                  for name, wert in koepfe]
+        return antworten(status, koepfe, *rest)
+    return weiter
 
 
 # --- Eine Instanz -------------------------------------------------------------
@@ -165,12 +192,49 @@ class EineInstanz:
 
 def _meldung(text: str, frage: bool = False) -> bool:
     """Meldung im Stil des Systems; unter Windows eine MessageBox."""
+    if aktualisierung.betriebssystem() == 'darwin':
+        return _meldung_macos(text, frage)
     if sys.platform == 'win32':  # pragma: no cover - Windows
         import ctypes
         stil = 0x04 | 0x20 if frage else 0x10  # JA/NEIN + Frage bzw. Fehler
         return ctypes.windll.user32.MessageBoxW(None, text, TITEL, stil) == 6
     protokoll.warning('%s', text)
     return False
+
+
+def _meldung_macos(text: str, frage: bool) -> bool:
+    """Titel und Text gehen als Argumente an ``on run argv``, nie ins
+    Skript: Ein Anführungszeichen im Pfad führt nichts aus."""
+    if frage:
+        zeilen = ['on run argv',
+                  'display dialog (item 2 of argv) with title (item 1 of argv) '
+                  'buttons {"Nein", "Ja"} default button "Ja" with icon caution',
+                  'end run']
+    else:
+        zeilen = ['on run argv',
+                  'display alert (item 1 of argv) message (item 2 of argv) as critical',
+                  'end run']
+    befehl = ['/usr/bin/osascript']
+    for zeile in zeilen:
+        befehl += ['-e', zeile]
+    # Bandit-Ausnahme (B603): fester Pfad, der Text ist nur ein Argument
+    lauf = subprocess.run(befehl + [TITEL, text], capture_output=True, text=True,  # nosec B603
+                          check=False)
+    if lauf.returncode != 0:
+        protokoll.warning('%s', text)
+        return False
+    return frage and lauf.stdout.strip() == 'button returned:Ja'
+
+
+def standardprogramm_oeffnen(pfad) -> None:
+    """Datei oder Ordner im Programm, das das System dafür vorsieht."""
+    system = aktualisierung.betriebssystem()
+    if system == 'win32':  # pragma: no cover - Windows
+        # Bandit-Ausnahme (B606): Standardprogramm des Nutzers, kein Befehl
+        os.startfile(pfad)  # nosec B606
+    elif system == 'darwin':
+        # Bandit-Ausnahme (B603): fester Pfad; „--“, damit kein Pfad als Option gilt
+        subprocess.run(['/usr/bin/open', '--', str(pfad)], check=False)  # nosec B603
 
 
 def datenordner_bestimmen(fragen: bool = True, vorgabe: str | None = None) -> Path:
@@ -232,9 +296,7 @@ class Bruecke:
             pfad = pfad.with_suffix('.html')
             pfad.write_text(f'<meta http-equiv="refresh" content="0; url={html.escape(ziel)}">',
                             encoding='utf-8')
-        if sys.platform == 'win32':  # pragma: no cover - Windows
-            # Bandit-Ausnahme (B606): Standardprogramm des Nutzers, kein Befehl
-            os.startfile(pfad)  # nosec B606
+        standardprogramm_oeffnen(pfad)
         return str(pfad)
 
     def extern_oeffnen(self, adresse: str):
@@ -253,9 +315,11 @@ class Bruecke:
         import webview
 
         from nebenkostenfix import umzug
+        # Der Dialog von macOS vergleicht nur die letzte Endung (#44).
+        archiv = '*.gz' if aktualisierung.betriebssystem() == 'darwin' else '*.tar.gz'
         auswahl = self._fenster.create_file_dialog(
             webview.OPEN_DIALOG,
-            file_types=('NebenkostenFix Paket (*.nkfix;*.nkbak;*.tar.gz)', 'Alle Dateien (*.*)'))
+            file_types=(f'NebenkostenFix Paket (*.nkfix;*.nkbak;{archiv})', 'Alle Dateien (*.*)'))
         if not auswahl:
             return None
         return umzug.freigeben(auswahl if isinstance(auswahl, str) else auswahl[0])
@@ -507,17 +571,25 @@ def fenster_starten(datenordner: Path) -> int:  # pragma: no cover - braucht GUI
         if 'basis' in zustand:
             fenster.load_url(f"{zustand['basis']}/huelle/passwort")
 
+    macos = aktualisierung.betriebssystem() == 'darwin'
+    if macos:
+        # Cmd-Q beendet den Prozess, ohne dass webview.start zurückkehrt;
+        # vorher kommt nur noch closing (#44).
+        def beim_schliessen():
+            if 'server' in zustand:
+                anhalten(zustand.pop('server'), zustand['app_modul'])
+            instanz.freigeben()
+        fenster.events.closing += beim_schliessen
+
+    datei = [MenuAction('Drucken', lambda: fenster.evaluate_js('window.print()'))]
+    if not macos:   # macOS hat „Beenden“ mit Cmd-Q im App-Menü
+        datei += [MenuSeparator(), MenuAction('Beenden', fenster.destroy)]
     menue = [
-        Menu('Datei', [
-            MenuAction('Drucken', lambda: fenster.evaluate_js('window.print()')),
-            MenuSeparator(),
-            MenuAction('Beenden', fenster.destroy),
-        ]),
+        Menu('Datei', datei),
         Menu('Hilfe', [
             MenuAction('Passwort vergessen …', passwort_seite),
-            # Bandit-Ausnahme (B606): oeffnet den Datenordner im Explorer
             MenuAction('Datenordner anzeigen',
-                       lambda: os.startfile(datenordner)),  # nosec B606
+                       lambda: standardprogramm_oeffnen(datenordner)),
             MenuSeparator(),
             # NK-179: springt in der Oberfläche zu „Über NebenkostenFix“.
             MenuAction(f'Über {marke.PRODUKT}',

@@ -18,9 +18,19 @@ from pathlib import Path
 import pytest
 
 import desktop
+from nebenkostenfix import aktualisierung
 from nebenkostenfix import windows_ordner
 
 WURZEL = Path(__file__).resolve().parents[1]
+
+
+@pytest.fixture(autouse=True)
+def windows(monkeypatch):
+    """Die Hülle verhält sich wie unter Windows, auch auf einem Mac;
+    macOS prüft tests/test_macos.py (#44)."""
+    monkeypatch.setattr(aktualisierung, 'betriebssystem', lambda: 'win32')
+    # os.startfile gibt es nur unter Windows; hier öffnet es nichts.
+    monkeypatch.setattr(desktop.os, 'startfile', lambda pfad: None, raising=False)
 
 
 # --- Start-Token ------------------------------------------------------------
