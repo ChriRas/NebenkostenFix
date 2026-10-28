@@ -100,7 +100,7 @@ jobs:
           codesign --verify --deep --strict dist/NebenkostenFix.app
           find dist/NebenkostenFix.app -name THIRD_PARTY_LICENSES.txt | grep -q . || { echo "THIRD_PARTY_LICENSES.txt fehlt im Paket"; exit 1; }
           python packaging/windows/paketprobe.py groesse dist/NebenkostenFix.app
-          python packaging/windows/paketprobe.py selbsttest dist/NebenkostenFix.app/Contents/MacOS/NebenkostenFix "$RUNNER_TEMP/nk-paket" "$RUNNER_TEMP/bericht-paket.json"
+          python packaging/windows/paketprobe.py selbsttest "$GITHUB_WORKSPACE/dist/NebenkostenFix.app/Contents/MacOS/NebenkostenFix" "$RUNNER_TEMP/nk-paket" "$RUNNER_TEMP/bericht-paket.json"
       - uses: actions/download-artifact@v8
         with:
           name: umzug-linux-fuer-macos

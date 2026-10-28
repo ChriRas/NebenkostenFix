@@ -155,7 +155,9 @@ def test_workflow_prueft_das_gebaute_paket():
     programm = 'dist/NebenkostenFix.app/Contents/MacOS/NebenkostenFix'
     for probe in ('groesse', 'selbsttest', 'umzug'):
         assert f'packaging/windows/paketprobe.py {probe}' in schritte
-    assert f'paketprobe.py selbsttest {programm}' in schritte
+    # Der Selbsttest startet im Ordner der Programmdatei; unter macOS löst
+    # Popen einen relativen Pfad erst danach auf (erster CI-Lauf: FileNotFoundError).
+    assert f'paketprobe.py selbsttest "$GITHUB_WORKSPACE/{programm}"' in schritte
     assert 'packaging/macos/fensterprobe.py' in schritte
     assert 'hdiutil create' in schritte
 
