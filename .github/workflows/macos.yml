@@ -1,0 +1,148 @@
+# macOS-Weg (#44, Schritt 2): die Testsuite auf macOS und der Bau der App
+# (PyInstaller, Bundle NebenkostenFix.app, DMG) samt Selbsttest, Umzug
+# Linux -> macOS und einer Probe mit echtem Fenster und Cmd-Q. Freiwillig:
+# kein Pflicht-Check und nicht in release.yml eingebunden. Das DMG ist nur
+# ein Artefakt des Laufs, ad hoc signiert, nicht notarisiert. Nur Apple
+# Silicon, ab macOS 15.
+name: macos
+
+on:
+  pull_request:
+    branches: [main, feature/macos]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Neuer Push auf denselben Pull Request bricht den alten Lauf ab.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    name: Tests auf macOS
+    runs-on: macos-26
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+            requirements-desktop.txt
+      - name: Abhaengigkeiten
+        run: python -m pip install -r requirements.txt -r requirements-dev.txt -r requirements-desktop.txt
+      - name: pytest
+        run: python -m pytest -q -p no:cacheprovider -o addopts="" --maxfail=50
+
+  # NK-164: ein Umzugspaket aus einem fiktiven Bestand unter Linux, das die
+  # gebaute Mac-App uebernimmt.
+  umzug-linux:
+    name: Umzugspaket unter Linux bauen
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - name: Abhaengigkeiten
+        run: python -m pip install -r requirements.txt
+      - name: Paket bauen
+        run: python scripts/umzug_kreuzprobe.py bauen --arbeit umzug --name linux
+      - uses: actions/upload-artifact@v7
+        with:
+          name: umzug-linux-fuer-macos
+          path: |
+            umzug/linux.nkfix
+            umzug/linux.json
+          retention-days: 7
+
+  paket:
+    name: Mac-App bauen und pruefen
+    # Die aelteste Version, die Apple noch pflegt: was hier laeuft, laeuft ab 15.
+    runs-on: macos-15
+    needs: umzug-linux
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-desktop.txt
+      - name: Abhaengigkeiten
+        run: python -m pip install -r requirements.txt -r requirements-desktop.txt
+      - name: Lizenztexte der mitgelieferten Software (NK-148)
+        run: python -m nebenkostenfix.drittlizenzen --ausgabe THIRD_PARTY_LICENSES.txt requirements.txt requirements-desktop.txt
+      - name: Version
+        id: version
+        run: |
+          v=$(python -c "from nebenkostenfix.abrechnung_version import SOFTWARE_VERSION as v; print(v)")
+          echo "wert=$v" >> "$GITHUB_OUTPUT"
+          echo "## Mac-Paket $v ($(sw_vers -productVersion), $(uname -m))" >> "$GITHUB_STEP_SUMMARY"
+      - name: Selbsttest aus den Quellen
+        timeout-minutes: 10
+        run: python desktop.py --selbsttest --datenordner "$RUNNER_TEMP/nk-quelle" --bericht "$RUNNER_TEMP/bericht-quelle.json"
+      - name: PyInstaller
+        run: pyinstaller packaging/macos/nebenkosten.spec --noconfirm --distpath dist --workpath build
+      - name: Paket pruefen (Signatur, Groesse, Selbsttest)
+        timeout-minutes: 10
+        run: |
+          codesign --verify --deep --strict dist/NebenkostenFix.app
+          find dist/NebenkostenFix.app -name THIRD_PARTY_LICENSES.txt | grep -q . || { echo "THIRD_PARTY_LICENSES.txt fehlt im Paket"; exit 1; }
+          python packaging/windows/paketprobe.py groesse dist/NebenkostenFix.app
+          python packaging/windows/paketprobe.py selbsttest dist/NebenkostenFix.app/Contents/MacOS/NebenkostenFix "$RUNNER_TEMP/nk-paket" "$RUNNER_TEMP/bericht-paket.json"
+      - uses: actions/download-artifact@v8
+        with:
+          name: umzug-linux-fuer-macos
+          path: umzug-linux
+      - name: Umzug Linux -> macOS (Quellen und gebaute App)
+        timeout-minutes: 10
+        run: |
+          python scripts/umzug_kreuzprobe.py pruefen --arbeit "$RUNNER_TEMP/umzug-quelle" --paket umzug-linux/linux.nkfix --erwartet umzug-linux/linux.json
+          python packaging/windows/paketprobe.py umzug dist/NebenkostenFix.app/Contents/MacOS/NebenkostenFix umzug-linux/linux.nkfix umzug-linux/linux.json "$RUNNER_TEMP/nk-umzug" "$RUNNER_TEMP/bericht-umzug.json"
+      - name: Fensterprobe (Start wie aus dem Finder, Update-Suche, Cmd-Q)
+        timeout-minutes: 10
+        run: python packaging/macos/fensterprobe.py dist/NebenkostenFix.app "$RUNNER_TEMP/bericht-fenster.json"
+      - name: DMG
+        # hdiutil meldet auf den Runnern gelegentlich „Resource busy“
+        # (runner-images#7522): mehrmals versuchen; im if bricht set -e nicht
+        # ab, und eine halbe Datei vom Fehlversuch zaehlt nicht.
+        run: |
+          inhalt="$RUNNER_TEMP/dmg"
+          mkdir -p "$inhalt"
+          ditto dist/NebenkostenFix.app "$inhalt/NebenkostenFix.app"
+          # Die Proben haben das Bundle gestartet: noch unversehrt signiert?
+          codesign --verify --deep --strict "$inhalt/NebenkostenFix.app"
+          ln -s /Applications "$inhalt/Programme"
+          dmg="dist/NebenkostenFix-${{ steps.version.outputs.wert }}-macOS-arm64.dmg"
+          for versuch in 1 2 3 4 5; do
+            sync
+            if hdiutil create -volname NebenkostenFix -srcfolder "$inhalt" -ov -format UDZO "$dmg"; then
+              break
+            fi
+            rm -f "$dmg"
+            if [ "$versuch" = 5 ]; then echo "hdiutil scheiterte fuenfmal"; exit 1; fi
+            sleep $((versuch * 10))
+          done
+          hdiutil verify "$dmg"
+          echo "- DMG: $(basename "$dmg"), $(du -m "$dmg" | cut -f1) MB, ad hoc signiert, nicht notarisiert" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: nebenkostenfix-macos
+          path: |
+            dist/NebenkostenFix-*-macOS-arm64.dmg
+            THIRD_PARTY_LICENSES.txt
+            ${{ runner.temp }}/bericht-*.json
+          retention-days: 14
+          if-no-files-found: warn

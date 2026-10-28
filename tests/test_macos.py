@@ -316,8 +316,9 @@ def _fenster_starten(monkeypatch, tmp_path, cmd_q):
     fenster = _Fenster()
     ablauf = {'angehalten': []}
 
-    def start(funktion, menu=(), **_):
+    def start(funktion, menu=(), **optionen):
         ablauf['menue'] = menu
+        ablauf['optionen'] = optionen
         funktion()
         for beim_schliessen in fenster.events.closing:
             beim_schliessen()
@@ -408,3 +409,18 @@ def test_datenordner_anzeigen_nimmt_das_standardprogramm(system, monkeypatch, tm
     hilfe = next(m for m in ablauf['menue'] if m.titel == 'Hilfe')
     next(e for e in hilfe.inhalt if e.titel == 'Datenordner anzeigen').inhalt()
     assert geoeffnet == [tmp_path / 'daten']
+
+
+def test_webview_speicher_unter_macos_ohne_eigenen_ordner(system, monkeypatch, tmp_path):
+    """WKWebView ignoriert ``storage_path`` (pywebview#1714) und legt die
+    Daten nach der Bundle-ID ab; ein Ordner „WebView2“ bliebe leer."""
+    system('darwin')
+    optionen = _fenster_starten(monkeypatch, tmp_path, cmd_q=False)['optionen']
+    assert 'storage_path' not in optionen and optionen['private_mode'] is False
+
+
+def test_webview_speicher_unter_windows_wie_bisher(system, monkeypatch, tmp_path):
+    system('win32')
+    optionen = _fenster_starten(monkeypatch, tmp_path, cmd_q=False)['optionen']
+    assert optionen['storage_path'] == str(tmp_path / 'lokal' / 'NebenkostenFix' / 'WebView2')
+    assert optionen['private_mode'] is False

@@ -630,9 +630,12 @@ def fenster_starten(datenordner: Path) -> int:  # pragma: no cover - braucht GUI
                        lambda: fenster.evaluate_js("zeigeHilfe('hilfe-ueber')")),
         ]),
     ]
-    speicher = windows_ordner.lokaler_ordner() / 'WebView2'
+    # WKWebView ignoriert storage_path und legt die Daten nach der Bundle-ID
+    # ab (pywebview#1714); der Ordner bliebe unter macOS leer.
+    speicher = {} if macos else {
+        'storage_path': str(windows_ordner.lokaler_ordner() / 'WebView2')}
     try:
-        webview.start(hochfahren, menu=menue, private_mode=False, storage_path=str(speicher))
+        webview.start(hochfahren, menu=menue, private_mode=False, **speicher)
     finally:
         if 'server' in zustand:
             anhalten(zustand['server'], zustand['app_modul'])
