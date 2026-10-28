@@ -610,16 +610,50 @@ def server_starten(wsgi):
     from waitress import create_server
     server = create_server(wsgi, host='127.0.0.1', port=0, threads=8,
                            ident=TITEL, clear_untrusted_proxy_headers=True)
-    faden = threading.Thread(target=server.run, name='waitress', daemon=True)
-    faden.start()
-    return server, faden
+    thread = threading.Thread(target=server.run, name='waitress', daemon=True)
+    thread.start()
+    return server, thread
+
+
+def _im_thread_von_waitress(server, aufgabe, warten: float) -> bool:
+    """Führt ``aufgabe`` über den Trigger im Thread von waitress aus, also
+    zwischen zwei select(). False, wenn sie nicht innerhalb von ``warten``
+    drankommt."""
+    erledigt = threading.Event()
+
+    def ausfuehren():
+        try:
+            aufgabe()
+        finally:
+            erledigt.set()
+    server.trigger.pull_trigger(ausfuehren)
+    return erledigt.wait(warten)
+
+
+def _server_schliessen(server, warten: float = 5.0) -> None:
+    """Fährt waitress der Reihe nach herunter (#44). Aus einem anderen Thread
+    geschlossen, wartete waitress noch in select() auf den Sockets und endete
+    mit „Bad file descriptor“. Und ein Worker, der danach fertig wurde, zog
+    den schon geschlossenen Trigger: unter macOS und Linux womöglich die fd,
+    die der Checkpoint gerade geöffnet hat."""
+    if not server.accepting:   # schon zu (zweiter Aufruf)
+        return
+    from waitress import wasyncore
+    # 1. Keine neuen Verbindungen; Trigger und offene Verbindungen bleiben.
+    if not _im_thread_von_waitress(server, lambda: wasyncore.dispatcher.close(server), warten):
+        # Neben einer vielleicht doch laufenden Schleife nichts direkt schließen.
+        protokoll.warning('waitress kam beim Beenden nicht dran; das Prozessende räumt auf')
+        return
+    # 2. Laufende Anfragen zu Ende; die Schleife schreibt ihre Antworten noch.
+    server.task_dispatcher.shutdown(timeout=warten)
+    # 3. Trigger und Verbindungen zu, danach endet die Schleife.
+    if not _im_thread_von_waitress(server, lambda: wasyncore.close_all(server._map), warten):
+        protokoll.warning('waitress kam beim Beenden nicht dran; das Prozessende räumt auf')
 
 
 def anhalten(server, app_modul) -> None:
     """Server zu, WAL in die Datenbank zurueckschreiben, Griffe schliessen."""
-    # Schon zu (zweiter Aufruf) ist dasselbe Ergebnis.
-    with contextlib.suppress(OSError):
-        server.close()
+    _server_schliessen(server)
     with app_modul.app.app_context():
         from sqlalchemy import text
         with app_modul.db.engine.connect() as verbindung:
