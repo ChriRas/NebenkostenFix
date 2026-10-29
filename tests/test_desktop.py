@@ -362,6 +362,71 @@ def test_paketprobe_update(tmp_path):
     assert paketprobe.probe_update(tmp_path, summe, '0.9.0', lambda: ['0.9.0']) is False
 
 
+def _pascal_block(quelle: str, kopf: str) -> str:
+    """Eine Routine aus dem [Code] des Installers, bis zur nächsten."""
+    anfang = quelle.index(kopf)
+    folgende = [quelle.find(k, anfang + 1) for k in ('\nprocedure ', '\nfunction ')]
+    return quelle[anfang:min([f for f in folgende if f != -1], default=len(quelle))]
+
+
+def test_deinstallation_entfernt_einstellungen_nur_auf_wunsch_und_nie_daten():
+    """#45: Wer will, nimmt beim Deinstallieren die Einstellungen dieses Rechners
+    mit (sonst startet eine Neuinstallation wieder verbunden). Daten nie."""
+    import re
+    iss = (WURZEL / 'packaging/windows/installer.iss').read_text(encoding='utf-8')
+    schritt = _pascal_block(iss, 'procedure CurUninstallStepChanged')
+    entfernen = _pascal_block(iss, 'procedure EinstellungenEntfernen')
+    # Gefragt wird vor dem Entfernen, Vorgabe Nein; still nur mit Parameter.
+    assert 'CurUninstallStep = usUninstall' in schritt
+    assert 'MB_YESNO or MB_DEFBUTTON2) = IDYES' in schritt
+    assert ("if UninstallSilent then\n      Entfernen := "
+            "ExpandConstant('{param:EINSTELLUNGEN|0}') = '1'") in schritt
+    assert 'if Entfernen then\n      EinstellungenEntfernen;' in schritt
+    # Gelöscht wird gezielt: der Abschnitt [Server], nie [Daten] ...
+    assert "DeleteIniSection('Server', Ini);" in entfernen
+    assert not re.search(r"DeleteIni\w*\('Daten'", iss)
+    assert '[UninstallDelete]' not in iss and 'uninsdelete' not in iss
+    # ... und rekursiv nur das WebView2-Profil, nie der lokale Ordner, in dem
+    # der OneDrive-Ausweich „Daten“ liegen kann, und nie mit dem Datenordner darin.
+    assert re.findall(r'DelTree\(([^,]*),', iss) == ["Lokal + '\\WebView2'"]
+    assert ("if not LiegtUnter(Daten, Lokal + '\\WebView2') then\n"
+            "    DelTree(Lokal + '\\WebView2', True, True, True);") in entfernen
+    assert re.findall(r'DeleteFile\(([^)]*)\)', entfernen) == [
+        "Lokal + '\\konsole.log'", "Lokal + '\\app-einstellungen.json'"]
+    # app-einstellungen.json gehört dem Datenordner, wenn er der lokale Ordner ist.
+    assert ("if CompareText(RemoveBackslashUnlessRoot(Daten), Lokal) <> 0 then\n"
+            "    DeleteFile(Lokal + '\\app-einstellungen.json');") in entfernen
+    # Die Schlussmeldung, wo die Daten liegen, bleibt.
+    assert 'bleiben erhalten in:' in schritt
+
+
+def test_paketprobe_prueft_die_einstellungen_nach_der_deinstallation(lokal):
+    import shutil
+    sys.path.insert(0, str(WURZEL / 'packaging' / 'windows'))
+    try:
+        import paketprobe
+    finally:
+        sys.path.pop(0)
+    daten = str(lokal / 'Dokumente' / 'NebenkostenFix')
+    windows_ordner.einstellungen_schreiben(datenordner=daten)
+    paketprobe.lokale_reste_anlegen()
+    ordner = windows_ordner.lokaler_ordner()
+    # Ohne Parameter bleibt alles.
+    assert paketprobe.probe_lokale_reste(False, daten) is True
+    assert paketprobe.probe_lokale_reste(True, daten) is False
+    # So wie der Deinstaller mit /EINSTELLUNGEN=1.
+    windows_ordner.einstellungen_schreiben(server=None)
+    shutil.rmtree(ordner / 'WebView2')
+    (ordner / 'konsole.log').unlink()
+    (ordner / 'app-einstellungen.json').unlink()
+    assert paketprobe.probe_lokale_reste(True, daten) is True
+    assert paketprobe.probe_lokale_reste(False, daten) is False
+    # [Daten] verändert oder der lokale Ausweich leer heißt: nicht bestanden.
+    assert paketprobe.probe_lokale_reste(True, str(lokal / 'anders')) is False
+    (ordner / 'Daten' / 'probe.txt').unlink()
+    assert paketprobe.probe_lokale_reste(True, daten) is False
+
+
 # --- D-95: Installationen aus der Zeit vor der Umbenennung ----------------------
 
 def test_vorhandener_alter_datenordner_bleibt(lokal, monkeypatch):
@@ -477,13 +542,18 @@ def test_pdf_oeffnet_auf_der_angegebenen_seite(monkeypatch, tmp_path):
     assert f'{ohne.as_uri()}#page=3' in mit.read_text(encoding='utf-8')
 
 
-def test_haengendes_update_ueber_die_vorversion_bricht_nach_fuenf_minuten_ab():
-    """Der Schritt dauert unter einer Minute; hängt der Installer, soll er
-    nicht den ganzen Windows-Lauf blockieren (NK-239)."""
+def test_haengendes_update_ueber_die_vorversion_bricht_nach_sieben_minuten_ab():
+    """Der Schritt dauert wenige Minuten; hängt der Installer, soll er
+    nicht den ganzen Windows-Lauf blockieren (NK-239). Seit #45 deinstalliert
+    er zweimal: ohne und mit /EINSTELLUNGEN=1."""
     windows = (WURZEL / '.github/workflows/windows.yml').read_text(encoding='utf-8')
     schritt = windows.split('- name: Vorversion (vor der Umbenennung) installieren', 1)[1]
     schritt = schritt.split('- name:', 1)[0]
-    assert '\n        timeout-minutes: 5\n' in schritt
+    assert '\n        timeout-minutes: 7\n' in schritt
+    reihenfolge = ['paketprobe.py lokale-reste\n', ' $daten behalten\n',
+                   'installation-neu.log', ' $daten entfernen\n']
+    stellen = [schritt.find(t) for t in reihenfolge]
+    assert -1 not in stellen and stellen == sorted(stellen)
 
 
 def _paketprobe():

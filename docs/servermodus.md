@@ -125,12 +125,16 @@ Daraus folgt:
 
 - Wer den Datenordner löscht, bleibt verbunden. Erst beim nächsten **lokalen** Start
   erscheint der Hinweis wieder (dann mit dem Knopf „Mit einem Server verbinden“).
-- Das Deinstallieren (setup.exe) entfernt weder die INI noch das WebView2-Profil, ebenso
-  wenig den Datenordner. Der Installer (`packaging/windows/installer.iss`) hat keinen
-  Abschnitt `[UninstallDelete]`, und seine `[INI]`-Einträge tragen kein
-  `uninsdelete`-Flag. Eine Neuinstallation startet also wieder verbunden.
+- Das Deinstallieren (setup.exe) fragt, ob auch die Einstellungen dieses Rechners weg
+  sollen (Vorgabe Nein, still nur mit `/EINSTELLUNGEN=1`). Bei Ja entfernt es den
+  Abschnitt `[Server]` der INI, den Ordner `WebView2`, `konsole.log` und
+  `app-einstellungen.json` (Merker der Update-Suche; nicht, wenn der lokale Ordner zugleich
+  der Datenordner ist). `[Daten]`, den Datenordner und den Ausweich `Daten` lässt es immer
+  stehen. Bei Nein startet eine Neuinstallation wieder verbunden.
 - Store-Paket (MSIX): Windows lenkt Schreibzugriffe nach `%LOCALAPPDATA%` vermutlich in den
-  Paketordner um und entfernt ihn beim Deinstallieren. Unter Windows nicht geprüft.
+  Paketordner um und entfernt ihn beim Deinstallieren; eine Rückfrage gibt es dort nicht.
+  Ausnahme: Eine INI am echten Ort aus einer früheren Exe-Installation bleibt. Unter Windows
+  nicht geprüft.
 
 Das ist gewollt: Die Wahl „lokal oder Server“ gehört zum Gerät, nicht zu den Daten. Wer
 Daten löscht, verschiebt oder eine Sicherung einspielt, soll nicht nebenbei den Modus
