@@ -3,7 +3,8 @@
 nur Text, sondern wird maschinell geprueft.
 
 Geprueft werden (jeweils ueber static/index.html und die in static/app.js
-erzeugten Beschriftungen):
+erzeugten Beschriftungen; Sperrliste und Steuerelemente zusaetzlich ueber
+jede eigene static/*.js und die Seiten aus nebenkostenfix/auth.py):
 
   1. Navigationskanon (Glossar Par. 5): Zieltab, Beschriftung und Icon.
   2. Verbliste fuer Schaltflaechen (Glossar Par. 6): jeder Aktionsknopf
@@ -111,7 +112,9 @@ ENGLISCHE_RESTE: list[str] = [
     "Property", "Meter", "Reading", "Payment",
     # Formulare im Hausstil: was Browser und Vorlagen einschleppen.
     "Choose File", "No file chosen", "Browse", "Submit", "Select", "Search",
-    "Clear", "Today", "Password", "Username", "mm/dd/yyyy",
+    "Clear", "Today", "Password", "Username", "mm/dd/yyyy", "dd/mm/yyyy",
+    # Nicht hier: "Upload", "Enter", "Optional" -- im Deutschen gebraeuchlich.
+    "Enter amount", "Upload file", "Close", "Required", "Remove",
 ]
 # Verworfene Synonyme (Par. 1 und 2):
 VERWORFENE_SYNONYME: list[str] = [
@@ -164,15 +167,20 @@ def _normalisiere_knopftext(text: str) -> str:
 
 
 def _sichtbarer_text_index(quelle: str) -> str:
-    """Sichtbarer Text von index.html: Textknoten plus Titelzeilen
-    (title/aria-label/placeholder). Ids, Klassen und Funktionsnamen
-    bleiben draussen -- die Sperrliste gilt der Beschriftung."""
+    """Sichtbarer Text von HTML: Textknoten plus Titelzeilen
+    (title/aria-label/placeholder/alt, beide Anfuehrungsarten) und die
+    Beschriftung von Knopf-Feldern (value bei submit/button/reset). Ids,
+    Klassen und Funktionsnamen bleiben draussen -- die Sperrliste gilt
+    der Beschriftung."""
     quelle = re.sub(r"<!--[\s\S]*?-->", " ", quelle)
     quelle = re.sub(r"<(script|style)\b[\s\S]*?</\1>", " ", quelle)
     texte = re.findall(r">([^<>]*)<", quelle)           # Textknoten
-    attribute = re.findall(
-        r'(?:title|aria-label|placeholder)="([^"]*)"', quelle)
-    return _normalisiere_knopftext(" ".join(texte + attribute))
+    attribute = [a or b for a, b in re.findall(
+        r"""(?:title|aria-label|placeholder|alt)\s*=\s*(?:"([^"]*)"|'([^']*)')""",
+        quelle)]
+    knopffelder = [_attr(tag, "value") or "" for tag in _INPUT_TAG.findall(quelle)
+                   if (_attr(tag, "type") or "").lower() in ("submit", "button", "reset")]
+    return _normalisiere_knopftext(" ".join(texte + attribute + knopffelder))
 
 
 def _ohne_js_kommentare(quelle: str) -> str:
@@ -265,7 +273,7 @@ def pruefe_sperrliste(quelle: str, datei: str) -> list[str]:
     """Glossar Par. 7: englische Reste, verworfene Synonyme, Du-Form.
     Geprueft wird nur sichtbarer Text (bei index.html Textknoten und
     Titelzeilen, bei app.js Zeichenketten-Inhalte)."""
-    if datei == "index.html":
+    if datei.endswith((".html", ".py")):
         sichtbar = _sichtbarer_text_index(quelle)
     else:
         sichtbar = _sichtbare_zeichenketten_app(quelle)
@@ -526,8 +534,30 @@ STYLE = STATIC / "style.css"
 AUTH = BASIS / "nebenkostenfix" / "auth.py"
 # Ausnahmen (Feld-id -> Begruendung), wie QM_IN_APP. Zum Start leer.
 STEUERELEMENT_AUSNAHMEN: dict[str, str] = {}
-
+# appearance ausser none ausserhalb von forced-colors (Selektor -> Begruendung):
+APPEARANCE_AUSNAHMEN: dict[str, str] = {
+    "select, .form-group select, ::picker(select)":
+        "Customizable Select (base-select), kein Kästchen",
+    'input[type="number"]': "textfield blendet nur die Drehknöpfe aus",
+}
 _INPUT_TAG = re.compile(r"<input\b[^>]*>")
+# Grenze: Regeln im Stylesheet, die eine Hausregel spaeter ueberschreiben
+# (staerkere Selektoren, eigene Groesse per Klasse), erkennt nur der Rundgang
+# (scripts/rundgang.py, PRUEFUNG_JS) -- und nur in den Ansichten, die er aufnimmt.
+
+
+def ui_quellen() -> dict[str, str]:
+    """index.html, jede eigene JS-Datei (ohne vendor/) und die Seiten aus auth.py."""
+    quellen = {"index.html": _lies(INDEX)}
+    for js in sorted(STATIC.glob("*.js")):
+        quellen[js.name] = _lies(js)
+    quellen["auth.py"] = _lies(AUTH)
+    return quellen
+
+
+def _html_aus_python(pfad: Path) -> str:
+    """Die HTML-Zeichenketten einer Python-Datei (Seiten von auth.py)."""
+    return "\n".join(t for _, t in _zeichenketten_python(pfad) if "<" in t)
 
 
 def _zeile(quelle: str, stelle: int) -> int:
@@ -535,8 +565,9 @@ def _zeile(quelle: str, stelle: int) -> int:
 
 
 def _attr(tag: str, name: str) -> str | None:
-    m = re.search(rf'\s{name}\s*=\s*"([^"]*)"', tag)
-    return m.group(1) if m else None
+    """Attributwert in doppelten, einfachen oder ohne Anfuehrungszeichen."""
+    m = re.search(rf"""\s{name}\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))""", tag)
+    return next(g for g in m.groups() if g is not None) if m else None
 
 
 def _css_ohne_block(css: str, kopf: str) -> str:
@@ -567,8 +598,7 @@ def pruefe_steuerelemente(quellen: dict[str, str] | None = None,
     Gegenproben austauschen.
     """
     if quellen is None:
-        quellen = {"index.html": _lies(INDEX), "app.js": _lies(APP),
-                   "auth.py": _lies(AUTH)}
+        quellen = ui_quellen()
     if css is None:
         css = _lies(STYLE)
     verstoesse: list[str] = []
@@ -582,7 +612,9 @@ def pruefe_steuerelemente(quellen: dict[str, str] | None = None,
             if kennung in STEUERELEMENT_AUSNAHMEN:
                 continue
             if typ == "file":
-                if re.search(r"\shidden(?=[\s>/=])", tag):
+                # hidden als eigenes Attribut, nicht als Wort in einem Wert (class="a hidden b"):
+                if re.search(r"\shidden(?=[\s>/=])",
+                             re.sub(r"\"[^\"]*\"|'[^']*'", '""', tag)):
                     continue                    # Muster B: ein Knopf ruft .click()
                 im_rahmen = re.search(
                     r'<div class="file-upload-wrapper"[^>]*>\s*$', quelle[:m.start()])
@@ -601,18 +633,29 @@ def pruefe_steuerelemente(quellen: dict[str, str] | None = None,
                         f"{stelle}: {typ} #{name} mit eigener Größe oder "
                         f"Optik im style ({stil.strip()!r}); es gilt die Hausregel "
                         "in style.css")
+        # Felder, die erst im Skript ihre Art bekommen, sehen weder Rahmen noch Label:
+        for m in re.finditer(r"""(?:\.type\s*=\s*|setAttribute\(\s*['"]type['"]\s*,\s*)"""
+                             r"""['"](file|checkbox|radio)['"]""", quelle):
+            verstoesse.append(
+                f"{datei}:{_zeile(quelle, m.start())}: {m.group(1)}-Feld im Skript "
+                "gebaut; bitte als Markup im Hausmuster")
     regeln = _css_regeln(_css_ohne_block(css, "@media (forced-colors: active)"))
+    # Die Hausregeln zaehlen nur auf oberster Ebene, nicht in @media/@supports.
+    oben = _css_regeln(re.sub(r"@[^{};]+\{(?:[^{}]*\{[^{}]*\})*[^{}]*\}", " ",
+                              re.sub(r"/\*[\s\S]*?\*/", " ", css)))
     if not any(s == 'input[type="checkbox"], input[type="radio"]'
-               and re.search(r"(?<!-)appearance:\s*none", k) for s, k in regeln):
+               and re.search(r"(?<!-)appearance:\s*none", k) for s, k in oben):
         verstoesse.append(
             "style.css: globale Regel für Kästchen und Optionsfelder "
             "(input[type=\"checkbox\"], input[type=\"radio\"] { appearance: none }) fehlt")
     for s, k in regeln:
-        if re.search(r"checkbox|radio", s) and re.search(r"appearance:\s*auto", k):
-            verstoesse.append(
-                f"style.css: {s!r} setzt appearance: auto außerhalb von forced-colors")
+        for wert in re.findall(r"(?<![\w-])(?:-webkit-|-moz-)?appearance\s*:\s*([^;]+)", k):
+            if wert.strip() != "none" and s not in APPEARANCE_AUSNAHMEN:
+                verstoesse.append(
+                    f"style.css: {s!r} setzt appearance: {wert.strip()} außerhalb von "
+                    "forced-colors (stellt das Systemkästchen wieder her)")
     if not any(s.startswith(":where(input:is(") and "select" in s and "textarea" in s
-               and "var(--field-border)" in k for s, k in regeln):
+               and "var(--field-border)" in k for s, k in oben):
         verstoesse.append(
             "style.css: globale Feldregel :where(input:is(…), select, textarea) fehlt")
     return verstoesse
@@ -625,8 +668,10 @@ def alle_verstoesse() -> list[str]:
     verstoesse: list[str] = []
     verstoesse += pruefe_verben(index)
     verstoesse += pruefe_verben(app)
-    verstoesse += pruefe_sperrliste(index, "index.html")
-    verstoesse += pruefe_sperrliste(app, "app.js")
+    for datei, quelle in ui_quellen().items():
+        if datei == "auth.py":
+            quelle = _html_aus_python(AUTH)
+        verstoesse += pruefe_sperrliste(quelle, datei)
     verstoesse += pruefe_navigation(index)
     verstoesse += pruefe_umlagearten(app)
     verstoesse += pruefe_backend_meldungen()
