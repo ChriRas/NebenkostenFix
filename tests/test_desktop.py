@@ -117,7 +117,8 @@ def test_onedrive_wird_erkannt(tmp_path):
 
 def test_einstellungen_rundlauf(lokal):
     assert windows_ordner.einstellungen_lesen() == {
-        'datenordner': None, 'sicherungsziele': [], 'onedrive_bestaetigt': False}
+        'datenordner': None, 'sicherungsziele': [], 'onedrive_bestaetigt': False,
+        'server': None}
     windows_ordner.einstellungen_schreiben(datenordner=lokal / 'Daten')
     windows_ordner.einstellungen_schreiben(
         sicherungsziele=[str(lokal / 'a'), str(lokal / 'b')], onedrive_bestaetigt=True)
@@ -241,6 +242,59 @@ def test_selbsttest_aus_den_quellen(tmp_path):
     daten = tmp_path / 'daten'
     assert (daten / 'nebenkosten.db').is_file()
     assert (daten / 'belege').is_dir() and (daten / 'backups').is_dir()
+
+
+def _abschnitte(datei):
+    import configparser
+    parser = configparser.ConfigParser(interpolation=None)
+    parser.read_string(windows_ordner._ini_text(datei))
+    return {name: dict(parser[name]) for name in parser.sections()}
+
+
+def test_server_adresse_rundlauf(lokal):
+    """#45: setzen, lesen, mit None entfernen; ein leerer Abschnitt geht mit."""
+    windows_ordner.einstellungen_schreiben(server='https://nas.example:8443')
+    assert windows_ordner.einstellungen_lesen()['server'] == 'https://nas.example:8443'
+    datei = windows_ordner.einstellungen_datei()
+    assert _abschnitte(datei) == {'Server': {'adresse': 'https://nas.example:8443'}}
+    windows_ordner.einstellungen_schreiben(server=None)
+    assert windows_ordner.einstellungen_lesen()['server'] is None
+    assert _abschnitte(datei) == {}
+    windows_ordner.einstellungen_schreiben(server='http://nas')
+    windows_ordner.einstellungen_schreiben(server='')
+    assert windows_ordner.einstellungen_lesen()['server'] is None
+
+
+def test_daten_schreiben_behaelt_server(lokal):
+    """So schreibt auch eine alte App: [Server] und fremde Abschnitte bleiben."""
+    datei = windows_ordner.einstellungen_datei()
+    datei.parent.mkdir(parents=True)
+    datei.write_bytes('[Daten]\r\nOrdner=C:\\Daten\r\n[Server]\r\nAdresse=https://nas\r\n'
+                      '[Fremd]\r\nSchluessel=1\r\n'.encode('cp1252'))
+    windows_ordner.einstellungen_schreiben(datenordner='D:\\Neu')
+    windows_ordner.einstellungen_schreiben(onedrive_bestaetigt=True)
+    assert _abschnitte(datei) == {
+        'Daten': {'ordner': 'D:\\Neu', 'onedrivebestaetigt': '1'},
+        'Server': {'adresse': 'https://nas'}, 'Fremd': {'schluessel': '1'}}
+    # Der Rückweg nimmt nur die Adresse, alles andere bleibt.
+    windows_ordner.einstellungen_schreiben(server=None)
+    assert _abschnitte(datei) == {
+        'Daten': {'ordner': 'D:\\Neu', 'onedrivebestaetigt': '1'}, 'Fremd': {'schluessel': '1'}}
+
+
+def test_ini_schreiben_atomar(lokal, monkeypatch):
+    """Scheitert das Ersetzen, liegt die alte Datei unverändert da."""
+    windows_ordner.einstellungen_schreiben(datenordner='C:\\Daten')
+    datei = windows_ordner.einstellungen_datei()
+    vorher = datei.read_bytes()
+
+    def kaputt(*_):
+        raise OSError('Platte voll')
+
+    monkeypatch.setattr(windows_ordner.os, 'replace', kaputt)
+    with pytest.raises(OSError):
+        windows_ordner.einstellungen_schreiben(server='https://nas')
+    assert datei.read_bytes() == vorher
 
 
 @pytest.mark.parametrize('kodierung', ['cp1252', 'utf-8', 'utf-8-sig', 'utf-16'])
