@@ -722,10 +722,10 @@
                             </label>
                             <div id="sicherung-passphrase-felder" style="display: none; margin-top: 8px;">
                                 <div class="knopf-zeile">
-                                    <input type="password" id="sicherung-passphrase" autocomplete="new-password"
-                                        minlength="12" placeholder="Passphrase (mindestens 12 Zeichen)" style="flex: 1; min-width: 200px;">
-                                    <input type="password" id="sicherung-passphrase2" autocomplete="new-password"
-                                        minlength="12" placeholder="Passphrase wiederholen" style="flex: 1; min-width: 200px;">
+                                    <input class="feld-breit" type="password" id="sicherung-passphrase" autocomplete="new-password"
+                                        minlength="12" placeholder="Passphrase (mindestens 12 Zeichen)">
+                                    <input class="feld-breit" type="password" id="sicherung-passphrase2" autocomplete="new-password"
+                                        minlength="12" placeholder="Passphrase wiederholen">
                                 </div>
                                 <p style="font-size: 13px; color: var(--text-muted); margin: 8px 0 0;">
                                     Ohne die Passphrase lässt sich die Sicherung nicht mehr öffnen — niemand
@@ -852,7 +852,7 @@
                                     onchange="document.getElementById('umzug-export-passphrase').hidden = !this.checked">
                                 Mit Passphrase verschlüsseln (empfohlen, wenn das Paket über Cloud oder USB reist)
                             </label>
-                            <div id="umzug-export-passphrase" class="knopf-zeile abstand-oben" hidden>
+                            <div id="umzug-export-passphrase" class="form-group feld-zeile abstand-oben" hidden>
                                 <input class="feld-breit" type="password" id="umzug-export-pass1" autocomplete="new-password"
                                     minlength="12" placeholder="Passphrase (mindestens 12 Zeichen)" aria-label="Passphrase">
                                 <input class="feld-breit" type="password" id="umzug-export-pass2" autocomplete="new-password"
@@ -2891,7 +2891,7 @@
                 <p id="anschreiben-status" style="margin: 0 0 12px 0; color: var(--text-muted); font-size: 13px;"></p>
                 <div class="form-group">
                     <label for="anschreiben-text">Der Text des Anschreibens. Platzhalter füllt die Software aus.</label>
-                    <textarea id="anschreiben-text" rows="12" style="width: 100%; font-family: inherit;"></textarea>
+                    <textarea id="anschreiben-text" rows="12"></textarea>
                 </div>
                 <div class="form-group">
                     <label>Platzhalter</label>
