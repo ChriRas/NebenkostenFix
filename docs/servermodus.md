@@ -200,7 +200,9 @@ Ein Rechner mit Windows 10 oder 11 reicht, dazu ein NebenkostenFix-Server im Net
    „Das Zertifikat des Servers ist nicht vertrauenswürdig“. Nach dem Import des Zertifikats
    (siehe oben) klappt die Verbindung, und das Fenster zeigt die Seite ohne Warnung.
 5. **Dateien und Druck:** Beleg hochladen (Dateiauswahl), Abrechnung herunterladen, PDF
-   auf einer bestimmten Seite öffnen, Datei → Drucken.
+   auf einer bestimmten Seite öffnen, Datei → Drucken. Kein Feld zeigt „Choose File“ oder
+   „No file chosen“; ein Datumsfeld öffnet mit deutschen Monatsnamen, und „12,5“ in einem
+   Zahlenfeld bleibt nach dem Speichern 12,5.
 6. **Neustart:** Verbinden startet die App neu, ebenso „Auf diesem Rechner arbeiten …“.
    Ein Update im Servermodus installieren (die Frage mit OK bestätigen): Danach startet die
    App von selbst wieder im Servermodus.
