@@ -479,6 +479,22 @@ def test_haftung_erstmals(auth_client, monkeypatch, tmp_path):
     assert stand['erstmals'] is False and stand['bestaetigt'] is False
 
 
+def test_haftung_erstmals_nicht_mit_vorhandenen_objekten(auth_client, monkeypatch, tmp_path):
+    """#45: Datenbank mit Objekten, aber nie bestätigt (Update von vor NK-174,
+    nur die Datenbank kopiert): kein erster Start, sonst böte der Hinweis den
+    Server an und die lokalen Objekte wären scheinbar weg."""
+    from nebenkostenfix import datenordner
+    from nebenkostenfix.models import Property, db
+    monkeypatch.setattr(datenordner, 'datenordner', lambda: tmp_path)
+    db.session.add(Property(name='Haus Bestand'))
+    db.session.commit()
+    stand = auth_client.get('/api/haftung').get_json()
+    assert stand['erstmals'] is False and stand['bestaetigt'] is False
+    # Nur gelesen: weder Bestätigung noch Objekt verändert.
+    assert not (tmp_path / 'app-einstellungen.json').exists()
+    assert Property.query.count() == 1
+
+
 def test_einstellungen_gleichzeitig_geht_nichts_verloren(tmp_path):
     """Suche beim Start und „Verstanden“ zugleich: jede Änderung bleibt."""
     import threading

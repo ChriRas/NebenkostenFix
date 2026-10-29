@@ -3458,7 +3458,11 @@ def _vermieter_stand():
 @app.route('/api/haftung', methods=['GET'])
 def haftung_anzeigen():
     """Der Haftungshinweis und ob diese Fassung bestaetigt ist (NK-174)."""
-    return jsonify(haftung.stand())
+    stand = haftung.stand()
+    # #45: Mit Objekten ist es kein neuer Anfang (Update von vor NK-174,
+    # nur die Datenbank kopiert); dann kein Knopf „Mit einem Server verbinden“.
+    stand['erstmals'] = stand['erstmals'] and Property.query.first() is None
+    return jsonify(stand)
 
 
 @app.route('/api/haftung', methods=['POST'])

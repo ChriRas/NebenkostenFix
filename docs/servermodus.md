@@ -41,8 +41,9 @@ Server im eigenen Fenster, wie ein Browser, nur ohne Adressleiste.
 
 ## Verbinden
 
-1. In der Windows-App (lokale Daten): Beim ersten Start steht im Hinweis „Bevor es
-   losgeht“ der Knopf **Mit einem Server verbinden**. Er bestätigt den Hinweis und öffnet
+1. In der Windows-App (lokale Daten): Beim ersten Start (Hinweis nie bestätigt, noch kein
+   Objekt) steht im Hinweis „Bevor es losgeht“ der Knopf **Mit einem Server verbinden**.
+   Er bestätigt den Hinweis und öffnet
    die Verbindungskarte. Später: Einstellungen → Sicherung → Karte **Mit einem Server
    verbinden**, oder die zweite Aktion im leeren Reiter **Immobilien**.
 2. Adresse eintragen, zum Beispiel `https://nebenkosten.example.de` oder
