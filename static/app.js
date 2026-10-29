@@ -599,6 +599,7 @@ function initTabs() {
                 targetTab.dataset.richtung = seitenRichtung(vorher, item);
                 targetTab.classList.add('active');
                 targetTab.style.display = 'block';
+                startwahlVerlassen(item.dataset.tab);
                 
                 if (item.dataset.tab === 'billing') {
                     fetchBillingSuggestions();
@@ -2815,6 +2816,16 @@ function startwahlServer() {
     zeigeServerKarte();
 }
 window.startwahlServer = startwahlServer;
+
+// Wer nach dem Serverweg ohne Verbindung woanders hingeht, arbeitet lokal: Dann kommen
+// Haftungshinweis, Tour und Update-Suche wie nach „Auf diesem Rechner arbeiten“.
+// Der Zustand steht im DOM (Rückweg sichtbar, Wahl zu): initTabs läuft vor dem let oben.
+function startwahlVerlassen(tab) {
+    const zurueck = document.getElementById('btn-startwahl-zurueck');
+    if (tab === 'settings' || !zurueck || zurueck.hidden
+        || document.getElementById('startwahl-modal').classList.contains('active')) return;
+    startwahlLokal();
+}
 
 function startwahlZurueck() {
     document.getElementById('startwahl-modal').classList.add('active');
@@ -6566,9 +6577,6 @@ async function ladeSicherungsStatus() {
         // NK-152: in der App gibt es den Ordner-Dialog.
         const ordnerKnopf = document.getElementById('btn-sicherung-ordner');
         if (ordnerKnopf) ordnerKnopf.style.display = huelle.kann('ordner_waehlen') ? '' : 'none';
-        // #45: die Verbindungskarte nur in der App mit lokalen Daten.
-        const serverKarte = document.getElementById('server-karte');
-        if (serverKarte) serverKarte.style.display = huelle.kann('server_verbinden') ? '' : 'none';
         // NK-130: Hinweis zur Festplattenverschluesselung, mit Pruefergebnis.
         const platte = document.getElementById('sicherung-festplatte');
         if (platte && status.festplatte) {
@@ -6718,6 +6726,11 @@ function umzugHinweis(text) {
 // #45: Im Servermodus zeigen Kopf und Einstellungen, wessen Daten das sind.
 // Die Adresse kommt aus location: Die Brücke antwortet nur, solange sie gleich der geprüften ist.
 function serverAnzeige() {
+    // Die Verbindungskarte nur in der App mit lokalen Daten. Nur hier gesetzt, nicht beim
+    // Laden der Sicherungen: Das liefe sonst nach dem Serverweg der Startwahl und versteckte
+    // die Karte samt Rückweg, solange die Brücke noch fehlt.
+    const serverKarte = document.getElementById('server-karte');
+    if (serverKarte) serverKarte.style.display = huelle.kann('server_verbinden') ? '' : 'none';
     const verbunden = huelle.kann('lokal_arbeiten');
     const chip = document.getElementById('kopf-server');
     const karte = document.getElementById('server-verbunden-karte');

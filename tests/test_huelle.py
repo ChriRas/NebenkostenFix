@@ -427,3 +427,47 @@ def test_tour_bleibt_in_den_einstellungen():
     assert "getElementById('tab-settings').classList.contains('active')) return;" in versuch
     # Die Zeile für die Hilfe bleibt wörtlich (Rauchtest).
     assert "getElementById('tab-hilfe').classList.contains('active')) return;" in versuch
+
+
+def test_spaete_bruecke_zeigt_die_verbindungskarte():
+    """Prüfbefund: Serverweg vor der Brücke. Das Laden der Sicherungen versteckte die
+    Karte samt Rückweg, und die spät gemeldete Brücke zeigte sie nicht wieder."""
+    assert 'server-karte' not in _funktion('ladeSicherungsStatus')
+    probe = _DOM + _huelle_block() + _funktion('serverAnzeige') + f'''
+        const karte = () => element('server-karte').style.display;
+        serverAnzeige();
+        const ohne = karte();
+        element('server-karte').style.display = 'none';  // so stand sie nach dem Serverweg da
+        window.pywebview = {{api: {_LOKALE_API}}};
+        serverAnzeige();
+        const lokal = karte();
+        window.pywebview = {{api: {_SERVER_API}}};
+        serverAnzeige();
+        console.log(JSON.stringify([ohne, lokal, karte()]));
+    '''
+    assert _node(probe) == ['none', '', 'none']
+
+
+def test_serverweg_verlassen_heisst_lokal_arbeiten():
+    """Prüfbefund: Wer nach dem Serverweg ohne Verbindung weiterarbeitet, bekommt
+    Haftungshinweis, Tour und Update-Suche trotzdem."""
+    assert 'startwahlVerlassen(item.dataset.tab);' in _funktion('initTabs')
+    probe = (_DOM + 'let startwahlFertig = null;\n' + _funktion('startwahlLokal')
+             + _funktion('startwahlVerlassen') + '''
+        const wechsleZuTab = () => {};
+        let fertig = 0;
+        startwahlFertig = () => fertig++;
+        const zurueck = element('btn-startwahl-zurueck');
+        const modal = element('startwahl-modal');
+        startwahlVerlassen('dashboard');            // Rückweg versteckt: kein Serverweg offen
+        const ohneWeg = fertig;
+        zurueck.hidden = false;
+        startwahlVerlassen('settings');             // in der Karte geblieben
+        modal.classList.add('active');
+        startwahlVerlassen('dashboard');            // Wahl wieder offen
+        const geblieben = fertig;
+        modal.classList.remove('active');
+        startwahlVerlassen('tenants');
+        console.log(JSON.stringify([ohneWeg, geblieben, fertig, zurueck.hidden, startwahlFertig]));
+    ''')
+    assert _node(probe) == [0, 0, 1, True, None]
