@@ -801,6 +801,114 @@ def fehlerseite(text: str) -> str:
         'Ihre Daten sind nicht verändert.</p></body></html>')
 
 
+# --- macOS: Fenster und Menü wie bei Mac-Apps (#44) ---------------------------
+
+# Die Standardmenüs von pywebview sind englisch. Den App-Namen hängt es hinten
+# an („Quit NebenkostenFix“); _menueleiste_ordnen stellt ihn bei ausblenden
+# und beenden nach vorn.
+MENUE_TEXTE_MACOS = {
+    'cocoa.menu.about': 'Über',
+    'cocoa.menu.services': 'Dienste',
+    'cocoa.menu.hide': 'ausblenden',
+    'cocoa.menu.hideOthers': 'Andere ausblenden',
+    'cocoa.menu.showAll': 'Alle einblenden',
+    'cocoa.menu.quit': 'beenden',
+    'cocoa.menu.edit': 'Bearbeiten',
+    'cocoa.menu.view': 'Darstellung',
+    'cocoa.menu.fullscreen': 'Vollbildmodus',
+    'cocoa.menu.cut': 'Ausschneiden',
+    'cocoa.menu.copy': 'Kopieren',
+    'cocoa.menu.paste': 'Einsetzen',
+    'cocoa.menu.selectAll': 'Alles auswählen',
+    # Sichern-Dialog (Datenauszug, Umzugspaket) und Rückfragen von pywebview
+    'global.saveFile': 'Sichern',
+    'global.cancel': 'Abbrechen',
+    'global.quit': 'Beenden',
+    'global.quitConfirmation': f'Möchten Sie {TITEL} wirklich beenden?',
+}
+ABLAGE = 'Ablage'   # Apples deutscher Name für das Menü „File“
+_MACOS_ANGEPASST = False
+
+
+class MacFenster:
+    """Fenster zu heißt unter macOS nicht Programm zu: Der rote Knopf
+    versteckt das Fenster, die App bleibt mit Punkt im Dock aktiv, ein Klick
+    aufs Dock-Symbol holt es zurück. Erst Beenden (Cmd-Q, Dock, Abmelden)
+    hält den Server an. pywebview ruft in beiden Fällen ``closing`` auf; was
+    gemeint ist, erfährt diese Klasse vom App-Delegate (_macos_anpassen)."""
+
+    def __init__(self, fenster, beim_beenden):
+        self.fenster = fenster
+        self.beim_beenden = beim_beenden
+        self.beendet = False
+
+    def beenden_angefordert(self) -> None:
+        self.beendet = True
+
+    def schliessen(self) -> bool | None:
+        """Hook für ``closing``: False bricht das Schließen ab."""
+        if self.beendet:
+            self.beim_beenden()
+            return None
+        self.fenster.hide()
+        return False
+
+    def wieder_oeffnen(self, sichtbar: bool) -> None:
+        if not sichtbar:
+            self.fenster.show()
+
+
+def _menueleiste_ordnen(hauptmenue) -> None:
+    """pywebview setzt Bearbeiten und Darstellung direkt hinter das App-Menü
+    und hängt eigene Menüs hinten an; macOS erwartet die Ablage an zweiter
+    Stelle. Braucht nur Methoden von NSMenu."""
+    index = hauptmenue.indexOfItemWithTitle_(ABLAGE)
+    if index > 1:
+        eintrag = hauptmenue.itemAtIndex_(index)
+        hauptmenue.removeItemAtIndex_(index)
+        hauptmenue.insertItem_atIndex_(eintrag, 1)
+    namen = {'hide:': f'{TITEL} ausblenden', 'terminate:': f'{TITEL} beenden'}
+    for eintrag in hauptmenue.itemAtIndex_(0).submenu().itemArray():
+        aktion = eintrag.action()
+        if isinstance(aktion, bytes):   # ältere PyObjC; 12.x liefert str
+            aktion = aktion.decode('ascii')
+        if aktion in namen:
+            eintrag.setTitle_(namen[aktion])
+
+
+def _macos_anpassen(mac_fenster: MacFenster) -> None:  # pragma: no cover - braucht AppKit
+    """Greift an zwei Stellen in pywebview (cocoa) ein, für die es keine
+    öffentliche Schnittstelle gibt; tests/test_macos.py prüft, dass es sie
+    gibt. Vor ``webview.start`` aufrufen, einmal je Prozess: Ein zweiter
+    Aufruf legte die ObjC-Klasse neu an (objc.error)."""
+    global _MACOS_ANGEPASST
+    if _MACOS_ANGEPASST:
+        return
+    _MACOS_ANGEPASST = True
+    import objc
+    from webview.platforms import cocoa
+
+    menue_bauen = cocoa.BrowserView._recreate_menus
+
+    def menue_neu_bauen(self, user_menu):
+        hauptmenue = menue_bauen(self, user_menu)
+        _menueleiste_ordnen(hauptmenue)
+        return hauptmenue
+    cocoa.BrowserView._recreate_menus = menue_neu_bauen
+
+    class NebenkostenFixAppDelegate(cocoa.BrowserView.AppDelegate):
+        def applicationShouldTerminate_(self, app):
+            mac_fenster.beenden_angefordert()
+            return objc.super(NebenkostenFixAppDelegate, self).applicationShouldTerminate_(app)
+
+        def applicationShouldHandleReopen_hasVisibleWindows_(self, app, sichtbar):
+            mac_fenster.wieder_oeffnen(bool(sichtbar))
+            return True
+
+    # pywebview nimmt einen schon gesetzten Delegate, statt einen eigenen zu bauen.
+    cocoa.BrowserView._shared_app_delegate = NebenkostenFixAppDelegate.alloc().init()
+
+
 def fenster_starten(datenordner: Path) -> int:  # pragma: no cover - braucht GUI
     import webview
     from webview.menu import Menu, MenuAction, MenuSeparator
@@ -859,39 +967,54 @@ def fenster_starten(datenordner: Path) -> int:  # pragma: no cover - braucht GUI
     if macos:
         # Cmd-Q beendet den Prozess, ohne dass webview.start zurückkehrt;
         # vorher kommt nur noch closing (#44).
-        def beim_schliessen():
+        def beim_beenden():
             if 'server' in zustand:
                 anhalten(zustand.pop('server'), zustand['app_modul'])
             instanz.freigeben()
-        fenster.events.closing += beim_schliessen
+        mac_fenster = MacFenster(fenster, beim_beenden)
+        fenster.events.closing += mac_fenster.schliessen
+        _macos_anpassen(mac_fenster)
+
+    def im_fenster(aktion):
+        """Unter macOS kann das Fenster versteckt sein (roter Knopf), die
+        Menüleiste bleibt: Was im Fenster wirkt, holt es erst nach vorn."""
+        if not macos:
+            return aktion
+
+        def vorn_dann_aktion():
+            nach_vorne()
+            aktion()
+        return vorn_dann_aktion
 
     datei = [
-        MenuAction('Drucken', lambda: fenster.evaluate_js('window.print()')),
+        MenuAction('Drucken', im_fenster(lambda: fenster.evaluate_js('window.print()'))),
         MenuSeparator(),
         # #45: der Weg zum Server, auch wenn die Übersicht schon Objekte zeigt.
         MenuAction('Mit einem Server verbinden …',
-                   lambda: fenster.evaluate_js('zeigeServerKarte()')),
+                   im_fenster(lambda: fenster.evaluate_js('zeigeServerKarte()'))),
     ]
-    if not macos:   # macOS hat „Beenden“ mit Cmd-Q im App-Menü
+    if macos:   # Cmd-Tab zur App holt das Fenster nicht von selbst zurück
+        datei = [MenuAction('Fenster zeigen', nach_vorne), MenuSeparator()] + datei
+    else:       # macOS hat „Beenden“ mit Cmd-Q im App-Menü
         datei += [MenuSeparator(), MenuAction('Beenden', fenster.destroy)]
     menue = [
-        Menu('Datei', datei),
+        Menu(ABLAGE if macos else 'Datei', datei),
         Menu('Hilfe', [
-            MenuAction('Passwort vergessen …', passwort_seite),
+            MenuAction('Passwort vergessen …', im_fenster(passwort_seite)),
             MenuAction('Datenordner anzeigen',
                        lambda: standardprogramm_oeffnen(datenordner)),
             MenuSeparator(),
             # NK-179: springt in der Oberfläche zu „Über NebenkostenFix“.
             MenuAction(f'Über {marke.PRODUKT}',
-                       lambda: fenster.evaluate_js("zeigeHilfe('hilfe-ueber')")),
+                       im_fenster(lambda: fenster.evaluate_js("zeigeHilfe('hilfe-ueber')"))),
         ]),
     ]
-    # WKWebView ignoriert storage_path und legt die Daten nach der Bundle-ID
-    # ab (pywebview#1714); der Ordner bliebe unter macOS leer.
-    speicher = {} if macos else {
+    # Unter macOS deutsche Standardmenüs. WKWebView ignoriert storage_path und
+    # legt die Daten nach der Bundle-ID ab (pywebview#1714); der Ordner bliebe leer.
+    optionen = {'localization': MENUE_TEXTE_MACOS} if macos else {
         'storage_path': str(windows_ordner.lokaler_ordner() / 'WebView2')}
     try:
-        webview.start(hochfahren, menu=menue, private_mode=False, **speicher)
+        webview.start(hochfahren, menu=menue, private_mode=False, **optionen)
     finally:
         if 'server' in zustand:
             anhalten(zustand['server'], zustand['app_modul'])
