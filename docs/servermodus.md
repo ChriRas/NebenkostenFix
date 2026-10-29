@@ -41,10 +41,13 @@ Server im eigenen Fenster, wie ein Browser, nur ohne Adressleiste.
 
 ## Verbinden
 
-1. In der Windows-App (lokale Daten): Beim ersten Start (Hinweis nie bestätigt, noch kein
-   Objekt) steht im Hinweis „Bevor es losgeht“ der Knopf **Mit einem Server verbinden**.
-   Er bestätigt den Hinweis und öffnet
-   die Verbindungskarte. Später: Einstellungen → Sicherung → Karte **Mit einem Server
+1. In der Windows-App (lokale Daten): Solange noch kein Objekt angelegt ist, fragt die App
+   beim Start vor allem anderen „Wo sollen Ihre Daten liegen?“: **Auf diesem Rechner
+   arbeiten** (dann Hinweis „Bevor es losgeht“, falls nötig, und die Einführung) oder **Mit
+   einem NebenkostenFix-Server verbinden** (öffnet die Verbindungskarte, dort führt **Zurück
+   zur Startwahl** zurück). Eine alte Bestätigung des Hinweises im Datenordner spielt dafür
+   keine Rolle. Die Wahl kommt bei jedem Start wieder, bis ein Objekt da ist; im Browser und
+   auf dem Server nie. Später: Einstellungen → Sicherung → Karte **Mit einem Server
    verbinden**, oder die zweite Aktion im leeren Reiter **Immobilien**.
 2. Adresse eintragen, zum Beispiel `https://nebenkosten.example.de` oder
    `http://192.168.1.10:8080`. Ohne `http://` oder `https://` nimmt die App `https://`.
@@ -168,7 +171,6 @@ die Anmeldung zusätzlich den Ordner `WebView2`).
 - Der Schalter „Updates automatisch“ aus den lokalen Einstellungen gilt im Servermodus
   nicht, weil der Datenordner zu bleibt. Die App sucht dort höchstens einmal in
   24 Stunden und fragt vor jeder Installation.
-- Beim ersten Start gibt es statt einer Wahlseite den Knopf im Hinweis „Bevor es losgeht“.
 - Eine Server-Seite kann die Rückfrage zum Rückweg nach einer Ablehnung erneut öffnen, frühestens
   nach 10 Sekunden und nie zwei zugleich. Dazwischen sind Menü und Datei → Beenden erreichbar.
 - Nicht im MVP: mehrere Server, Installer-Schalter
@@ -203,22 +205,26 @@ Ein Rechner mit Windows 10 oder 11 reicht, dazu ein NebenkostenFix-Server im Net
    Ein Update im Servermodus installieren (die Frage mit OK bestätigen): Danach startet die
    App von selbst wieder im Servermodus.
 7. **Erster Start, Anzeige und Rückweg:**
-   1. Frische Installation, leerer Datenordner (vorher deinstallieren und die Frage nach
-      den Einstellungen mit Ja beantworten, sonst startet die App wieder verbunden): Der
-      Hinweis „Bevor es losgeht“ zeigt „Mit einem Server verbinden“, der Fokus liegt auf
-      „Verstanden“. Ein Klick auf den Server-Knopf führt zu Einstellungen → Sicherung, der
-      Fokus steht im Adressfeld; die Einführung springt nicht dazwischen.
-   2. Wie 1, aber „Verstanden“: Die Einführung startet wie bisher.
-   3. Nach dem Verbinden: Die Kopfzeile zeigt „Verbunden mit …“, bei `http://` mit
+   1. Frische Installation ohne Objekte (vorher deinstallieren und die Frage nach den
+      Einstellungen mit Ja beantworten, sonst startet die App wieder verbunden), einmal mit
+      leerem und einmal mit altem Datenordner, in dem der Hinweis schon bestätigt ist: Zuerst
+      kommt nur „Wo sollen Ihre Daten liegen?“, der Fokus liegt auf „Auf diesem Rechner
+      arbeiten“, Escape schließt nicht. Weder Hinweis noch Einführung springen dazwischen.
+   2. „Mit einem NebenkostenFix-Server verbinden“: Einstellungen → Sicherung, Fokus im
+      Adressfeld. **Zurück zur Startwahl** öffnet die Wahl wieder.
+   3. „Auf diesem Rechner arbeiten“: Hinweis „Bevor es losgeht“ (beim alten Datenordner
+      nicht), danach die Einführung wie bisher.
+   4. Mit mindestens einem Objekt neu starten: keine Startwahl.
+   5. Nach dem Verbinden: Die Kopfzeile zeigt „Verbunden mit …“, bei `http://` mit
       „(unverschlüsselt)“. Ein Klick darauf führt zur Karte „Mit einem Server verbunden“.
-   4. In der Karte **Zurück zu den Daten auf diesem Rechner** → Abbrechen: Die App bleibt
+   6. In der Karte **Zurück zu den Daten auf diesem Rechner** → Abbrechen: Die App bleibt
       verbunden, ein zweiter Klick gleich danach tut nichts. Nach mehr als 10 Sekunden noch
       einmal → Bestätigen: Neustart lokal, die lokalen Daten sind unverändert (Prüfsumme
       wie unten).
-   5. Der Menüweg geht weiter. Menü und Knopf kurz nacheinander: Es öffnet sich nur eine
+   7. Der Menüweg geht weiter. Menü und Knopf kurz nacheinander: Es öffnet sich nur eine
       Rückfrage.
-   6. Neue App gegen einen 0.18.0-Server: kein Hinweis in der Kopfzeile, der Menüweg geht.
-   7. Datenordner bei bestehender Verbindung löschen: Die App bleibt verbunden (gewollt,
+   8. Neue App gegen einen 0.18.0-Server: kein Hinweis in der Kopfzeile, der Menüweg geht.
+   9. Datenordner bei bestehender Verbindung löschen: Die App bleibt verbunden (gewollt,
       siehe „Wo die App die Verbindung speichert“).
 8. **Deinstallation:** Bei bestehender Verbindung deinstallieren, die Frage nach den
    Einstellungen mit Nein beantworten: INI mit `[Server]`, `WebView2` und `konsole.log`
