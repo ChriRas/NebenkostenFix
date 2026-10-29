@@ -32,7 +32,9 @@ TEXT = (
 def stand(ordner=None) -> dict:
     gespeichert = einstellungen.lesen(ordner)['haftung'] or {}
     return {'version': VERSION, 'titel': TITEL, 'text': list(TEXT),
-            'bestaetigt': gespeichert.get('version') == VERSION}
+            'bestaetigt': gespeichert.get('version') == VERSION,
+            # #45: noch nie bestätigt, also ein neuer Anfang (nur lesend).
+            'erstmals': not gespeichert}
 
 
 def bestaetigen(ordner=None) -> None:

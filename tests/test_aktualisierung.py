@@ -461,6 +461,24 @@ def test_api_haftung(auth_client, monkeypatch, tmp_path):
     assert auth_client.get('/api/haftung').get_json()['bestaetigt'] is False
 
 
+def test_haftung_erstmals(auth_client, monkeypatch, tmp_path):
+    """#45: Nur ein Datenordner ohne jede Bestätigung gilt als erster Start."""
+    from nebenkostenfix import datenordner, einstellungen, haftung
+    neu, alt = tmp_path / 'neu', tmp_path / 'alt'
+    neu.mkdir()
+    alt.mkdir()
+    monkeypatch.setattr(datenordner, 'datenordner', lambda: neu)
+    assert auth_client.get('/api/haftung').get_json()['erstmals'] is True
+    antwort = auth_client.post('/api/haftung', json={'version': haftung.VERSION}).get_json()
+    assert antwort['erstmals'] is False
+    assert auth_client.get('/api/haftung').get_json()['erstmals'] is False
+    # Bestätigt war nur eine ältere Fassung: Hinweis ja, erster Start nein.
+    einstellungen.schreiben(alt, haftung={'version': haftung.VERSION - 1})
+    monkeypatch.setattr(datenordner, 'datenordner', lambda: alt)
+    stand = auth_client.get('/api/haftung').get_json()
+    assert stand['erstmals'] is False and stand['bestaetigt'] is False
+
+
 def test_einstellungen_gleichzeitig_geht_nichts_verloren(tmp_path):
     """Suche beim Start und „Verstanden“ zugleich: jede Änderung bleibt."""
     import threading

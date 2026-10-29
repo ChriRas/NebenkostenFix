@@ -515,7 +515,7 @@ const huelle = {
 window.huelle = huelle;
 
 // pywebview hängt die Brücke womöglich erst nach dem ersten Zeichnen an (#45).
-window.addEventListener('pywebviewready', () => { serverAnzeige(); });
+window.addEventListener('pywebviewready', () => { serverAnzeige(); haftungServerKnopf(); });
 
 // Links mit target="_blank" oder download landen in der App bei der Huelle.
 // Im Browser bleibt der Klick unberuehrt.
@@ -1355,6 +1355,8 @@ function tourAutostart() {
         if (tourOffen() || echterBestand().properties.length > 0) return;
         if (document.getElementById('tab-hilfe').classList.contains('active')) return;
         if (document.querySelector('.modal-overlay.active')) return setTimeout(versuch, 1000);
+        // Wer schon in den Einstellungen ist (etwa über „Mit einem Server verbinden“), bleibt dort.
+        if (document.getElementById('tab-settings').classList.contains('active')) return;
         tourStarten();
     };
     setTimeout(versuch, 600);
@@ -2770,6 +2772,8 @@ function haftungZeigen(stand) {
     const text = document.getElementById('haftung-text');
     text.innerHTML = stand.text.map(satz => `<p>${escapeHtml(satz)}</p>`).join('');
     overlay.dataset.version = stand.version;
+    overlay.dataset.erstmals = stand.erstmals ? '1' : '';
+    haftungServerKnopf();
     overlay.classList.add('active');
     return new Promise(erledigt => {
         const wache = new MutationObserver(() => {
@@ -2781,6 +2785,19 @@ function haftungZeigen(stand) {
     });
 }
 
+// #45: Wer nur mit einem Server arbeitet, kommt vom ersten Bildschirm direkt zur Verbindung.
+function haftungServerKnopf() {
+    const knopf = document.getElementById('haftung-server');
+    const erstmals = document.getElementById('haftung-modal').dataset.erstmals === '1';
+    if (knopf) knopf.hidden = !(erstmals && huelle.kann('server_verbinden'));
+}
+
+// Derselbe POST wie „Verstanden“: Wer diesen Knopf drückt, hat den Hinweis gelesen.
+async function haftungServerWaehlen() {
+    if (await haftungBestaetigen()) zeigeServerKarte();
+}
+window.haftungServerWaehlen = haftungServerWaehlen;
+
 async function haftungBestaetigen() {
     const overlay = document.getElementById('haftung-modal');
     try {
@@ -2791,8 +2808,10 @@ async function haftungBestaetigen() {
         });
         if (!res.ok) throw await serverFehler(res);
         overlay.classList.remove('active');
+        return true;
     } catch (e) {
         showError(meldungZu(e, 'Der Hinweis konnte nicht gespeichert werden.'));
+        return false;
     }
 }
 window.haftungBestaetigen = haftungBestaetigen;

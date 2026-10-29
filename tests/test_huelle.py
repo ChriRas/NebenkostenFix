@@ -209,7 +209,8 @@ _DOM = '''
     const document = {getElementById: element};
     const location = {protocol: 'http:', host: 'nas.example:8080', origin: 'http://nas.example:8080'};
     const window = {};
-    const showError = m => { throw new Error(m); };
+    const fehler = [];
+    const showError = m => fehler.push(m);
     const meldungZu = (e, ersatz) => ersatz;
 '''
 
@@ -287,6 +288,7 @@ def test_bruecke_kommt_spaet():
     """pywebview meldet die Brücke womöglich erst nach initApp (#45)."""
     treffer = re.search(r"window\.addEventListener\('pywebviewready', \(\) => \{(.*?)\}\);", APP_JS)
     assert treffer and 'serverAnzeige()' in treffer.group(1)
+    assert 'haftungServerKnopf()' in treffer.group(1)
     start = _funktion('initApp')
     assert 'serverAnzeige();' in start
 
@@ -307,3 +309,63 @@ def test_servermodus_anzeige_im_html():
     # Die einzige Bestätigung kommt von Windows; die Seite fragt nicht selbst.
     rueckweg = _funktion('lokalArbeiten')
     assert 'frage(' not in rueckweg and 'confirm(' not in rueckweg
+    # Erster Start: der Server-Knopf steht versteckt vor „Verstanden“.
+    haftung = _kopf('haftung-server')
+    assert haftung.startswith('<button ') and ' hidden' in haftung
+    fuss = INDEX[INDEX.index('id="haftung-server"'):]
+    assert fuss.index('Mit einem Server verbinden') < fuss.index('Verstanden')
+
+
+# --- #45: erster Start, „Mit einem Server verbinden“ im Hinweis -------------
+
+def test_haftung_serverknopf_nur_erstmals_in_der_app():
+    probe = _DOM + _huelle_block() + _funktion('haftungServerKnopf') + f'''
+        const ergebnis = [];
+        for (const api of [null, {_LOKALE_API}, {_SERVER_API}]) {{
+            for (const erstmals of ['1', '']) {{
+                if (api) window.pywebview = {{api}}; else delete window.pywebview;
+                element('haftung-modal').dataset.erstmals = erstmals;
+                haftungServerKnopf();
+                ergebnis.push(!element('haftung-server').hidden);
+            }}
+        }}
+        console.log(JSON.stringify(ergebnis));
+    '''
+    # Browser, lokale App, Server-Brücke je erstmals ja/nein: sichtbar nur lokal + erstmals.
+    assert _node(probe) == [False, False, True, False, False, False]
+
+
+def test_haftung_server_waehlen_erst_nach_bestaetigung():
+    # _funktion schneidet das vorangestellte async ab.
+    probe = (_DOM + 'async ' + _funktion('haftungServerWaehlen') + 'async ' + _funktion('haftungBestaetigen') + '''
+        const karte = [];
+        const zeigeServerKarte = () => karte.push('karte');
+        const serverFehler = async res => new Error('abgelehnt');
+        let antwort = {ok: true};
+        const posts = [];
+        const fetch = async (url, optionen) => { posts.push([url, optionen.body]); return antwort; };
+        const overlay = element('haftung-modal');
+        overlay.dataset.version = '2';
+        (async () => {
+            overlay.classList.add('active');
+            await haftungServerWaehlen();
+            const ok = [karte.length, overlay.classList.contains('active')];
+            antwort = {ok: false, status: 409};
+            overlay.classList.add('active');
+            await haftungServerWaehlen();
+            const abgelehnt = [karte.length, overlay.classList.contains('active'), fehler];
+            console.log(JSON.stringify([ok, abgelehnt, posts]));
+        })();
+    ''')
+    ok, abgelehnt, posts = _node(probe)
+    assert ok == [1, False]
+    assert abgelehnt == [1, True, ['Der Hinweis konnte nicht gespeichert werden.']]
+    # Derselbe POST wie „Verstanden“, kein eigener Weg.
+    assert posts == [['/api/haftung', '{"version":2}']] * 2
+
+
+def test_tour_bleibt_in_den_einstellungen():
+    versuch = re.search(r'const versuch = \(\) => \{[\s\S]*?\n    \};', APP_JS).group(0)
+    assert "getElementById('tab-settings').classList.contains('active')) return;" in versuch
+    # Die Zeile für die Hilfe bleibt wörtlich (Rauchtest).
+    assert "getElementById('tab-hilfe').classList.contains('active')) return;" in versuch
