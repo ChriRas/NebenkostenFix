@@ -895,6 +895,21 @@ def test_lokal_arbeiten_verweigert_fremden_ursprung(tmp_path):
     assert aufrufe == [True]
 
 
+def test_lokal_arbeiten_nach_nein_erst_nach_der_abkuehlzeit(tmp_path, monkeypatch):
+    """Eine Seite, die nach jedem „Nein“ sofort wieder ruft, sperrt das Menü nicht aus."""
+    jetzt = [1000.0]
+    monkeypatch.setattr(desktop.time, 'monotonic', lambda: jetzt[0])
+    antworten = [False, True]
+    bruecke = desktop.ServerBruecke('https://nk.example')
+    bruecke._zurueck = lambda: antworten.pop(0)
+    bruecke._fenster = _UrlFenster(tmp_path / 'x', 'https://nk.example/')
+    assert bruecke.lokal_arbeiten() is False
+    jetzt[0] += desktop.ABKUEHLEN - 1
+    assert bruecke.lokal_arbeiten() is False and antworten == [True]
+    jetzt[0] += 1
+    assert bruecke.lokal_arbeiten() is True and antworten == []
+
+
 def test_lokal_arbeiten_vor_dem_verdrahten(tmp_path):
     bruecke = desktop.ServerBruecke('https://nk.example')
     bruecke._fenster = _UrlFenster(tmp_path / 'x', 'https://nk.example/')
@@ -1328,15 +1343,16 @@ def test_lokal_arbeiten_nur_eine_rueckfrage(servermodus, testserver, lokal, monk
 
     def nach_dem_start(bruecke, gestartet):
         innen['seite'], innen['gestartet'] = bruecke, gestartet
-        return [bruecke.lokal_arbeiten(), bruecke.lokal_arbeiten()]
+        menue = _menuepunkt(gestartet, 'Auf diesem Rechner arbeiten …')
+        return [bruecke.lokal_arbeiten(), bruecke.lokal_arbeiten(), menue()]
 
     basis, protokoll = _rueckweg_umgebung(servermodus, testserver, monkeypatch, antwort,
                                           nach_dem_start)
     windows_ordner.einstellungen_schreiben(server=basis)
     assert desktop.main([]) == 0
     assert innen['bruecke'] is False and innen['menue'] is False
-    # Nach der Ablehnung ist die Sperre wieder frei: der zweite Klick fragt erneut.
-    assert protokoll['ergebnis'] == [False, False]
+    # Nach dem „Nein“ fragt die Seite eine Weile nicht wieder, das Menü schon.
+    assert protokoll['ergebnis'] == [False, False, False]
     assert protokoll['fragen'] == [desktop.ZURUECK_FRAGE] * 2
     assert windows_ordner.einstellungen_lesen()['server'] == basis
 

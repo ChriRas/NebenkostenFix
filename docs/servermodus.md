@@ -108,7 +108,8 @@ Zwei Wege, beide mit derselben Rückfrage von Windows:
 
 Nach dem Bestätigen entfernt die App nur die Serveradresse aus der INI und startet mit den
 lokalen Daten neu, so wie sie vor dem Verbinden waren. Es öffnet sich nie mehr als eine
-Rückfrage zugleich, auch wenn Menü und Knopf gleichzeitig gewählt werden. Bei älteren
+Rückfrage zugleich, auch wenn Menü und Knopf gleichzeitig gewählt werden. Nach einem
+„Abbrechen“ tut der Knopf 10 Sekunden lang nichts; das Menü fragt sofort. Bei älteren
 Servern und auf der Seite „Keine Verbindung zum Server“ gibt es nur den Menüweg; er geht
 auch, wenn der Server nicht erreichbar ist.
 
@@ -165,8 +166,8 @@ die Anmeldung zusätzlich den Ordner `WebView2`).
   nicht, weil der Datenordner zu bleibt. Die App sucht dort höchstens einmal in
   24 Stunden und fragt vor jeder Installation.
 - Beim ersten Start gibt es statt einer Wahlseite den Knopf im Hinweis „Bevor es losgeht“.
-- Eine Server-Seite kann die Rückfrage zum Rückweg nach einer Ablehnung erneut öffnen (nie
-  zwei zugleich). Datei → Beenden hilft.
+- Eine Server-Seite kann die Rückfrage zum Rückweg nach einer Ablehnung erneut öffnen, frühestens
+  nach 10 Sekunden und nie zwei zugleich. Dazwischen sind Menü und Datei → Beenden erreichbar.
 - Nicht im MVP: mehrere Server, Installer-Schalter
   `/SERVER=`, Ausnahmen für selbstsignierte Zertifikate, Anmeldung über einen
   Identitätsanbieter, Offline-Zwischenspeicher, eigener Umzugsassistent, Unterpfad hinter
@@ -206,8 +207,9 @@ Ein Rechner mit Windows 10 oder 11 reicht, dazu ein NebenkostenFix-Server im Net
    3. Nach dem Verbinden: Die Kopfzeile zeigt „Verbunden mit …“, bei `http://` mit
       „(unverschlüsselt)“. Ein Klick darauf führt zur Karte „Mit einem Server verbunden“.
    4. In der Karte **Zurück zu den Daten auf diesem Rechner** → Abbrechen: Die App bleibt
-      verbunden. Noch einmal → Bestätigen: Neustart lokal, die lokalen Daten sind
-      unverändert (Prüfsumme wie unten).
+      verbunden, ein zweiter Klick gleich danach tut nichts. Nach mehr als 10 Sekunden noch
+      einmal → Bestätigen: Neustart lokal, die lokalen Daten sind unverändert (Prüfsumme
+      wie unten).
    5. Der Menüweg geht weiter. Menü und Knopf kurz nacheinander: Es öffnet sich nur eine
       Rückfrage.
    6. Neue App gegen einen 0.18.0-Server: kein Hinweis in der Kopfzeile, der Menüweg geht.

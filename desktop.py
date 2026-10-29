@@ -339,6 +339,7 @@ ZURUECK_FRAGE = ('Zurück zu den Daten auf diesem Rechner? Die Verbindung zum Se
                  'getrennt. Auf dem Server und auf diesem Rechner geht nichts verloren.')
 NEUSTART_NACH = 1.5  # Sekunden
 RUECKSPRUENGE = 3  # binnen 10 Sekunden, danach die Offline-Seite
+ABKUEHLEN = 10  # Sekunden nach einem „Nein“, in denen die Seite nicht erneut fragt
 UPDATE_FRAGE = ('Eine neue Version von NebenkostenFix ist verfügbar ({version}). Jetzt '
                 'installieren? Die App startet danach neu.')
 
@@ -490,6 +491,7 @@ class ServerBruecke:
         self._fenster = None
         self._basis = basis
         self._zurueck = None  # setzt server_fenster_starten: der Rückweg des Menüs
+        self._abgelehnt = float('-inf')
 
     def _innen(self) -> Bruecke | None:
         if not _fenster_bei(self._fenster, self._basis):
@@ -515,7 +517,13 @@ class ServerBruecke:
         entscheidet der Nutzer im Dialog von Windows."""
         if self._zurueck is None or not _fenster_bei(self._fenster, self._basis):
             return False
-        return self._zurueck()
+        # Ruft die Seite nach jedem „Nein“ sofort wieder, käme man nie ans Menü.
+        if time.monotonic() - self._abgelehnt < ABKUEHLEN:
+            return False
+        if self._zurueck():
+            return True
+        self._abgelehnt = time.monotonic()
+        return False
 
 
 # --- Server -------------------------------------------------------------------
