@@ -217,6 +217,7 @@ class Bruecke:
         # öffentlichen Attribute der Brücke rekursiv. Das Fenster samt seinen
         # .NET-Objekten blockierte dabei die Oberfläche (0.9.0).
         self._fenster = None
+        self._neustart = None
 
     def speichern(self, dateiname: str, inhalt_base64: str):
         import webview
@@ -300,6 +301,21 @@ class Bruecke:
         os.environ['BACKUP_ZIELE'] = os.pathsep.join(ziele)
         return ordner
 
+    def server_verbinden(self, adresse: str):
+        """Karte „Mit einem Server verbinden“ (#45): erst prüfen, dann nur
+        ``[Server] Adresse`` eintragen und neu starten. Scheitert die
+        Prüfung, bleibt die INI, wie sie ist. Der Datenordner bleibt immer."""
+        ok, meldung, endadresse = server_pruefen(adresse)
+        if not ok:
+            return {'ok': False, 'meldung': meldung}
+        windows_ordner.einstellungen_schreiben(server=endadresse)
+        if self._neustart:
+            # Kurz warten, damit die Oberfläche „startet jetzt neu“ zeigen kann.
+            zeitgeber = threading.Timer(NEUSTART_NACH, self._neustart)
+            zeitgeber.daemon = True
+            zeitgeber.start()
+        return {'ok': True, 'adresse': endadresse}
+
 
 # --- Servermodus (#45): die App als Fenster auf einen NebenkostenFix-Server ---
 
@@ -314,6 +330,29 @@ WEITERLEITUNG = ('Der Server leitet auf eine andere Adresse weiter ({ziel}). Bit
                  'Sie diese Adresse direkt ein.')
 OHNE_PFAD = 'Bitte nur die Adresse ohne Pfad eintragen, zum Beispiel https://server:8080.'
 STANDARDPORT = {'http': 80, 'https': 443}
+ZURUECK_FRAGE = ('Zurück zu den Daten auf diesem Rechner? Die Verbindung zum Server wird '
+                 'getrennt. Auf dem Server und auf diesem Rechner geht nichts verloren.')
+NEUSTART_NACH = 1.5  # Sekunden
+
+
+def neustart_umgebung(umgebung=None) -> dict:
+    """Die Umgebung des neuen Prozesses: ohne das, was ``anwendung_laden``
+    für diesen Lauf gesetzt hat."""
+    umgebung = dict(os.environ if umgebung is None else umgebung)
+    for name in ('NK_DESKTOP', 'DATA_DIR', 'BACKUP_ZIELE'):
+        umgebung.pop(name, None)
+    umgebung['PYINSTALLER_RESET_ENVIRONMENT'] = '1'
+    return umgebung
+
+
+def neu_starten() -> None:
+    """Nach dem Schließen des Fensters dieselbe App noch einmal starten."""
+    import subprocess  # nosec B404
+    befehl = [sys.executable]
+    if not getattr(sys, 'frozen', False):
+        befehl.append(str(Path(__file__).resolve()))  # aus den Quellen
+    # Bandit-Ausnahme (B603): das eigene Programm, keine Eingabe von außen
+    subprocess.Popen(befehl, env=neustart_umgebung(), close_fds=True)  # nosec B603
 
 
 def adresse_normieren(text) -> str | None:
@@ -652,6 +691,12 @@ def fenster_starten(datenordner: Path) -> int:  # pragma: no cover - braucht GUI
         width=1440, height=900, min_size=(1024, 700), text_select=True)
     bruecke._fenster = fenster
 
+    def neustart():
+        zustand['neustart'] = True
+        fenster.destroy()
+
+    bruecke._neustart = neustart
+
     def nach_vorne():
         fenster.restore()
         fenster.show()
@@ -697,6 +742,8 @@ def fenster_starten(datenordner: Path) -> int:  # pragma: no cover - braucht GUI
         if 'server' in zustand:
             anhalten(zustand['server'], zustand['app_modul'])
         instanz.freigeben()
+    if zustand.get('neustart'):
+        neu_starten()
     return 0
 
 
@@ -762,6 +809,13 @@ def server_fenster_starten(adresse: str) -> int:
 
     fenster.events.loaded += beim_laden
 
+    def zurueck():
+        # Python-Rückruf aus dem Menü: die Server-Seite erreicht ihn nicht.
+        if fenster.create_confirmation_dialog(TITEL, ZURUECK_FRAGE):
+            windows_ordner.einstellungen_schreiben(server=None)
+            zustand['neustart'] = True
+            fenster.destroy()
+
     def ueber():
         _meldung(f'{TITEL} {SOFTWARE_VERSION}. Verbunden mit {zustand["basis"] or adresse}.',
                  hinweis=True)
@@ -773,6 +827,8 @@ def server_fenster_starten(adresse: str) -> int:
             MenuAction('Drucken', lambda: fenster.evaluate_js('window.print()')),
             MenuAction('Neu laden', lambda: threading.Thread(target=laden, daemon=True).start()),
             MenuSeparator(),
+            MenuAction('Auf diesem Rechner arbeiten …', zurueck),
+            MenuSeparator(),
             MenuAction('Beenden', fenster.destroy),
         ]),
         Menu('Hilfe', [MenuAction(f'Über {marke.PRODUKT}', ueber)]),
@@ -782,6 +838,8 @@ def server_fenster_starten(adresse: str) -> int:
         webview.start(laden, menu=menue, private_mode=False, storage_path=str(speicher))
     finally:
         instanz.freigeben()
+    if zustand.get('neustart'):
+        neu_starten()
     return 0
 
 

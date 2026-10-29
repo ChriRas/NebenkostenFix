@@ -966,3 +966,120 @@ def test_ohne_server_eintrag_bleibt_alles_lokal(lokal, monkeypatch):
     monkeypatch.setattr(desktop, 'fenster_starten', lambda ordner: lokal_gestartet.append(ordner) or 0)
     assert desktop.main([]) == 0
     assert lokal_gestartet == [lokal / 'daten']
+
+
+# --- Umschalten zwischen lokal und Server (#45, Commit 4) ----------------------
+
+@pytest.fixture
+def zeitgeber(monkeypatch):
+    """threading.Timer ohne Warten: merkt sich, was nach dem Verbinden käme."""
+    geplant = []
+
+    class Zeitgeber:
+        def __init__(self, sekunden, funktion):
+            self.sekunden, self.funktion, self.daemon = sekunden, funktion, False
+
+        def start(self):
+            geplant.append(self)
+
+    monkeypatch.setattr(desktop.threading, 'Timer', Zeitgeber)
+    return geplant
+
+
+def test_server_verbinden_schreibt_nur_server(lokal, testserver, zeitgeber):
+    basis, antworten = testserver
+    antworten['/api/health'] = GESUND
+    windows_ordner.einstellungen_schreiben(datenordner=lokal / 'daten',
+                                           sicherungsziele=[str(lokal / 'usb')])
+    datei = windows_ordner.einstellungen_datei()
+    vorher = _abschnitte(datei)
+    neu_gestartet = []
+    bruecke = desktop.Bruecke()
+    bruecke._neustart = lambda: neu_gestartet.append(True)
+
+    assert bruecke.server_verbinden(basis + '/') == {'ok': True, 'adresse': basis}
+    nachher = _abschnitte(datei)
+    assert nachher.pop('Server') == {'adresse': basis}
+    assert nachher == vorher
+    (geplant,) = zeitgeber
+    assert geplant.daemon and geplant.sekunden > 0
+    geplant.funktion()
+    assert neu_gestartet == [True]
+
+
+def test_server_verbinden_fehler_schreibt_nichts(lokal, testserver, zeitgeber):
+    basis, antworten = testserver
+    antworten['/api/health'] = (200, {}, b'<html>Router</html>')
+    windows_ordner.einstellungen_schreiben(datenordner=lokal / 'daten')
+    datei = windows_ordner.einstellungen_datei()
+    vorher = datei.read_bytes()
+    bruecke = desktop.Bruecke()
+    bruecke._neustart = lambda: pytest.fail('Neustart trotz Fehler')
+    for adresse, meldung in ((basis, desktop.KEIN_NK), ('https://nk.example/nk', desktop.OHNE_PFAD),
+                             ('ftp://nk.example', desktop.OHNE_PFAD)):
+        assert bruecke.server_verbinden(adresse) == {'ok': False, 'meldung': meldung}
+    assert datei.read_bytes() == vorher
+    assert zeitgeber == []
+
+
+def test_neustart_umgebung_bereinigt(monkeypatch):
+    assert desktop.neustart_umgebung({'NK_DESKTOP': '1', 'DATA_DIR': 'x', 'BACKUP_ZIELE': 'y',
+                                      'PATH': 'p'}) == \
+        {'PATH': 'p', 'PYINSTALLER_RESET_ENVIRONMENT': '1'}
+    import subprocess
+    aufrufe = []
+    monkeypatch.setattr(subprocess, 'Popen', lambda befehl, **k: aufrufe.append((befehl, k)))
+    monkeypatch.setenv('NK_DESKTOP', '1')
+    monkeypatch.setenv('DATA_DIR', '/daten')
+    desktop.neu_starten()
+    monkeypatch.setattr(sys, 'frozen', True, raising=False)
+    desktop.neu_starten()
+    (quellen, k1), (paket, k2) = aufrufe
+    assert quellen == [sys.executable, str(WURZEL / 'desktop.py')]
+    assert paket == [sys.executable]
+    for k in (k1, k2):
+        assert 'NK_DESKTOP' not in k['env'] and 'DATA_DIR' not in k['env']
+        assert k['env']['PYINSTALLER_RESET_ENVIRONMENT'] == '1' and k['close_fds']
+
+
+def _menuepunkt(gestartet, name):
+    for _, punkte in gestartet['menu']:
+        for punkt in punkte:
+            if punkt and punkt[0] == name:
+                return punkt[1]
+    raise KeyError(name)
+
+
+@pytest.mark.parametrize('bestaetigt', [True, False])
+def test_zurueck_entfernt_nur_adresse(servermodus, testserver, lokal, monkeypatch, bestaetigt):
+    import subprocess
+    fenster, gestartet = servermodus
+    basis, antworten = testserver
+    antworten['/api/health'] = GESUND
+    windows_ordner.einstellungen_schreiben(datenordner=lokal / 'daten', server=basis)
+    datei = windows_ordner.einstellungen_datei()
+    vorher = _abschnitte(datei)
+    neu = []
+    monkeypatch.setattr(subprocess, 'Popen', lambda befehl, **k: neu.append(befehl))
+    fragen = []
+    geschlossen = []
+    monkeypatch.setattr(_ServerFenster, 'create_confirmation_dialog',
+                        lambda self, titel, text: fragen.append(text) or bestaetigt, raising=False)
+    monkeypatch.setattr(_ServerFenster, 'destroy', lambda self: geschlossen.append(True))
+
+    original_start = sys.modules['webview'].start
+
+    def start(funktion, **einstellungen):
+        original_start(funktion, **einstellungen)
+        _menuepunkt(gestartet, 'Auf diesem Rechner arbeiten …')()
+
+    monkeypatch.setattr(sys.modules['webview'], 'start', start)
+    assert desktop.main([]) == 0
+    assert fragen == [desktop.ZURUECK_FRAGE]
+    nachher = _abschnitte(datei)
+    if bestaetigt:
+        assert nachher == {k: v for k, v in vorher.items() if k != 'Server'}
+        assert windows_ordner.einstellungen_lesen()['server'] is None
+        assert geschlossen == [True] and len(neu) == 1
+    else:
+        assert nachher == vorher and geschlossen == [] and neu == []
