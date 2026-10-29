@@ -17,7 +17,8 @@ festgehalten werden:
     - ``NIE_PER_SCHLUESSEL`` ist das zweite Netz: Konten, Passwort,
       Anmeldung aus, Schlüssel verwalten, Umzug, Sicherung, Export,
       Festsetzen, Löschen. Ein Wächtertest hält es von den Listen fern.
-    - Falsche Schlüssel zählen im Anmeldeschutz (NK-128).
+    - Falsche Schlüssel zählen im Anmeldeschutz (NK-128). Ein gültiger
+      geht an der Sperre vorbei und zählt nicht.
     - „erfassen“ legt an und ändert nichts: auch kein vorhandenes Soll.
     - Schlüssel verwalten geht nur mit Sitzung, im offenen Modus gar nicht.
 """
@@ -177,11 +178,36 @@ def test_falsche_schluessel_zaehlen_im_anmeldeschutz(auth_client, anon_client):
     # GRENZE_KONTO Versuchen fuer sich gesperrt, die Adresse zaehlte nicht weiter.
     for nummer in range(anmeldeschutz.GRENZE_IP):
         anon_client.get('/api/properties', headers=_kopf(f'nkf_{nummer:02d}falsch'))
-    neu = _anlegen(auth_client)
-    antwort = anon_client.get('/api/properties', headers=_kopf(neu['schluessel']))
+    antwort = anon_client.get('/api/properties', headers=_kopf('nkf_99falsch'))
     assert antwort.status_code == 429
     assert antwort.get_json()['code'] == 'anmeldung_gesperrt'
     assert 'Retry-After' in antwort.headers
+
+
+def test_ein_gueltiger_schluessel_kommt_an_der_sperre_vorbei(auth_client, anon_client):
+    """Review zu #48: Hinter einem Reverse Proxy kommen alle von derselben
+    Adresse. Zwanzig falsche Schlüssel sperrten sonst jedes Programm mit
+    gültigem Schlüssel für 15 Minuten aus."""
+    from nebenkostenfix import anmeldeschutz
+    neu = _anlegen(auth_client)
+    for nummer in range(anmeldeschutz.GRENZE_IP):
+        anon_client.get('/api/properties', headers=_kopf(f'nkf_{nummer:02d}falsch'))
+    antwort = anon_client.get('/api/properties', headers=_kopf(neu['schluessel']))
+    assert antwort.status_code == 200, antwort.get_data(as_text=True)
+
+
+def test_ein_gueltiger_schluessel_hebt_die_zaehlung_nicht_auf(auth_client, anon_client):
+    """Sonst setzte ein fleißiges Programm hinter dem Proxy den Zähler der
+    Adresse laufend zurück, und die Sperre griffe nie."""
+    from nebenkostenfix import anmeldeschutz
+    neu = _anlegen(auth_client)
+    for nummer in range(anmeldeschutz.GRENZE_IP - 1):
+        anon_client.get('/api/properties', headers=_kopf(f'nkf_{nummer:02d}falsch'))
+    assert anon_client.get('/api/properties',
+                           headers=_kopf(neu['schluessel'])).status_code == 200
+    anon_client.get('/api/properties', headers=_kopf('nkf_98falsch'))
+    antwort = anon_client.get('/api/properties', headers=_kopf('nkf_99falsch'))
+    assert antwort.status_code == 429
 
 
 def test_falsche_schluessel_sperren_nicht_die_anmeldung(auth_client, anon_client):
@@ -203,6 +229,20 @@ def test_schluessel_eines_stillgelegten_kontos_401(auth_client, anon_client):
     db.session.commit()
     antwort = anon_client.get('/api/properties', headers=_kopf(neu['schluessel']))
     assert antwort.status_code == 401
+
+
+def test_schluessel_eines_stillgelegten_kontos_kommt_nicht_an_der_sperre_vorbei(
+        auth_client, anon_client):
+    """Vorbei an der Sperre kommt nur, wer gültig ist und ein aktives Konto hat."""
+    from nebenkostenfix import anmeldeschutz
+    neu = _anlegen(auth_client)
+    konto = User.query.filter_by(username='pytest-vermieter').one()
+    konto.is_active = False
+    db.session.commit()
+    for nummer in range(anmeldeschutz.GRENZE_IP):
+        anon_client.get('/api/properties', headers=_kopf(f'nkf_{nummer:02d}falsch'))
+    antwort = anon_client.get('/api/properties', headers=_kopf(neu['schluessel']))
+    assert antwort.status_code == 429
 
 
 def test_der_schluessel_entscheidet_auch_neben_einer_sitzung(auth_client):
