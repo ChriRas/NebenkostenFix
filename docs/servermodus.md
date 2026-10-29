@@ -203,9 +203,11 @@ Ein Rechner mit Windows 10 oder 11 reicht, dazu ein NebenkostenFix-Server im Net
    Ein Update im Servermodus installieren (die Frage mit OK bestätigen): Danach startet die
    App von selbst wieder im Servermodus.
 7. **Erster Start, Anzeige und Rückweg:**
-   1. Frische Installation, leerer Datenordner: Der Hinweis „Bevor es losgeht“ zeigt
-      „Mit einem Server verbinden“. Ein Klick führt zu Einstellungen → Sicherung, der Fokus
-      steht im Adressfeld; die Einführung springt nicht dazwischen.
+   1. Frische Installation, leerer Datenordner (vorher deinstallieren und die Frage nach
+      den Einstellungen mit Ja beantworten, sonst startet die App wieder verbunden): Der
+      Hinweis „Bevor es losgeht“ zeigt „Mit einem Server verbinden“, der Fokus liegt auf
+      „Verstanden“. Ein Klick auf den Server-Knopf führt zu Einstellungen → Sicherung, der
+      Fokus steht im Adressfeld; die Einführung springt nicht dazwischen.
    2. Wie 1, aber „Verstanden“: Die Einführung startet wie bisher.
    3. Nach dem Verbinden: Die Kopfzeile zeigt „Verbunden mit …“, bei `http://` mit
       „(unverschlüsselt)“. Ein Klick darauf führt zur Karte „Mit einem Server verbunden“.
@@ -218,6 +220,11 @@ Ein Rechner mit Windows 10 oder 11 reicht, dazu ein NebenkostenFix-Server im Net
    6. Neue App gegen einen 0.18.0-Server: kein Hinweis in der Kopfzeile, der Menüweg geht.
    7. Datenordner bei bestehender Verbindung löschen: Die App bleibt verbunden (gewollt,
       siehe „Wo die App die Verbindung speichert“).
+8. **Deinstallation:** Bei bestehender Verbindung deinstallieren, die Frage nach den
+   Einstellungen mit Nein beantworten: INI mit `[Server]`, `WebView2` und `konsole.log`
+   bleiben. Neu installieren, verbinden, wieder deinstallieren, diesmal mit Ja: `[Server]`,
+   `WebView2` und `konsole.log` sind weg; `[Daten]`, der Datenordner und, falls vorhanden,
+   der Ordner `Daten` unter `%LOCALAPPDATA%\NebenkostenFix` bleiben.
 
 **Abwärtskompatibilität (von Hand):**
 
@@ -225,6 +232,6 @@ Ein Rechner mit Windows 10 oder 11 reicht, dazu ein NebenkostenFix-Server im Net
   startet lokal, alle Daten sind da.
 - Auf einen Server umschalten und zurück: Der lokale Datenordner ist bytegleich (vorher
   und nachher eine Prüfsumme über den Ordner bilden, etwa mit `Get-FileHash`).
-- Den neuen Stand deinstallieren und 0.11 neu installieren: Die App startet lokal,
-  `[Server]` steht weiter in der INI.
+- Den neuen Stand deinstallieren (Frage nach den Einstellungen mit Nein) und 0.11 neu
+  installieren: Die App startet lokal, `[Server]` steht weiter in der INI.
 - Eine alte Sicherung einspielen.
