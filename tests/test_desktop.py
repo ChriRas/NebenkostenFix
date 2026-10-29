@@ -379,6 +379,11 @@ def test_deinstallation_entfernt_einstellungen_nur_auf_wunsch_und_nie_daten():
     # Gefragt wird vor dem Entfernen, Vorgabe Nein; still nur mit Parameter.
     assert 'CurUninstallStep = usUninstall' in schritt
     assert 'MB_YESNO or MB_DEFBUTTON2) = IDYES' in schritt
+    # Die Frage nennt, was mit dem WebView2-Profil geht, und dass lokale Konten bleiben.
+    frage = re.sub(r"' \+\s*'", '', schritt)
+    for teil in ('Verbindung zu einem Server und die Anmeldung dort', 'Anzeige',
+                 'Fortschritt von Assistenten', 'Ihre Daten und Benutzerkonten bleiben'):
+        assert teil in frage, teil
     assert ("if UninstallSilent then\n      Entfernen := "
             "ExpandConstant('{param:EINSTELLUNGEN|0}') = '1'") in schritt
     assert 'if Entfernen then\n      EinstellungenEntfernen;' in schritt

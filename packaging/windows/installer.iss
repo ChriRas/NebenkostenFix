@@ -292,8 +292,11 @@ begin
     if UninstallSilent then
       Entfernen := ExpandConstant('{param:EINSTELLUNGEN|0}') = '1'
     else
+      // Das WebView2-Profil teilen beide Modi: mit ihm gehen auch Anzeige und
+      // Assistenten-Fortschritt der lokalen App (localStorage).
       Entfernen := MsgBox('Sollen auch die Einstellungen dieses Rechners entfernt ' +
-        'werden (Verbindung zu einem Server, Anmeldung, Protokolle)? Ihre Daten ' +
+        'werden (Verbindung zu einem Server und die Anmeldung dort, Anzeige, ' +
+        'Fortschritt von Assistenten, Protokolle)? Ihre Daten und Benutzerkonten ' +
         'bleiben in jedem Fall erhalten.', mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES;
     if Entfernen then
       EinstellungenEntfernen;
