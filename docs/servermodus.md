@@ -13,10 +13,12 @@ Server im eigenen Fenster, wie ein Browser, nur ohne Adressleiste.
   Der Schalter `--datenordner` erzwingt immer den lokalen Modus.
 - **Im Servermodus läuft kein lokaler Server.** Der Datenordner wird weder geöffnet noch
   angelegt noch verändert, der lokale Port bleibt zu.
-- **Kleine Brücke:** Die Server-Seite erreicht nur `speichern` (Speichern-Dialog),
-  `oeffnen` (nur PDF und Bilder, siehe unten) und `extern_oeffnen` (nur die Projektseite).
-  Jede Methode prüft vorher, ob das Fenster noch die Seite des Servers zeigt. Ordnerwahl,
-  Umzug, Umschalten und Neustart gibt es dort nicht.
+- **Kleine Brücke:** Die Server-Seite erreicht nur vier Methoden: `speichern`
+  (Speichern-Dialog), `oeffnen` (nur PDF und Bilder, siehe unten), `extern_oeffnen` (nur
+  die Projektseite) und `lokal_arbeiten` (ohne Parameter; öffnet nur die Rückfrage von
+  Windows zum Rückweg, siehe unten). Jede Methode prüft vorher, ob das Fenster noch die
+  Seite des Servers zeigt. Ordnerwahl, Umzug und Umschalten auf einen anderen Server gibt
+  es dort nicht.
 - **Navigationssperre:** Landet das Fenster auf einer fremden Seite, lädt es die
   Startseite des Servers neu. Schickt der Server selbst immer wieder weg (etwa ein
   Anmelde-Proxy vor „/“), zeigt das Fenster nach drei Rücksprüngen binnen zehn Sekunden
@@ -27,7 +29,8 @@ Server im eigenen Fenster, wie ein Browser, nur ohne Adressleiste.
 - **Menü im Servermodus:** Datei → Drucken, Neu laden, Auf diesem Rechner arbeiten …,
   Beenden; Hilfe → Über. Der Fenstertitel nennt den Server, bei `http://` mit dem Zusatz
   „(unverschlüsselt)“. Nach der Prüfung folgt er der geprüften Adresse, also ohne den
-  Zusatz, wenn der Server von `http://` auf `https://` weiterleitet.
+  Zusatz, wenn der Server von `http://` auf `https://` weiterleitet. Dazu zeigen Kopfzeile
+  und Einstellungen die Verbindung (siehe „Woran man den Servermodus erkennt“).
 - **Updates:** Auch im Servermodus sucht die App beim Start nach einer neuen Version (von
   der Projektseite, nicht vom Server). Sie fragt vor der Installation und startet danach
   wieder im Servermodus. Gemerkt wird der Zeitpunkt der Suche im lokalen App-Ordner, nicht
@@ -38,9 +41,10 @@ Server im eigenen Fenster, wie ein Browser, nur ohne Adressleiste.
 
 ## Verbinden
 
-1. In der Windows-App (lokale Daten): Einstellungen → Sicherung → Karte
-   **Mit einem Server verbinden**. Auf der leeren Übersicht führt die zweite Aktion
-   „Mit einem Server verbinden“ dorthin.
+1. In der Windows-App (lokale Daten): Beim ersten Start steht im Hinweis „Bevor es
+   losgeht“ der Knopf **Mit einem Server verbinden**. Er bestätigt den Hinweis und öffnet
+   die Verbindungskarte. Später: Einstellungen → Sicherung → Karte **Mit einem Server
+   verbinden**, oder die zweite Aktion im leeren Reiter **Immobilien**.
 2. Adresse eintragen, zum Beispiel `https://nebenkosten.example.de` oder
    `http://192.168.1.10:8080`. Ohne `http://` oder `https://` nimmt die App `https://`.
    Ein Pfad (`/nk`), Benutzername oder Passwort in der Adresse werden abgelehnt.
@@ -80,12 +84,60 @@ Die Anmeldung gilt für eine Sitzung. Nach jedem Start der App meldet man sich n
 Die App speichert keine Passwörter; Cookies liegen im WebView2-Profil unter
 `%LOCALAPPDATA%\NebenkostenFix\WebView2`.
 
+## Woran man den Servermodus erkennt
+
+- **Kopfzeile:** ein Hinweis „Verbunden mit nas.example:8080“ (Host und Port des Servers).
+  Bei `http://` steht „(unverschlüsselt)“ dahinter, im Warnton. Ein Klick darauf führt zur
+  Karte in den Einstellungen.
+- **Einstellungen → Sicherung:** die Karte **Mit einem Server verbunden** mit der Adresse
+  und dem Rückweg.
+- **Fenstertitel:** nennt den Server, wie oben beschrieben. Ihn setzt die App selbst, nicht
+  die Seite des Servers.
+
+Kopfzeile und Karte gibt es nur, wenn App **und** Server diesen Stand haben. Die
+Oberfläche kommt im Servermodus vom Server, die Brücke von der App; fehlt einer Seite der
+neue Stand, bleiben nur Fenstertitel und Menü.
+
 ## Zurück zu den lokalen Daten
 
-Datei → **Auf diesem Rechner arbeiten …** → bestätigen. Die App entfernt die Adresse aus
-der INI und startet mit den lokalen Daten neu, so wie sie vor dem Verbinden waren. Ist der
-Server nicht erreichbar, zeigt das Fenster „Keine Verbindung zum Server“; der Rückweg über
-das Menü geht trotzdem.
+Zwei Wege, beide mit derselben Rückfrage von Windows:
+
+- Einstellungen → Sicherung → **Zurück zu den Daten auf diesem Rechner** (auch über den
+  Hinweis in der Kopfzeile erreichbar).
+- Datei → **Auf diesem Rechner arbeiten …**
+
+Nach dem Bestätigen entfernt die App nur die Serveradresse aus der INI und startet mit den
+lokalen Daten neu, so wie sie vor dem Verbinden waren. Es öffnet sich nie mehr als eine
+Rückfrage zugleich, auch wenn Menü und Knopf gleichzeitig gewählt werden. Bei älteren
+Servern und auf der Seite „Keine Verbindung zum Server“ gibt es nur den Menüweg; er geht
+auch, wenn der Server nicht erreichbar ist.
+
+## Wo die App die Verbindung speichert
+
+- **Die Verbindung:** `[Server] Adresse` in `%LOCALAPPDATA%\NebenkostenFix\einstellungen.ini`,
+  neben dem Pfad zum Datenordner (`[Daten] Ordner`) und den übrigen Geräteeinstellungen.
+- **Die Anmeldung am Server:** Cookies im WebView2-Profil
+  `%LOCALAPPDATA%\NebenkostenFix\WebView2`.
+- **Die Daten:** getrennt davon im Datenordner (Standard `Dokumente\NebenkostenFix`).
+  Dort steht auch, ob der Hinweis „Bevor es losgeht“ bestätigt ist.
+
+Daraus folgt:
+
+- Wer den Datenordner löscht, bleibt verbunden. Erst beim nächsten **lokalen** Start
+  erscheint der Hinweis wieder (dann mit dem Knopf „Mit einem Server verbinden“).
+- Das Deinstallieren (setup.exe) entfernt weder die INI noch das WebView2-Profil, ebenso
+  wenig den Datenordner. Der Installer (`packaging/windows/installer.iss`) hat keinen
+  Abschnitt `[UninstallDelete]`, und seine `[INI]`-Einträge tragen kein
+  `uninsdelete`-Flag. Eine Neuinstallation startet also wieder verbunden.
+- Store-Paket (MSIX): Windows lenkt Schreibzugriffe nach `%LOCALAPPDATA%` vermutlich in den
+  Paketordner um und entfernt ihn beim Deinstallieren. Unter Windows nicht geprüft.
+
+Das ist gewollt: Die Wahl „lokal oder Server“ gehört zum Gerät, nicht zu den Daten. Wer
+Daten löscht, verschiebt oder eine Sicherung einspielt, soll nicht nebenbei den Modus
+wechseln, und Updates oder eine Neuinstallation behalten die Wahl. Der Nachteil: Den
+Datenordner zu löschen ist kein frischer Anfang. Deshalb gibt es den sichtbaren Rückweg in
+den Einstellungen. Von Hand geht es auch: in der INI den Abschnitt `[Server]` löschen (für
+die Anmeldung zusätzlich den Ordner `WebView2`).
 
 ## Ältere Versionen
 
@@ -95,6 +147,10 @@ das Menü geht trotzdem.
   Oberfläche ruft nur `speichern`, `oeffnen` und `extern_oeffnen`. Den Ordnerknopf der
   Sicherung zeigt sie trotzdem; ein Klick darauf tut nichts. Server vor 0.9 sind nicht
   geprüft.
+- **Neue App, Server vor diesem Stand:** kein Hinweis in der Kopfzeile, keine Karte
+  „Mit einem Server verbunden“; der Rückweg geht über das Menü.
+- **App 0.18.0, neuer Server:** ebenso. Die Oberfläche zeigt nichts, was die Brücke nicht
+  kann.
 - Datenbank, Sicherungsformat und Umzugspaket sind unverändert. Alte Sicherungen lassen
   sich weiter einspielen.
 
@@ -104,7 +160,10 @@ das Menü geht trotzdem.
 - Der Schalter „Updates automatisch“ aus den lokalen Einstellungen gilt im Servermodus
   nicht, weil der Datenordner zu bleibt. Die App sucht dort höchstens einmal in
   24 Stunden und fragt vor jeder Installation.
-- Nicht im MVP: Wahlseite beim ersten Start, mehrere Server, Installer-Schalter
+- Beim ersten Start gibt es statt einer Wahlseite den Knopf im Hinweis „Bevor es losgeht“.
+- Eine Server-Seite kann die Rückfrage zum Rückweg nach einer Ablehnung erneut öffnen (nie
+  zwei zugleich). Datei → Beenden hilft.
+- Nicht im MVP: mehrere Server, Installer-Schalter
   `/SERVER=`, Ausnahmen für selbstsignierte Zertifikate, Anmeldung über einen
   Identitätsanbieter, Offline-Zwischenspeicher, eigener Umzugsassistent, Unterpfad hinter
   dem Reverse-Proxy, Versionsangabe in `/api/health`.
@@ -135,6 +194,21 @@ Ein Rechner mit Windows 10 oder 11 reicht, dazu ein NebenkostenFix-Server im Net
 6. **Neustart:** Verbinden startet die App neu, ebenso „Auf diesem Rechner arbeiten …“.
    Ein Update im Servermodus installieren (die Frage mit OK bestätigen): Danach startet die
    App von selbst wieder im Servermodus.
+7. **Erster Start, Anzeige und Rückweg:**
+   1. Frische Installation, leerer Datenordner: Der Hinweis „Bevor es losgeht“ zeigt
+      „Mit einem Server verbinden“. Ein Klick führt zu Einstellungen → Sicherung, der Fokus
+      steht im Adressfeld; die Einführung springt nicht dazwischen.
+   2. Wie 1, aber „Verstanden“: Die Einführung startet wie bisher.
+   3. Nach dem Verbinden: Die Kopfzeile zeigt „Verbunden mit …“, bei `http://` mit
+      „(unverschlüsselt)“. Ein Klick darauf führt zur Karte „Mit einem Server verbunden“.
+   4. In der Karte **Zurück zu den Daten auf diesem Rechner** → Abbrechen: Die App bleibt
+      verbunden. Noch einmal → Bestätigen: Neustart lokal, die lokalen Daten sind
+      unverändert (Prüfsumme wie unten).
+   5. Der Menüweg geht weiter. Menü und Knopf kurz nacheinander: Es öffnet sich nur eine
+      Rückfrage.
+   6. Neue App gegen einen 0.18.0-Server: kein Hinweis in der Kopfzeile, der Menüweg geht.
+   7. Datenordner bei bestehender Verbindung löschen: Die App bleibt verbunden (gewollt,
+      siehe „Wo die App die Verbindung speichert“).
 
 **Abwärtskompatibilität (von Hand):**
 
