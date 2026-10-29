@@ -34,6 +34,7 @@ import html
 import json
 import logging
 import os
+import re
 import secrets
 import sys
 import tempfile
@@ -53,6 +54,9 @@ protokoll = logging.getLogger(__name__)
 
 COOKIE = 'nk_huelle'
 TITEL = marke.PRODUKT
+# Was Bruecke.oeffnen dem Standardprogramm übergibt. Alles andere geht in den
+# Speichern-Dialog: der Name stammt aus dem Upload, eine .exe startet nie.
+OEFFNEN_ERLAUBT = {'.pdf', '.jpg', '.jpeg', '.png', '.webp', '.heic'}
 
 
 # --- Start-Token (Zugriff nur aus dem Fenster) -------------------------------
@@ -221,9 +225,16 @@ class Bruecke:
         return pfad
 
     def oeffnen(self, dateiname: str, inhalt_base64: str, seite=None):
+        # Nur der letzte Teil, ohne ':' (ADS-Streams) und Steuerzeichen;
+        # '.' und ' ' am Rand weg, damit '..' nicht aus dem Ordner führt.
+        letzter = re.split(r'[\\/]', str(dateiname))[-1]  # beide Trenner, auf jedem System
+        name = re.sub(r'[^\w.\- ]', '_', letzter).strip(' .') or 'datei'
+        if Path(name).suffix.lower() not in OEFFNEN_ERLAUBT:
+            # Altbestand mit fremdem Typ bleibt erreichbar, startet aber nicht.
+            return self.speichern(name, inhalt_base64)
         ordner = Path(tempfile.gettempdir()) / TITEL
         ordner.mkdir(exist_ok=True)
-        pfad = ordner / Path(dateiname).name
+        pfad = ordner / name
         pfad.write_bytes(base64.b64decode(inhalt_base64))
         if seite and pfad.suffix.lower() == '.pdf':
             # os.startfile kennt keinen Anker #page=N; eine Weiterleitung im

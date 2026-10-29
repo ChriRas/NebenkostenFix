@@ -461,3 +461,74 @@ def test_paketprobe_haelt_den_ci_schritt_nicht_ueber_kindprozesse_offen():
     lauf = subprocess.run([sys.executable, '-c', probe], capture_output=True, timeout=10,
                           env={k: v for k, v in os.environ.items() if k != 'GITHUB_STEP_SUMMARY'})
     assert lauf.returncode == 0
+
+
+# --- Öffnen nur bekannter Dateitypen (#45, Commit 1) ----------------------------
+
+class _SpeicherFenster:
+    """Ersatz für das pywebview-Fenster: merkt sich den Speichern-Dialog."""
+
+    def __init__(self, ziel):
+        self.ziel = ziel
+        self.dialoge = []
+
+    def create_file_dialog(self, art, save_filename=None, **_):
+        self.dialoge.append(save_filename)
+        return str(self.ziel)
+
+
+@pytest.fixture
+def oeffnen_umgebung(monkeypatch, tmp_path):
+    """Temp-Ordner, pywebview-Ersatz und gestartete Dateien wie unter Windows."""
+    import types
+    gestartet = []
+    monkeypatch.setattr(desktop.tempfile, 'gettempdir', lambda: str(tmp_path / 'temp'))
+    (tmp_path / 'temp').mkdir()
+    monkeypatch.setitem(sys.modules, 'webview', types.SimpleNamespace(SAVE_DIALOG=30))
+    monkeypatch.setattr(desktop.os, 'startfile', lambda pfad: gestartet.append(Path(pfad)),
+                        raising=False)
+    monkeypatch.setattr(desktop.sys, 'platform', 'win32')
+    bruecke = desktop.Bruecke()
+    bruecke._fenster = _SpeicherFenster(tmp_path / 'gespeichert.bin')
+    return bruecke, gestartet, tmp_path
+
+
+def test_oeffnen_startet_keine_unbekannten_typen(oeffnen_umgebung):
+    """Der Name kommt aus dem Upload: „rechnung.pdf.exe“ startet nicht,
+    sondern geht in den Speichern-Dialog (Altbestand bleibt erreichbar)."""
+    import base64
+    bruecke, gestartet, tmp_path = oeffnen_umgebung
+    ergebnis = bruecke.oeffnen('rechnung.pdf.exe', base64.b64encode(b'MZ').decode())
+    assert gestartet == []
+    assert bruecke._fenster.dialoge == ['rechnung.pdf.exe']
+    assert ergebnis == str(tmp_path / 'gespeichert.bin')
+    assert (tmp_path / 'gespeichert.bin').read_bytes() == b'MZ'
+    assert not list((tmp_path / 'temp').rglob('*.exe'))
+
+
+def test_oeffnen_bereinigt_dateinamen(oeffnen_umgebung):
+    import base64
+    bruecke, gestartet, tmp_path = oeffnen_umgebung
+    inhalt = base64.b64encode(b'%PDF').decode()
+    assert Path(bruecke.oeffnen('a:b.pdf', inhalt)).name == 'a_b.pdf'
+    temp = (tmp_path / 'temp' / 'NebenkostenFix').resolve()
+    for boese in ('..\\x.pdf', '../x.pdf', 'C:\\Windows\\x.pdf'):
+        pfad = Path(bruecke.oeffnen(boese, inhalt)).resolve()
+        assert pfad.parent == temp, boese
+    assert all(p.parent == temp for p in gestartet)
+    assert bruecke._fenster.dialoge == []
+    bruecke.oeffnen('x.pdf:strom', inhalt)  # ADS-Strom: keine bekannte Endung mehr
+    bruecke.oeffnen('..', inhalt)
+    assert bruecke._fenster.dialoge == ['x.pdf_strom', 'datei']
+
+
+def test_oeffnen_bekannte_typen_wie_bisher(oeffnen_umgebung):
+    import base64
+    bruecke, gestartet, _ = oeffnen_umgebung
+    inhalt = base64.b64encode(b'%PDF').decode()
+    for name in ('foto.JPG', 'scan.png', 'beleg.heic', 'r.pdf'):
+        assert Path(bruecke.oeffnen(name, inhalt)).name == name
+    mit = Path(bruecke.oeffnen('r.pdf', inhalt, 2))
+    assert mit.suffix == '.html' and '#page=2' in mit.read_text(encoding='utf-8')
+    assert [p.name for p in gestartet] == ['foto.JPG', 'scan.png', 'beleg.heic', 'r.pdf', 'r.html']
+    assert bruecke._fenster.dialoge == []
