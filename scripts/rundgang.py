@@ -385,7 +385,7 @@ def rundgang(chromium: str | None, ausgabe: Path, readme: Path | None = None) ->
                     if seite.is_visible('#haftung-modal'):
                         gang.aufnahme('haftung')
                         gang.pruefen('haftung')
-                        seite.click('#haftung-modal button')
+                        seite.click('#haftung-modal [data-autofokus]')
                         seite.wait_for_timeout(500)
                     else:
                         befunde.append('haftung: der Hinweis erscheint nach der Einrichtung nicht')
