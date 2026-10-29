@@ -87,6 +87,8 @@ VERBEN: set[str] = {
     "f\u00fcllen",
     # #45: die Windows-App auf einen Server umstellen.
     "verbinden",
+    # #45: Startwahl beim ersten Start („Auf diesem Rechner arbeiten“).
+    "arbeiten",
 }
 
 # Knopftexte, die zwar mit einem Verb aus der Liste beginnen, aber das

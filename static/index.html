@@ -826,6 +826,9 @@
                                 onclick="serverVerbinden(this)">
                                 <i class="ph ph-plugs-connected" aria-hidden="true"></i> Verbinden
                             </button>
+                            <!-- #45: nur, wenn man aus der Startwahl hierher kam. -->
+                            <button class="btn-secondary" type="button" id="btn-startwahl-zurueck" hidden
+                                onclick="startwahlZurueck()">Zurück zur Startwahl</button>
                         </div>
                     </div>
 
@@ -3025,6 +3028,42 @@
         </div>
     </div>
 
+    <!-- #45: Startwahl beim ersten Start der Windows-App (leere Datenbank,
+         startwahlZeigen in app.js). Ohne Schließen-Knopf: Weiter geht es nur
+         über einen der beiden Wege. -->
+    <div class="modal-overlay" id="startwahl-modal" data-fest="1">
+        <div class="modal glass-panel" role="dialog" aria-modal="true"
+            aria-labelledby="startwahl-titel" aria-describedby="startwahl-text">
+            <div class="modal-header">
+                <h2 id="startwahl-titel">Wo sollen Ihre Daten liegen?</h2>
+            </div>
+            <div class="modal-body">
+                <p class="modal-text" id="startwahl-text">Sie können später jederzeit wechseln, in den
+                    Einstellungen unter Datensicherung.</p>
+                <div class="startwahl-wege">
+                    <div class="startwahl-weg">
+                        <span class="schritt-marke"><i class="ph ph-desktop" aria-hidden="true"></i></span>
+                        <div>
+                            <button type="button" class="startwahl-knopf" data-autofokus
+                                aria-describedby="startwahl-lokal-satz" onclick="startwahlLokal()">Auf diesem Rechner arbeiten</button>
+                            <p class="startwahl-satz" id="startwahl-lokal-satz">Ihre Daten liegen auf diesem
+                                Rechner. Dafür brauchen Sie keinen Server.</p>
+                        </div>
+                    </div>
+                    <div class="startwahl-weg">
+                        <span class="schritt-marke"><i class="ph ph-plugs-connected" aria-hidden="true"></i></span>
+                        <div>
+                            <button type="button" class="startwahl-knopf"
+                                aria-describedby="startwahl-server-satz" onclick="startwahlServer()">Mit einem NebenkostenFix-Server verbinden</button>
+                            <p class="startwahl-satz" id="startwahl-server-satz">Ihre Daten liegen auf einem
+                                Server, zum Beispiel im Heimnetz. Die App lädt sie von dort.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- NK-174: Haftungshinweis, einmal je Fassung. Ohne Schließen-Knopf:
          der einzige Weg weiter ist „Verstanden“. -->
     <div class="modal-overlay" id="haftung-modal" data-fest="1">
@@ -3034,9 +3073,6 @@
             </div>
             <div class="modal-body modal-text" id="haftung-text"></div>
             <div class="modal-footer">
-                <!-- #45: nur beim ersten Start der Windows-App (haftungServerKnopf). -->
-                <button type="button" class="btn-secondary" id="haftung-server" hidden
-                    onclick="haftungServerWaehlen()"><i class="ph ph-plugs-connected" aria-hidden="true"></i> Mit einem Server verbinden</button>
                 <button type="button" class="btn-primary" data-autofokus onclick="haftungBestaetigen()">Verstanden</button>
             </div>
         </div>

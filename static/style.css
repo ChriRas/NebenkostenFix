@@ -2576,6 +2576,65 @@ i.feld-hilfe:hover {
     white-space: pre-line;
 }
 
+/* #45: Startwahl. Zwei gleichwertige Wege, je Marke | Knopf und Satz.
+   Der Knopf deckt mit ::after die ganze Karte ab: Klick überall, ein Tabstopp. */
+.startwahl-wege {
+    display: grid;
+    gap: var(--space-3);
+}
+
+.startwahl-weg {
+    position: relative;
+    display: grid;
+    grid-template-columns: 32px 1fr;
+    align-items: start;
+    gap: var(--space-4);
+    min-height: 64px;
+    padding: var(--space-4);
+    background: var(--surface);
+    border: 1px solid var(--control-border);
+    border-radius: var(--radius-md);
+}
+
+.startwahl-weg:hover {
+    background: var(--bg-hover);
+    border-color: var(--primary);
+}
+
+.startwahl-knopf {
+    padding: 0;
+    font: inherit;
+    font-weight: 600;
+    text-align: left;
+    color: var(--text-main);
+    background: none;
+    border: none;
+    cursor: pointer;
+}
+
+.startwahl-knopf::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+}
+
+/* Der Fokusring umrahmt die ganze Karte, nicht nur die Beschriftung. */
+.startwahl-knopf:focus-visible {
+    outline: none;
+}
+
+.startwahl-knopf:focus-visible::after {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+}
+
+.startwahl-satz {
+    margin: var(--space-1) 0 0;
+    color: var(--text-muted);
+    line-height: 1.45;
+}
+
 .karten-abschnitt {
     margin: var(--space-4) 0;
 }

@@ -515,7 +515,7 @@ const huelle = {
 window.huelle = huelle;
 
 // pywebview hängt die Brücke womöglich erst nach dem ersten Zeichnen an (#45).
-window.addEventListener('pywebviewready', () => { serverAnzeige(); haftungServerKnopf(); });
+window.addEventListener('pywebviewready', serverAnzeige);
 
 // Links mit target="_blank" oder download landen in der App bei der Huelle.
 // Im Browser bleibt der Klick unberuehrt.
@@ -1349,12 +1349,12 @@ function tourAutostart() {
     try {
         if (localStorage.getItem('nk-tour-gesehen')) return;
     } catch (e) { return; }
-    // Beim ersten Anmelden liegt der Haftungshinweis davor: warten, bis kein
-    // Dialog mehr offen ist, und nur starten, wenn noch kein Haus angelegt wurde.
+    // Vorher kommen Startwahl (#45) und Haftungshinweis: warten, bis beide durch
+    // sind, und nur starten, wenn noch kein Haus angelegt wurde.
     const versuch = () => {
         if (tourOffen() || echterBestand().properties.length > 0) return;
         if (document.getElementById('tab-hilfe').classList.contains('active')) return;
-        if (document.querySelector('.modal-overlay.active')) return setTimeout(versuch, 1000);
+        if (!startHinweiseFertig || document.querySelector('.modal-overlay.active')) return setTimeout(versuch, 1000);
         // Wer schon in den Einstellungen ist (etwa über „Mit einem Server verbinden“), bleibt dort.
         if (document.getElementById('tab-settings').classList.contains('active')) return;
         tourStarten();
@@ -2747,15 +2747,20 @@ function gemerkteEinstellungsgruppe() {
 
 // NK-174, NK-175: erst der Haftungshinweis (einmal je Fassung), danach die
 // Suche beim Start. Die Suche ist still: kein Netz, kein Fenster.
+// #45: In der leeren Windows-App steht davor die Startwahl (lokal oder Server).
+let startHinweiseFertig = false;
 async function startHinweise() {
     try {
         const res = await fetch('/api/haftung');
         if (res.ok) {
             const stand = await res.json();
+            if (stand.startwahl) await startwahlZeigen();
             if (!stand.bestaetigt) await haftungZeigen(stand);
         }
     } catch (e) {
         console.error('Haftungshinweis nicht ladbar', e);
+    } finally {
+        startHinweiseFertig = true;
     }
     try {
         const res = await fetch('/api/aktualisierung/automatisch');
@@ -2773,8 +2778,6 @@ function haftungZeigen(stand) {
     const text = document.getElementById('haftung-text');
     text.innerHTML = stand.text.map(satz => `<p>${escapeHtml(satz)}</p>`).join('');
     overlay.dataset.version = stand.version;
-    overlay.dataset.erstmals = stand.erstmals ? '1' : '';
-    haftungServerKnopf();
     overlay.classList.add('active');
     return new Promise(erledigt => {
         const wache = new MutationObserver(() => {
@@ -2786,18 +2789,37 @@ function haftungZeigen(stand) {
     });
 }
 
-// #45: Wer nur mit einem Server arbeitet, kommt vom ersten Bildschirm direkt zur Verbindung.
-function haftungServerKnopf() {
-    const knopf = document.getElementById('haftung-server');
-    const erstmals = document.getElementById('haftung-modal').dataset.erstmals === '1';
-    if (knopf) knopf.hidden = !(erstmals && huelle.kann('server_verbinden'));
+// #45: Die Startwahl bleibt offen, bis „Auf diesem Rechner arbeiten“ gewählt ist.
+// Der Serverweg führt zur Verbindungskarte; gelingt die Verbindung, startet die
+// App neu, sonst führt „Zurück zur Startwahl“ hierher. Den Haftungshinweis zeigt
+// danach die Seite, auf der man arbeitet: lokal hier, sonst der Server.
+let startwahlFertig = null;
+function startwahlZeigen() {
+    document.getElementById('startwahl-modal').classList.add('active');
+    return new Promise(erledigt => { startwahlFertig = erledigt; });
 }
 
-// Derselbe POST wie „Verstanden“: Wer diesen Knopf drückt, hat den Hinweis gelesen.
-async function haftungServerWaehlen() {
-    if (await haftungBestaetigen()) zeigeServerKarte();
+function startwahlLokal() {
+    document.getElementById('startwahl-modal').classList.remove('active');
+    document.getElementById('btn-startwahl-zurueck').hidden = true;
+    // Zurück aus der Verbindungskarte: Die Tour beginnt auf der Startseite.
+    if (document.getElementById('tab-settings').classList.contains('active')) wechsleZuTab('dashboard');
+    if (startwahlFertig) startwahlFertig();
+    startwahlFertig = null;
 }
-window.haftungServerWaehlen = haftungServerWaehlen;
+window.startwahlLokal = startwahlLokal;
+
+function startwahlServer() {
+    document.getElementById('startwahl-modal').classList.remove('active');
+    document.getElementById('btn-startwahl-zurueck').hidden = false;
+    zeigeServerKarte();
+}
+window.startwahlServer = startwahlServer;
+
+function startwahlZurueck() {
+    document.getElementById('startwahl-modal').classList.add('active');
+}
+window.startwahlZurueck = startwahlZurueck;
 
 async function haftungBestaetigen() {
     const overlay = document.getElementById('haftung-modal');

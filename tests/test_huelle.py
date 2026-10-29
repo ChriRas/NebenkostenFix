@@ -290,9 +290,7 @@ def test_zeige_server_karte_waehlt_die_sichtbare_karte():
 
 def test_bruecke_kommt_spaet():
     """pywebview meldet die Brücke womöglich erst nach initApp (#45)."""
-    treffer = re.search(r"window\.addEventListener\('pywebviewready', \(\) => \{(.*?)\}\);", APP_JS)
-    assert treffer and 'serverAnzeige()' in treffer.group(1)
-    assert 'haftungServerKnopf()' in treffer.group(1)
+    assert "window.addEventListener('pywebviewready', serverAnzeige);" in APP_JS
     start = _funktion('initApp')
     assert 'serverAnzeige();' in start
 
@@ -313,86 +311,115 @@ def test_servermodus_anzeige_im_html():
     # Die einzige Bestätigung kommt von Windows; die Seite fragt nicht selbst.
     rueckweg = _funktion('lokalArbeiten')
     assert 'frage(' not in rueckweg and 'confirm(' not in rueckweg
-    # Erster Start: der Server-Knopf steht versteckt vor „Verstanden“.
-    haftung = _kopf('haftung-server')
-    assert haftung.startswith('<button ') and ' hidden' in haftung
-    fuss = INDEX[INDEX.index('id="haftung-server"'):]
-    assert fuss.index('Mit einem Server verbinden') < fuss.index('Verstanden')
 
 
-# --- #45: erster Start, „Mit einem Server verbinden“ im Hinweis -------------
+# --- #45: Startwahl beim ersten Start ------------------------------------
 
-def test_haftung_serverknopf_nur_erstmals_in_der_app():
-    probe = _DOM + _huelle_block() + _funktion('haftungServerKnopf') + f'''
-        const ergebnis = [];
-        for (const api of [null, {_LOKALE_API}, {_SERVER_API}]) {{
-            for (const erstmals of ['1', '']) {{
-                if (api) window.pywebview = {{api}}; else delete window.pywebview;
-                element('haftung-modal').dataset.erstmals = erstmals;
-                haftungServerKnopf();
-                ergebnis.push(!element('haftung-server').hidden);
+def _startwahl_probe(staende):
+    """Spielt startHinweise je Stand durch; die Brücke fehlt dabei absichtlich
+    (Hülle meldet sich spät): Die Wahl hängt nur an /api/haftung."""
+    return (_DOM + 'let startHinweiseFertig = false;\nlet startwahlFertig = null;\n'
+            + 'async ' + _funktion('startHinweise') + _funktion('startwahlZeigen')
+            + _funktion('startwahlLokal') + _funktion('startwahlServer') + _funktion('startwahlZurueck')
+            + _huelle_block() + f'''
+        const schritte = [];
+        let stand = null;
+        const fetch = async url => url === '/api/haftung'
+            ? {{ok: true, json: async () => stand}} : {{ok: false}};
+        const haftungZeigen = async () => schritte.push('haftung');
+        const zeigeServerKarte = () => schritte.push('karte');
+        const wechsleZuTab = name => {{ schritte.push('tab:' + name); element('tab-settings').classList.remove('active'); }};
+        const updateHinweisZeigen = () => {{}};
+        const offen = () => element('startwahl-modal').classList.contains('active');
+        const pause = () => new Promise(r => setTimeout(r, 0));
+        (async () => {{
+            const ergebnis = [];
+            for (const s of {staende}) {{
+                stand = s; schritte.length = 0; startHinweiseFertig = false;
+                const lauf = startHinweise();
+                await pause();
+                const zuerst = [offen(), [...schritte], startHinweiseFertig];
+                if (offen()) {{
+                    startwahlServer();
+                    element('tab-settings').classList.add('active');
+                    await pause();
+                    const server = [offen(), !element('btn-startwahl-zurueck').hidden, [...schritte], startHinweiseFertig];
+                    startwahlZurueck();
+                    const zurueck = offen();
+                    startwahlLokal();
+                    await lauf;
+                    ergebnis.push([zuerst, server, zurueck, offen(), !element('btn-startwahl-zurueck').hidden,
+                                   [...schritte], startHinweiseFertig]);
+                }} else {{
+                    await lauf;
+                    ergebnis.push([zuerst, [...schritte], startHinweiseFertig]);
+                }}
             }}
-        }}
-        console.log(JSON.stringify(ergebnis));
-    '''
-    # Browser, lokale App, Server-Brücke je erstmals ja/nein: sichtbar nur lokal + erstmals.
-    assert _node(probe) == [False, False, True, False, False, False]
-
-
-def test_haftung_fokus_auf_verstanden_nicht_auf_dem_serverknopf():
-    """Wer den Hinweis mit Enter bestätigt, landet nicht im Server-Dialog."""
-    fuss = INDEX[INDEX.index('id="haftung-server"'):]
-    verstanden = fuss[fuss.rindex('<button', 0, fuss.index('>Verstanden<')):fuss.index('>Verstanden<')]
-    assert 'data-autofokus' in verstanden and 'haftungBestaetigen()' in verstanden
-    probe = _funktion('fokussierbar') + _funktion('ersterFokus') + '''
-        const fokus = [];
-        const knopf = (name, auto) => ({tagName: 'BUTTON', disabled: false, offsetParent: {},
-                                         auto, focus() { fokus.push(name); }});
-        const knoepfe = [knopf('server', false), knopf('verstanden', true)];
-        const koerper = {querySelectorAll: () => []};
-        const modal = {
-            querySelector: sel => sel === '.modal-body' ? koerper
-                : sel === '[data-autofokus]' ? knoepfe.find(k => k.auto) || null : null,
-            querySelectorAll: () => knoepfe,
-            contains: () => false,
-        };
-        const document = {activeElement: null};
-        ersterFokus({querySelector: () => modal});
-        knoepfe[1].auto = false;
-        ersterFokus({querySelector: () => modal});
-        console.log(JSON.stringify(fokus));
-    '''
-    # Mit data-autofokus der Hauptknopf; ohne bleibt es beim ersten Knopf wie bisher.
-    assert _node(probe) == ['verstanden', 'server']
-
-
-def test_haftung_server_waehlen_erst_nach_bestaetigung():
-    # _funktion schneidet das vorangestellte async ab.
-    probe = (_DOM + 'async ' + _funktion('haftungServerWaehlen') + 'async ' + _funktion('haftungBestaetigen') + '''
-        const karte = [];
-        const zeigeServerKarte = () => karte.push('karte');
-        const serverFehler = async res => new Error('abgelehnt');
-        let antwort = {ok: true};
-        const posts = [];
-        const fetch = async (url, optionen) => { posts.push([url, optionen.body]); return antwort; };
-        const overlay = element('haftung-modal');
-        overlay.dataset.version = '2';
-        (async () => {
-            overlay.classList.add('active');
-            await haftungServerWaehlen();
-            const ok = [karte.length, overlay.classList.contains('active')];
-            antwort = {ok: false, status: 409};
-            overlay.classList.add('active');
-            await haftungServerWaehlen();
-            const abgelehnt = [karte.length, overlay.classList.contains('active'), fehler];
-            console.log(JSON.stringify([ok, abgelehnt, posts]));
-        })();
+            console.log(JSON.stringify(ergebnis));
+        }})();
     ''')
-    ok, abgelehnt, posts = _node(probe)
-    assert ok == [1, False]
-    assert abgelehnt == [1, True, ['Der Hinweis konnte nicht gespeichert werden.']]
-    # Derselbe POST wie „Verstanden“, kein eigener Weg.
-    assert posts == [['/api/haftung', '{"version":2}']] * 2
+
+
+def test_startwahl_vor_allem_anderen_und_nur_wenn_der_server_sie_meldet():
+    staende = ('[{startwahl: true, bestaetigt: false}, {startwahl: true, bestaetigt: true},'
+               ' {startwahl: false, bestaetigt: false}, {startwahl: false, bestaetigt: true}]')
+    neu, alt_bestaetigt, mit_daten, bestaetigt = _node(_startwahl_probe(staende))
+    # Leere App: erst die Wahl, nichts sonst. Serverweg: Karte, Rückweg sichtbar,
+    # Hinweis und Tour warten. Zurück, dann lokal: Startseite, danach der Hinweis.
+    assert neu == [[True, [], False],
+                   [False, True, ['karte'], False],
+                   True, False, False,
+                   ['karte', 'tab:dashboard', 'haftung'], True]
+    # Alter Datenordner mit früherer Bestätigung: Wahl ja, Hinweis nicht nochmal.
+    assert alt_bestaetigt[0] == [True, [], False]
+    assert alt_bestaetigt[5] == ['karte', 'tab:dashboard'] and alt_bestaetigt[6] is True
+    # Mit Daten oder im Browser (startwahl false): keine Wahl, alles wie bisher.
+    assert mit_daten == [[False, ['haftung'], True], ['haftung'], True]
+    assert bestaetigt == [[False, [], True], [], True]
+
+
+def test_tour_wartet_auf_die_startwahl():
+    probe = 'let startHinweiseFertig = false;\nlet tourAutoVersucht = false;\n' + _funktion('tourAutostart') + '''
+        const geplant = [];
+        const setTimeout = fn => geplant.push(fn);
+        const localStorage = {getItem: () => null};
+        const tourOffen = () => false;
+        const echterBestand = () => ({properties: []});
+        const aktiv = {classList: {contains: () => false}};
+        const document = {getElementById: () => aktiv, querySelector: () => null};
+        let gestartet = 0;
+        const tourStarten = () => gestartet++;
+        tourAutostart();
+        geplant.shift()();
+        const vorher = [gestartet, geplant.length];
+        startHinweiseFertig = true;
+        geplant.shift()();
+        console.log(JSON.stringify([vorher, gestartet]));
+    '''
+    # Ohne Modal, aber vor dem Ende der Startwahl: kein Start, neuer Versuch geplant.
+    assert _node(probe) == [[0, 1], 1]
+
+
+def test_startwahl_im_html():
+    modal = _kopf('startwahl-modal')
+    assert 'modal-overlay' in modal and 'data-fest' in modal
+    block = INDEX[INDEX.index('id="startwahl-modal"'):INDEX.index('id="haftung-modal"')]
+    assert 'aria-labelledby="startwahl-titel"' in block
+    wege = re.findall(r'<button type="button" class="startwahl-knopf"([^>]*)>([^<]*)</button>', block)
+    assert [text for _, text in wege] == ['Auf diesem Rechner arbeiten', 'Mit einem NebenkostenFix-Server verbinden']
+    (lokal, _), (server, _) = wege
+    assert 'startwahlLokal()' in lokal and 'data-autofokus' in lokal
+    assert 'startwahlServer()' in server and 'data-autofokus' not in server
+    for knopf in (lokal, server):
+        satz = re.search(r'aria-describedby="([^"]+)"', knopf).group(1)
+        assert f'id="{satz}"' in block
+    assert '\u2014' not in block
+    # Der alte Knopf im Hinweis ist weg, der Rückweg steht versteckt in der Serverkarte.
+    assert 'haftung-server' not in INDEX and 'haftungServer' not in APP_JS
+    zurueck = _kopf('btn-startwahl-zurueck')
+    assert ' hidden' in zurueck and 'startwahlZurueck()' in zurueck
+    karte = INDEX[INDEX.index('id="server-karte"'):INDEX.index('id="btn-startwahl-zurueck"')]
+    assert '</div>\n\n' not in karte  # Knopf liegt in der Karte, nicht dahinter
 
 
 def test_tour_bleibt_in_den_einstellungen():
