@@ -2686,7 +2686,8 @@ i.feld-hilfe:hover {
     content: "";
     position: absolute;
     inset: 0;
-    border-radius: inherit;
+    /* Die Rundung der Karte; inherit nähme die des Knopfs (keine). */
+    border-radius: var(--radius-md);
 }
 
 /* Der Fokusring umrahmt die ganze Karte, nicht nur die Beschriftung. */
@@ -2814,6 +2815,7 @@ a.btn-primary:hover {
 .knopf-zeile {
     display: flex;
     flex-wrap: wrap;
+    align-items: center;
     gap: var(--space-2);
 }
 
@@ -3071,7 +3073,9 @@ a.btn-primary:hover {
 }
 
 /* NK-164: Umzugskarte. */
-.haken-zeile {
+/* Auch in .form-group normal gewichtet: dort setzt .form-group label sonst 600. */
+.haken-zeile,
+.form-group .haken-zeile {
     display: flex;
     gap: var(--space-2);
     align-items: center;

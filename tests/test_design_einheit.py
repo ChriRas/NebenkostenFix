@@ -935,3 +935,14 @@ def test_geoeffnete_auswahllisten_im_design():
     # .form-group select setzt appearance: none spezifischer, darum eigens.
     assert re.search(r'@supports \(appearance: base-select\) \{\s*select,\s*'
                      r'\.form-group select,', STIL)
+
+
+def test_formular_feinheiten():
+    """Haken-Zeile in .form-group normal statt fett, Fokusring der Startwahl mit
+    der Rundung der Karte, Knopfzeile mittig (Knopf neben Text oder Feld)."""
+    haken = STIL[:STIL.index('.form-group .haken-zeile {')]
+    assert haken.rstrip().endswith('.haken-zeile,')
+    assert 'font-weight: 400' in _regel('.form-group .haken-zeile')
+    assert 'border-radius: var(--radius-md)' in _regel('.startwahl-knopf::after')
+    assert 'border-radius: var(--radius-md)' in _regel('.startwahl-weg')
+    assert 'align-items: center' in _regel('.knopf-zeile')
