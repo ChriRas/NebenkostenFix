@@ -13,6 +13,7 @@ import json
 import os
 import subprocess
 import sys
+import threading
 import types
 from pathlib import Path
 
@@ -873,6 +874,16 @@ def servermodus(lokal, monkeypatch):
         monkeypatch.setattr(desktop, name, verboten)
     monkeypatch.setattr(windows_ordner, 'schreibprobe', verboten)
     monkeypatch.setattr(windows_ordner, 'dokumente_ordner', lambda: lokal / 'Dokumente')
+    # Die Update-Suche läuft im eigenen Faden; hier nur gemerkt, nie im Netz.
+    angeboten = threading.Event()
+    gestartet['update_fuer'] = []
+
+    def update_anbieten(f):
+        gestartet['update_fuer'].append(f)
+        angeboten.set()
+
+    gestartet['update_angeboten'] = angeboten
+    monkeypatch.setattr(desktop, 'update_anbieten', update_anbieten)
     return fenster, gestartet
 
 
@@ -1083,3 +1094,98 @@ def test_zurueck_entfernt_nur_adresse(servermodus, testserver, lokal, monkeypatc
         assert geschlossen == [True] and len(neu) == 1
     else:
         assert nachher == vorher and geschlossen == [] and neu == []
+
+
+# --- #45: App-Update im Servermodus ---------------------------------------
+
+class _FrageFenster:
+    def __init__(self, antwort):
+        self.antwort = antwort
+        self.fragen = []
+
+    def create_confirmation_dialog(self, titel, text):
+        self.fragen.append((titel, text))
+        return self.antwort
+
+
+@pytest.fixture
+def update_ersatz(lokal, monkeypatch):
+    from nebenkostenfix import aktualisierung
+    aufrufe = {'automatisch': [], 'laden': [], 'starten': []}
+    gefunden = {'version': '9.9.9', 'neu': True, 'installierbar': True}
+
+    def automatisch(*args, **kwargs):
+        aufrufe['automatisch'].append((args, kwargs))
+        return gefunden
+
+    def installer_laden(version):
+        aufrufe['laden'].append(version)
+        return lokal / 'setup.exe'
+
+    monkeypatch.setattr(aktualisierung, 'automatisch', automatisch)
+    monkeypatch.setattr(aktualisierung, 'installer_laden', installer_laden)
+    monkeypatch.setattr(aktualisierung, 'installer_starten', aufrufe['starten'].append)
+    monkeypatch.setattr(desktop, '_meldung', lambda *a, **k: aufrufe.setdefault('meldung', []).append(a))
+    return aufrufe, gefunden
+
+
+def test_servermodus_update_im_lokalen_ordner(update_ersatz, lokal):
+    """Gesucht und gemerkt wird im lokalen App-Ordner, nicht im Datenordner."""
+    aufrufe, gefunden = update_ersatz
+    gefunden['installierbar'] = False
+    desktop.update_anbieten(_FrageFenster(True))
+    ((args, kwargs),) = aufrufe['automatisch']
+    assert args == (desktop.SOFTWARE_VERSION, True)
+    assert kwargs == {'ordner': windows_ordner.lokaler_ordner()}
+    assert windows_ordner.lokaler_ordner().is_relative_to(lokal / 'lokal')
+    assert aufrufe['laden'] == []
+
+
+def test_servermodus_bietet_update_beim_start_an(servermodus, testserver):
+    fenster, gestartet = servermodus
+    basis, antworten = testserver
+    antworten['/api/health'] = GESUND
+    windows_ordner.einstellungen_schreiben(server=basis)
+    assert desktop.main([]) == 0
+    assert gestartet['update_angeboten'].wait(5)
+    assert gestartet['update_fuer'] == fenster
+
+
+def test_update_erst_nach_bestaetigung(update_ersatz, lokal):
+    aufrufe, _ = update_ersatz
+    nein = _FrageFenster(False)
+    desktop.update_anbieten(nein)
+    ((titel, text),) = nein.fragen
+    assert titel == desktop.TITEL and '(9.9.9)' in text and 'startet danach neu' in text
+    assert aufrufe['laden'] == [] and aufrufe['starten'] == []
+
+    desktop.update_anbieten(_FrageFenster(True))
+    assert aufrufe['laden'] == [desktop.SOFTWARE_VERSION]
+    assert aufrufe['starten'] == [lokal / 'setup.exe']
+
+
+def test_update_ohne_treffer_oder_mit_fehler_fragt_nicht(update_ersatz, monkeypatch):
+    from nebenkostenfix import aktualisierung
+    aufrufe, _ = update_ersatz
+    fenster = _FrageFenster(True)
+    monkeypatch.setattr(aktualisierung, 'automatisch', lambda *a, **k: None)
+    desktop.update_anbieten(fenster)
+
+    def kaputt(*_, **__):
+        raise RuntimeError('kaputt')
+
+    monkeypatch.setattr(aktualisierung, 'automatisch', kaputt)
+    desktop.update_anbieten(fenster)
+    assert fenster.fragen == [] and aufrufe['laden'] == []
+
+    # Scheitert das Laden, meldet die App das und startet nichts.
+    monkeypatch.setattr(aktualisierung, 'automatisch',
+                        lambda *a, **k: {'version': '9.9.9', 'installierbar': True})
+
+    def laden_scheitert(_):
+        raise aktualisierung.AktualisierungsFehler('Prüfsumme falsch')
+
+    monkeypatch.setattr(aktualisierung, 'installer_laden', laden_scheitert)
+    desktop.update_anbieten(fenster)
+    assert aufrufe['starten'] == []
+    assert 'Prüfsumme falsch' in aufrufe['meldung'][0][0]

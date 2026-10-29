@@ -333,6 +333,8 @@ STANDARDPORT = {'http': 80, 'https': 443}
 ZURUECK_FRAGE = ('Zurück zu den Daten auf diesem Rechner? Die Verbindung zum Server wird '
                  'getrennt. Auf dem Server und auf diesem Rechner geht nichts verloren.')
 NEUSTART_NACH = 1.5  # Sekunden
+UPDATE_FRAGE = ('Eine neue Version von NebenkostenFix ist verfügbar ({version}). Jetzt '
+                'installieren? Die App startet danach neu.')
 
 
 def neustart_umgebung(umgebung=None) -> dict:
@@ -764,6 +766,25 @@ def offline_seite(meldung: str, adresse: str) -> str:
         f'<p><code>{html.escape(adresse)}</code></p></body></html>')
 
 
+def update_anbieten(fenster) -> None:
+    """App-Update im Servermodus (#45): ohne lokalen Server fragt das Fenster
+    selbst. Gemerkt wird nur im lokalen App-Ordner, nie im Datenordner."""
+    try:
+        gefunden = aktualisierung.automatisch(SOFTWARE_VERSION, True,
+                                              ordner=windows_ordner.lokaler_ordner())
+    except Exception:  # noqa: BLE001 -- still wie die Suche beim Start (NK-175)
+        protokoll.exception('Update-Suche im Servermodus gescheitert')
+        return
+    if not gefunden or not gefunden.get('installierbar'):
+        return
+    if not fenster.create_confirmation_dialog(TITEL, UPDATE_FRAGE.format(version=gefunden['version'])):
+        return
+    try:
+        aktualisierung.installer_starten(aktualisierung.installer_laden(SOFTWARE_VERSION))
+    except (aktualisierung.AktualisierungsFehler, OSError, ValueError) as fehler:
+        _meldung(f'Das Update konnte nicht installiert werden. {fehler}')
+
+
 def server_fenster_starten(adresse: str) -> int:
     """Servermodus (#45): kein lokaler Server, der Datenordner bleibt zu."""
     import webview
@@ -833,9 +854,15 @@ def server_fenster_starten(adresse: str) -> int:
         ]),
         Menu('Hilfe', [MenuAction(f'Über {marke.PRODUKT}', ueber)]),
     ]
+
+    def hochfahren():
+        laden()
+        # Das Update kommt von der Projektseite, nicht vom Server: auch offline.
+        threading.Thread(target=update_anbieten, args=(fenster,), daemon=True).start()
+
     speicher = windows_ordner.lokaler_ordner() / 'WebView2'
     try:
-        webview.start(laden, menu=menue, private_mode=False, storage_path=str(speicher))
+        webview.start(hochfahren, menu=menue, private_mode=False, storage_path=str(speicher))
     finally:
         instanz.freigeben()
     if zustand.get('neustart'):
