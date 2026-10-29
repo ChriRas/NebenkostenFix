@@ -1961,6 +1961,16 @@ def _anlagenzaehler(vorgang: Vorgang, anlage_id: int,
     return [z for z in zaehler if ist_warmwasserzaehler(z) is warm]
 
 
+def anlagen_zweckzaehler(vorgang: Vorgang, anlage_id: int, zweck: str, ids) -> dict:
+    """``{wohnung_id: zaehler}`` eines Zwecks für die Wohnungen ``ids``.
+
+    Abrechnung (``_anlagenzeilen``) und Schätzquote (``schaetzquoten``)
+    holen ihre Zähler hier, damit die Warnung nie andere zählt als das Blatt.
+    """
+    return {z.wohnung_id: z for z in _anlagenzaehler(vorgang, anlage_id, zweck)
+            if z.wohnung_id in ids}
+
+
 def anlagen_wohnungen(vorgang: Vorgang, anlage, mehrere: bool) -> list:
     """Die Wohnungen, die an dieser Anlage haengen.
 
@@ -2691,9 +2701,7 @@ def _anlagenzeilen(vorgang: Vorgang, anlage, rechnungen: Sequence[Rechnung],
                         (heizung.WARMWASSER, ww_anteil)):
         if teil <= 0:
             continue
-        zaehler = {z.wohnung_id: z
-                   for z in _anlagenzaehler(vorgang, anlage.id, zweck)
-                   if z.wohnung_id in ids}
+        zaehler = anlagen_zweckzaehler(vorgang, anlage.id, zweck, ids)
         zeile = _verteilzeile(
             vorgang, anlage, rechnungen, vermieter_positionen,
             zweck=zweck, ww_anteil=ww_anteil, wohnungen=wohnungen, ids=ids,
@@ -2715,7 +2723,7 @@ def schaetzquoten(vorgang: Vorgang, anlage_ids, von: date, bis: date) -> list:
 
     Nur eine Auskunft für den Prüfstand (§ 9a HeizkostenV), gerechnet wird
     damit nichts. Sie nimmt dieselben Wohnungen (``anlagen_wohnungen``) und
-    dieselben Zähler (``_anlagenzaehler``, Zählerwechsel schon verkettet)
+    dieselben Zähler (``anlagen_zweckzaehler``, Zählerwechsel schon verkettet)
     wie ``_anlagenzeilen`` -- sonst stünde in der Warnung ein anderer Nenner
     als auf dem Blatt. ``anlage_ids`` sind die Anlagen mit Rechnungen im
     Jahr; ihre Zahl entscheidet wie im Kern, ob die Zähler die Zuordnung
@@ -2750,9 +2758,7 @@ def schaetzquoten(vorgang: Vorgang, anlage_ids, von: date, bis: date) -> list:
                             (heizung.WARMWASSER, ww_anteil)):
             if teil <= 0:
                 continue
-            zaehler = {z.wohnung_id: z
-                       for z in _anlagenzaehler(vorgang, anlage.id, zweck)
-                       if z.wohnung_id in ids}
+            zaehler = anlagen_zweckzaehler(vorgang, anlage.id, zweck, ids)
             if (any(w.id not in zaehler for w in wohnungen)
                     or len({zaehler_einheit(z) for z in zaehler.values()}) > 1):
                 continue

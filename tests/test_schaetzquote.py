@@ -354,6 +354,29 @@ def test_nenner_gleich_wie_in_der_abrechnung(musterhaus):
     assert 'Für 50 von 200 m² (25,0 %)' in _einziger(haus)['text']
 
 
+def test_dieselben_zaehler_wie_in_der_abrechnung(musterhaus, monkeypatch):
+    # Beide holen ihre Zähler aus demselben Helfer -- und bekommen dieselben.
+    from nebenkostenfix import rechenkern
+    w4 = Meter.query.filter_by(meter_number='W-W4').one()
+    MeterReading.query.filter_by(meter_id=w4.id, reading_date=D(2025, 1, 1)).delete()
+    db.session.commit()
+    echt, gesehen = rechenkern.anlagen_zweckzaehler, []
+
+    def spion(vorgang, anlage_id, zweck, ids):
+        zaehler = echt(vorgang, anlage_id, zweck, ids)
+        gesehen.append((anlage_id, zweck, sorted(z.id for z in zaehler.values())))
+        return zaehler
+    monkeypatch.setattr(rechenkern, 'anlagen_zweckzaehler', spion)
+
+    musterhaus['abrechnung'](musterhaus['anna'])
+    in_abrechnung, gesehen[:] = list(gesehen), []
+    [q] = _quoten(Property.query.filter_by(name='Musterweg 1').one())
+    assert gesehen and in_abrechnung
+    assert all(g in in_abrechnung for g in gesehen)
+    [ids] = [z for a, zweck, z in gesehen if (a, zweck) == (q['anlage_id'], q['zweck'])]
+    assert {w['zaehler_id'] for w in q['wohnungen']} <= set(ids)
+
+
 def test_praxisbestand_ohne_schaetzquote(praxis):
     for h in Property.query.all():
         for jahr in range(bestand.HEUTE.year - 2, bestand.HEUTE.year + 1):
