@@ -148,6 +148,16 @@ auf „Trotzdem ausführen“. Updates aus der App heraus prüft NebenkostenFix 
 digitale Signatur. Die Fassung aus dem [Microsoft Store](https://apps.microsoft.com/detail/9pjqssqgbnz8)
 kommt ohne diese Warnung aus.
 
+#### Mit einem Server verbinden
+
+Die Windows-App kann statt der lokalen Daten eine NebenkostenFix-Instanz auf einem Server
+öffnen, zum Beispiel eine Docker-Instanz im Heimnetz: Einstellungen → Sicherung → Karte
+„Mit einem Server verbinden“. Die App prüft die Adresse, trägt sie in
+`%LOCALAPPDATA%\NebenkostenFix\einstellungen.ini` ein und startet neu. Im Servermodus läuft
+kein lokaler Server, die lokalen Daten bleiben unberührt. Zurück geht es über Datei →
+„Auf diesem Rechner arbeiten …“. Zertifikate, Anmeldung über http und die Prüfliste stehen
+in `docs/servermodus.md`.
+
 ### Docker
 
 Nötig ist ein Rechner mit Docker und dem Compose-Plugin. Eine Datenbank, einen
