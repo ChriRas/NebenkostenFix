@@ -219,6 +219,26 @@ def test_genau_die_haelfte_abgedeckt_ist_erfasst(haus):
     assert _befunde(haus) == []
 
 
+def test_waermezaehler_misst_die_haelfte_nach_gradtagen(haus):
+    # 152 von 366 Tagen, aber rund 58 % des Jahreswärmebedarfs: erfasst.
+    _zwei(haus, 50, 50, ((D(2024, 1, 1), 0), (D(2024, 6, 1), 200)))
+    assert _befunde(haus) == []
+
+
+def test_waermezaehler_ohne_winteranfang_ist_nicht_erfasst(haus):
+    # 244 von 366 Tagen, aber unter der Hälfte der Gradtage: überwiegend hochgerechnet.
+    _zwei(haus, 50, 50, ((D(2024, 5, 1), 0), (D(2024, 12, 31), 120)))
+    assert 'decken nur 244 von 366 Tagen' in _einziger(haus)['text']
+
+
+def test_warmwasser_misst_die_haelfte_nach_tagen(haus):
+    a = _anlage(haus, versorgt=heizung.WARMWASSER)
+    _zaehler(haus, _wohnung(haus, 'A', 50), a, GEMESSEN, art='Warmwasser')
+    _zaehler(haus, _wohnung(haus, 'B', 50), a, ((D(2024, 1, 1), 0), (D(2024, 6, 1), 20)),
+             art='Warmwasser')
+    assert 'decken nur 152 von 366 Tagen' in _einziger(haus)['text']
+
+
 # --- (f) und (g) die Texte sagen, was die App tut --------------------------------
 
 

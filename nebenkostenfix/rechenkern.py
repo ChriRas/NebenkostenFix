@@ -2727,7 +2727,8 @@ def schaetzquoten(vorgang: Vorgang, anlage_ids, von: date, bis: date) -> list:
     Gradtagen umrechnet, ist eine ordnungsgemäße Erfassung; liegt aber mehr
     als die Hälfte außerhalb jeder Ablesung, ist die Zahl überwiegend
     hochgerechnet und keine Messung mehr. Die Hälfte ist eine Wertung, die
-    Verordnung nennt keine Grenze.
+    Verordnung nennt keine Grenze. Gemessen wird sie so, wie der Kern
+    hochrechnet: beim Heizwärmezähler nach Gradtagen, sonst nach Tagen.
 
     Fehlt einer Wohnung der Zähler, sind die Einheiten gemischt oder ist gar
     nichts gemessen, steht hier nichts: dann verteilt der Kern die ganze
@@ -2767,8 +2768,15 @@ def schaetzquoten(vorgang: Vorgang, anlage_ids, von: date, bis: date) -> list:
                 else:
                     erste = date.fromisoformat(a['r_start']['date'])
                     letzte = date.fromisoformat(a['r_end']['date'])
-                    abgedeckt = max(0, (min(bis_grenze, letzte) - max(von, erste)).days)
-                    if abgedeckt * 2 >= a['target_days']:
+                    mess_von, mess_bis = max(von, erste), min(bis_grenze, letzte)
+                    abgedeckt = max(0, (mess_bis - mess_von).days)
+                    if ist_heizwaermezaehler(zaehler[w.id]):
+                        # Gemessen wie hochgerechnet wird: nach Gradtagen (D-115).
+                        gemessen = (heizung.gradtage(mess_von, mess_bis) * 2
+                                    >= heizung.gradtage(von, bis_grenze))
+                    else:
+                        gemessen = abgedeckt * 2 >= a['target_days']
+                    if gemessen:
                         continue
                 betroffen.append({
                     'wohnung': w.name, 'qm': dec(w.qm or 0),
