@@ -461,36 +461,41 @@ def test_api_haftung(auth_client, monkeypatch, tmp_path):
     assert auth_client.get('/api/haftung').get_json()['bestaetigt'] is False
 
 
-def test_haftung_erstmals(auth_client, monkeypatch, tmp_path):
-    """#45: Nur ein Datenordner ohne jede Bestätigung gilt als erster Start."""
+def test_startwahl_bei_leerer_app_trotz_alter_bestaetigung(auth_client, monkeypatch, tmp_path):
+    """#45, Rechner mit altem Datenordner: Der Datenordner überlebt die Deinstallation samt
+    Bestätigung, die Datenbank ist leer. Die Startwahl kommt trotzdem."""
+    from app import app
     from nebenkostenfix import datenordner, einstellungen, haftung
-    neu, alt = tmp_path / 'neu', tmp_path / 'alt'
-    neu.mkdir()
-    alt.mkdir()
-    monkeypatch.setattr(datenordner, 'datenordner', lambda: neu)
-    assert auth_client.get('/api/haftung').get_json()['erstmals'] is True
-    antwort = auth_client.post('/api/haftung', json={'version': haftung.VERSION}).get_json()
-    assert antwort['erstmals'] is False
-    assert auth_client.get('/api/haftung').get_json()['erstmals'] is False
-    # Bestätigt war nur eine ältere Fassung: Hinweis ja, erster Start nein.
-    einstellungen.schreiben(alt, haftung={'version': haftung.VERSION - 1})
-    monkeypatch.setattr(datenordner, 'datenordner', lambda: alt)
+    monkeypatch.setattr(datenordner, 'datenordner', lambda: tmp_path)
+    monkeypatch.setitem(app.config, 'DESKTOP', True)
+    einstellungen.schreiben(tmp_path, haftung={'version': haftung.VERSION})
+    vorher = (tmp_path / 'app-einstellungen.json').read_bytes()
     stand = auth_client.get('/api/haftung').get_json()
-    assert stand['erstmals'] is False and stand['bestaetigt'] is False
+    assert stand['startwahl'] is True and stand['bestaetigt'] is True
+    # Ganz neu (nie bestätigt) ebenso.
+    einstellungen.schreiben(tmp_path, haftung=None)
+    assert auth_client.get('/api/haftung').get_json()['startwahl'] is True
+    einstellungen.schreiben(tmp_path, haftung={'version': haftung.VERSION})
+    # Nur gelesen: Die Abfrage schreibt nichts.
+    assert (tmp_path / 'app-einstellungen.json').read_bytes() == vorher
 
 
-def test_haftung_erstmals_nicht_mit_vorhandenen_objekten(auth_client, monkeypatch, tmp_path):
-    """#45: Datenbank mit Objekten, aber nie bestätigt (Update von vor NK-174,
-    nur die Datenbank kopiert): kein erster Start, sonst böte der Hinweis den
-    Server an und die lokalen Objekte wären scheinbar weg."""
+def test_startwahl_nie_mit_objekten_und_nie_im_browser(auth_client, monkeypatch, tmp_path):
+    """#45: Mit Objekten (auch nie bestätigt, Update von vor NK-174) keine
+    Startwahl, sonst wären die lokalen Daten scheinbar weg. Docker und der
+    Server hinter der App (kein NK_DESKTOP) fragen nie."""
+    from app import app
     from nebenkostenfix import datenordner
     from nebenkostenfix.models import Property, db
     monkeypatch.setattr(datenordner, 'datenordner', lambda: tmp_path)
+    monkeypatch.setitem(app.config, 'DESKTOP', False)
+    stand = auth_client.get('/api/haftung').get_json()
+    assert stand['startwahl'] is False and stand['bestaetigt'] is False
+    monkeypatch.setitem(app.config, 'DESKTOP', True)
     db.session.add(Property(name='Haus Bestand'))
     db.session.commit()
     stand = auth_client.get('/api/haftung').get_json()
-    assert stand['erstmals'] is False and stand['bestaetigt'] is False
-    # Nur gelesen: weder Bestätigung noch Objekt verändert.
+    assert stand['startwahl'] is False and stand['bestaetigt'] is False
     assert not (tmp_path / 'app-einstellungen.json').exists()
     assert Property.query.count() == 1
 

@@ -3459,9 +3459,11 @@ def _vermieter_stand():
 def haftung_anzeigen():
     """Der Haftungshinweis und ob diese Fassung bestaetigt ist (NK-174)."""
     stand = haftung.stand()
-    # #45: Mit Objekten ist es kein neuer Anfang (Update von vor NK-174,
-    # nur die Datenbank kopiert); dann kein Knopf „Mit einem Server verbinden“.
-    stand['erstmals'] = stand['erstmals'] and Property.query.first() is None
+    # #45: Startwahl „lokal oder Server“ nur in der lokalen Windows-App
+    # (NK_DESKTOP, also ohne Warten auf die Brücke) und nur ohne Objekte.
+    # Eine alte Bestätigung zählt nicht: Sie liegt im Datenordner, den die
+    # Deinstallation stehen lässt.
+    stand['startwahl'] = bool(app.config.get('DESKTOP')) and Property.query.first() is None
     return jsonify(stand)
 
 
