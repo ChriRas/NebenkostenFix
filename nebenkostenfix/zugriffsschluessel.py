@@ -160,26 +160,35 @@ def anfrage_pruefen(app, ordner):
     spielt keine Rolle mehr.
     """
     roh = im_kopf() or ''
-    # Gezaehlt wird je Adresse und je Anfang des Schluessels: wer denselben
-    # falschen Schluessel wiederholt, ist nach GRENZE_KONTO gesperrt, wer
-    # beliebige probiert, nach GRENZE_IP. Die Adresse hat einen eigenen Topf
-    # neben der Anmeldung: hinter einem Reverse Proxy kommen alle von
-    # derselben, und ein Programm mit veralteten Schluesseln soll den
-    # Menschen nicht aussperren.
-    adresse = f'schluessel@{request.remote_addr}'
-    merkmal = f'schluessel:{roh[:12]}'
-    rest = anmeldeschutz.gesperrt_fuer(ordner, merkmal, adresse)
-    if rest:
-        minuten = max(1, (rest + 59) // 60)
-        antwort = make_response(jsonify({
-            'error': f'Zu viele Fehlversuche. Bitte warten Sie {minuten} Minuten.',
-            'code': 'anmeldung_gesperrt'}), 429)
-        antwort.headers['Retry-After'] = str(rest)
-        return antwort
     zeile = None
     if len(roh) <= 100:
         zeile = ApiSchluessel.query.filter_by(hash=_hash(roh)).first()
     if zeile is None or zeile.user is None or not zeile.user.is_active:
+        # Gezaehlt wird je Adresse und je Anfang des Schluessels: wer
+        # denselben falschen Schluessel wiederholt, ist nach GRENZE_KONTO
+        # gesperrt, wer beliebige probiert, nach GRENZE_IP. Die Adresse hat
+        # einen eigenen Topf neben der Anmeldung: hinter einem Reverse Proxy
+        # kommen alle von derselben, und ein Programm mit veralteten
+        # Schluesseln soll den Menschen nicht aussperren.
+        #
+        # Ein gueltiger Schluessel geht an der Sperre vorbei und zaehlt
+        # nicht, auch nicht zurueck (Review zu #48): 256 Bit Zufall raet
+        # niemand, die Sperre daempft nur das Rauschen. Sie traefe sonst
+        # hinter dem Proxy jedes Programm, sobald einer zwanzig falsche
+        # schickt; und ein Erfolg, der den Zaehler leert, hielte sie fuer
+        # den Falschen an derselben Adresse offen. Gesperrt antwortet sie
+        # sofort und ohne Wartezeit: das Raten bremsen muss sie bei 256 Bit
+        # nicht.
+        adresse = f'schluessel@{request.remote_addr}'
+        merkmal = f'schluessel:{roh[:12]}'
+        rest = anmeldeschutz.gesperrt_fuer(ordner, merkmal, adresse)
+        if rest:
+            minuten = max(1, (rest + 59) // 60)
+            antwort = make_response(jsonify({
+                'error': f'Zu viele Fehlversuche. Bitte warten Sie {minuten} Minuten.',
+                'code': 'anmeldung_gesperrt'}), 429)
+            antwort.headers['Retry-After'] = str(rest)
+            return antwort
         anzahl = anmeldeschutz.fehlversuch(ordner, merkmal, adresse)
         time.sleep(anmeldeschutz.wartezeit(anzahl))
         return jsonify({
