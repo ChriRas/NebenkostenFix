@@ -9,6 +9,7 @@ wirklichen Dateien; sie war vor dem Umbau rot.
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
@@ -144,3 +145,52 @@ def test_echte_oberflaeche_ist_im_hausstil():
     und die Kästchen mit Inline-Größe waren vor dem Umbau rot."""
     verstoesse = pruefe_steuerelemente()
     assert verstoesse == [], "\n".join(verstoesse)
+
+
+def _html_quellen() -> dict[str, str]:
+    quellen = ui_quellen()
+    quellen["auth.py"] = gate._html_aus_python(gate.AUTH)
+    return quellen
+
+
+def test_eingabefelder_nicht_in_der_knopfzeile():
+    """.knopf-zeile ist für Knöpfe; Felder gehören in .feld-zeile (Breite, Umbruch, Abstand)."""
+    funde = [(name, kennung) for name, quelle in _html_quellen().items()
+             for zeile in re.findall(r'<div class="knopf-zeile[^"]*"[^>]*>(.*?)</div>', quelle, re.S)
+             for kennung in re.findall(r'<(?:input|select|textarea)\b[^>]*\sid="([^"]+)"', zeile)]
+    assert funde == []
+
+
+def test_passphrasen_haben_einen_namen():
+    """Ein Platzhalter ist kein Name: Er verschwindet beim Tippen und wird nicht überall vorgelesen."""
+    funde = []
+    for name, quelle in _html_quellen().items():
+        for tag in re.findall(r'<input\b[^>]*type="password"[^>]*>', quelle):
+            kennung = re.search(r'\sid="([^"]+)"', tag).group(1)
+            if "aria-label" not in tag and f'for="{kennung}"' not in quelle:
+                funde.append((name, kennung))
+    assert funde == []
+
+
+def test_paketknopf_nennt_feld_und_auswahl():
+    """Der Knopf für ein verstecktes Dateifeld trägt dessen Beschriftung, und die gewählte
+    Datei wird angesagt (Einrichtung und Einstellungen)."""
+    quellen = _html_quellen()
+    for name, knopf, label, anzeige in (
+            ("auth.py", "umzug-auswahl-knopf", "umzug-datei-label", "umzug-auswahl-name"),
+            ("index.html", "btn-umzug-auswahl", "umzug-datei-einstellungen-label",
+             "umzug-auswahl-einstellungen")):
+        quelle = quellen[name]
+        tag = re.search(rf'<button\b[^>]*\sid="{knopf}"[^>]*>', quelle).group(0)
+        assert f'aria-labelledby="{label} {knopf}"' in tag, name
+        assert f'aria-describedby="{anzeige}"' in tag, name
+        assert re.search(rf'<label\b[^>]*\sid="{label}"', quelle), name
+        assert re.search(rf'<\w+\b[^>]*\sid="{anzeige}"[^>]*aria-live="polite"', quelle), name
+
+
+def test_symbole_im_dateiknopf_sind_stumm():
+    """Das Symbol im Hauslabel ist Schmuck; vorgelesen wird nur der Text daneben."""
+    funde = [(name, i) for name, quelle in _html_quellen().items()
+             for label in re.findall(r'<label\b[^>]*class="file-upload-label"[^>]*>(.*?)</label>', quelle, re.S)
+             for i in re.findall(r'<i\b[^>]*>', label) if 'aria-hidden="true"' not in i]
+    assert funde == []

@@ -387,10 +387,11 @@ UMZUG_KARTE = """<details class="anmelde-karte umzug-karte">
  Exportieren Sie dort unter <b>Einstellungen → Sicherung → Alles exportieren</b> und
  wählen Sie die <code>.nkfix</code>-Datei hier aus. Danach melden Sie sich mit Ihrem
  bisherigen Konto an.</p>
- <label for="umzug-datei">Umzugspaket (.nkfix)</label>
+ <label for="umzug-datei" id="umzug-datei-label">Umzugspaket (.nkfix)</label>
  <input id="umzug-datei" type="file" accept=".nkfix,.nkbak,.gz" hidden>
- <button type="button" id="umzug-auswahl-knopf" class="zweitknopf">Paket auswählen</button>
- <p class="hilfe" id="umzug-auswahl-name">Keine Datei ausgewählt</p>
+ <button type="button" id="umzug-auswahl-knopf" class="zweitknopf"
+  aria-labelledby="umzug-datei-label umzug-auswahl-knopf" aria-describedby="umzug-auswahl-name">Paket auswählen</button>
+ <p class="hilfe" id="umzug-auswahl-name" aria-live="polite">Keine Datei ausgewählt</p>
  <label for="umzug-passphrase">Passphrase (nur bei verschlüsselten Paketen)</label>
  <input id="umzug-passphrase" type="password" autocomplete="off">
  __UMZUGCODE__

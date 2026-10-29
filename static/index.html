@@ -721,13 +721,13 @@
                                 Sicherung mit Passphrase verschlüsseln (empfohlen für USB-Laufwerk und Cloud)
                             </label>
                             <div id="sicherung-passphrase-felder" style="display: none; margin-top: 8px;">
-                                <div class="knopf-zeile">
+                                <div class="form-group feld-zeile">
                                     <input class="feld-breit" type="password" id="sicherung-passphrase" autocomplete="new-password"
-                                        minlength="12" placeholder="Passphrase (mindestens 12 Zeichen)">
+                                        minlength="12" placeholder="Passphrase (mindestens 12 Zeichen)" aria-label="Passphrase">
                                     <input class="feld-breit" type="password" id="sicherung-passphrase2" autocomplete="new-password"
-                                        minlength="12" placeholder="Passphrase wiederholen">
+                                        minlength="12" placeholder="Passphrase wiederholen" aria-label="Passphrase wiederholen">
                                 </div>
-                                <p style="font-size: 13px; color: var(--text-muted); margin: 8px 0 0;">
+                                <p style="font-size: 13px; color: var(--text-muted); margin: 0;">
                                     Ohne die Passphrase lässt sich die Sicherung nicht mehr öffnen — niemand
                                     kann sie wiederherstellen. Bewahren Sie sie getrennt von der Sicherung auf.
                                 </p>
@@ -872,13 +872,15 @@
                                 Konto aus dem Paket an, falls das Paket eines enthält.
                             </p>
                             <div class="form-group">
-                                <label for="umzug-datei-einstellungen">Paket</label>
+                                <label for="umzug-datei-einstellungen" id="umzug-datei-einstellungen-label">Paket</label>
                                 <input type="file" id="umzug-datei-einstellungen" accept=".nkfix,.nkbak,.gz" hidden
                                     onchange="umzugDateiGewaehlt(this)">
                                 <div class="knopf-zeile">
                                     <button class="btn-secondary" type="button" id="btn-umzug-auswahl"
+                                        aria-labelledby="umzug-datei-einstellungen-label btn-umzug-auswahl"
+                                        aria-describedby="umzug-auswahl-einstellungen"
                                         onclick="umzugPaketWaehlen()">Paket auswählen</button>
-                                    <span class="text-muted" id="umzug-auswahl-einstellungen">Keine Datei ausgewählt</span>
+                                    <span class="text-muted" id="umzug-auswahl-einstellungen" aria-live="polite">Keine Datei ausgewählt</span>
                                 </div>
                             </div>
                             <div class="form-group" id="umzug-importordner-gruppe" hidden>
@@ -1907,7 +1909,7 @@
                         <input type="file" id="tenant-contract-file" accept=".pdf,.jpg,.jpeg,.png,.webp,.heic,.heif,application/pdf,image/jpeg,image/png,image/webp,image/heic"
                             onchange="document.getElementById('tenant-contract-name').textContent = this.files[0] ? this.files[0].name : 'Datei auswählen …'">
                         <label for="tenant-contract-file" class="file-upload-label">
-                            <i class="ph ph-file-pdf"></i>
+                            <i class="ph ph-file-pdf" aria-hidden="true"></i>
                             <span id="tenant-contract-name">Datei auswählen …</span>
                         </label>
                     </div>
@@ -2434,7 +2436,7 @@
                             <input type="file" id="reading-file" accept=".jpg,.jpeg,.png,.webp,.heic,.heif,.pdf,image/jpeg,image/png,image/webp,image/heic,application/pdf"
                                 onchange="document.getElementById('reading-file-name').textContent = this.files[0] ? this.files[0].name : 'Datei auswählen …'">
                             <label for="reading-file" class="file-upload-label">
-                                <i class="ph ph-upload-simple"></i>
+                                <i class="ph ph-upload-simple" aria-hidden="true"></i>
                                 <span id="reading-file-name">Datei auswählen …</span>
                             </label>
                         </div>
@@ -2520,7 +2522,7 @@
                             <input type="file" id="doc-file" accept=".pdf,.jpg,.jpeg,.png,.webp,.heic,.heif,application/pdf,image/jpeg,image/png,image/webp,image/heic" required
                                 onchange="document.getElementById('doc-file-name').textContent = this.files[0] ? this.files[0].name : 'Datei auswählen …'">
                             <label for="doc-file" class="file-upload-label">
-                                <i class="ph ph-file-pdf"></i>
+                                <i class="ph ph-file-pdf" aria-hidden="true"></i>
                                 <span id="doc-file-name">Datei auswählen …</span>
                             </label>
                         </div>
@@ -2707,7 +2709,7 @@
                             <input type="file" id="invoice-file" accept=".pdf,.jpg,.jpeg,.png,.webp,.heic,.heif,application/pdf,image/jpeg,image/png,image/webp,image/heic"
                                 onchange="document.getElementById('invoice-file-name').textContent = this.files[0] ? this.files[0].name : 'Datei auswählen …'">
                             <label for="invoice-file" class="file-upload-label">
-                                <i class="ph ph-upload-simple"></i>
+                                <i class="ph ph-upload-simple" aria-hidden="true"></i>
                                 <span id="invoice-file-name">Datei auswählen …</span>
                             </label>
                         </div>
