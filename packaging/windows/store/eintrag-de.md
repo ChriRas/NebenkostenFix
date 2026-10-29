@@ -27,7 +27,8 @@ Die Nebenkostenabrechnung für private Vermieter. Kostenlos, und Ihre Daten blei
 
 Version 0.18.0: Die App verbindet sich auf Wunsch mit einem NebenkostenFix-Server, und der Prüfstand nennt die Schätzquote. Die Rechenregeln sind unverändert.
 
-- Neu: Einstellungen → Sicherung → „Mit einem Server verbinden“. Die App öffnet dann die Daten einer NebenkostenFix-Instanz im Heimnetz, die lokalen Daten bleiben unberührt.
+- Neu: Beim ersten Start wählen Sie, ob Sie auf diesem Rechner arbeiten oder sich mit einem NebenkostenFix-Server verbinden. Später geht das über Einstellungen → Sicherung. Die lokalen Daten bleiben unberührt.
+- Neu: Dateiwähler, Kästchen und Eingabefelder sehen überall gleich aus und sprechen Deutsch.
 - Neu: Der Prüfstand zeigt je Heizungsanlage, welcher Anteil geschätzt ist, und warnt ab mehr als 25 % (§ 9a HeizkostenV).
 - Behoben: Aus der App öffnen sich nur noch PDF und Bilder direkt, alle anderen Dateien bietet sie zum Speichern an.
 
