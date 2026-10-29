@@ -294,6 +294,7 @@ class _Fenster:
     def __init__(self):
         self.events = types.SimpleNamespace(closing=_Ereignis())
         self.skripte = []
+        self.sichtbar = True
 
     def load_url(self, adresse):
         pass
@@ -307,27 +308,53 @@ class _Fenster:
     def destroy(self):
         pass
 
+    def hide(self):
+        self.sichtbar = False
 
-def _fenster_starten(monkeypatch, tmp_path, cmd_q):
-    """fenster_starten mit einem nachgebauten pywebview. ``cmd_q``: Beim
-    Beenden über das App-Menü kommt nur ``closing``, danach endet der
-    Prozess ohne Rückkehr aus ``webview.start`` (Probe auf macOS 26)."""
+    def show(self):
+        self.sichtbar = True
+
+    def restore(self):
+        pass
+
+
+def _fenster_starten(monkeypatch, tmp_path, *schritte):
+    """fenster_starten mit einem nachgebauten pywebview. Die Schritte:
+
+    ``zu``     roter Knopf oder Cmd-W: pywebview ruft ``closing`` auf,
+    ``dock``   Klick aufs Dock-Symbol ohne sichtbares Fenster,
+    ``cmd_q``  Beenden: der Delegate erfährt es, dann kommt ``closing``,
+               danach endet der Prozess ohne Rückkehr aus ``webview.start``
+               (Probe auf macOS 26),
+    ``beenden`` wie ``cmd_q``, aber ``webview.start`` kehrt zurück.
+    Nach den Schritten kehrt ``webview.start`` zurück (wie unter Windows).
+    """
     monkeypatch.setenv('LOCALAPPDATA', str(tmp_path / 'lokal'))
     fenster = _Fenster()
     ablauf = {'angehalten': []}
+    monkeypatch.setattr(desktop, '_macos_anpassen', lambda mac: ablauf.__setitem__('mac', mac))
 
     def start(funktion, menu=(), **optionen):
         ablauf['menue'] = menu
         ablauf['optionen'] = optionen
         funktion()
-        for beim_schliessen in fenster.events.closing:
-            beim_schliessen()
-        if cmd_q:
-            # AppKit beendet den Prozess in C; der finally-Block kommt nicht mehr dran.
-            ablauf['beim_ende'] = list(ablauf['angehalten'])
-            ablauf['instanz_beim_ende'] = (
-                tmp_path / 'lokal' / 'NebenkostenFix' / 'instanz.json').exists()
-            raise SystemExit(0)
+        for schritt in schritte:
+            if schritt == 'zu':
+                ablauf['zu'] = [hook() for hook in fenster.events.closing]
+                ablauf['nach_zu'] = list(ablauf['angehalten'])
+            elif schritt == 'dock':
+                ablauf['mac'].wieder_oeffnen(sichtbar=False)
+            elif schritt in ('cmd_q', 'beenden'):
+                if 'mac' in ablauf:
+                    ablauf['mac'].beenden_angefordert()
+                for hook in fenster.events.closing:
+                    hook()
+                if schritt == 'cmd_q':
+                    # AppKit beendet den Prozess in C; der finally-Block kommt nicht mehr dran.
+                    ablauf['beim_ende'] = list(ablauf['angehalten'])
+                    ablauf['instanz_beim_ende'] = (
+                        tmp_path / 'lokal' / 'NebenkostenFix' / 'instanz.json').exists()
+                    raise SystemExit(0)
 
     class Eintrag:
         def __init__(self, titel, inhalt=None):
@@ -363,50 +390,113 @@ def _menue(ablauf):
 def test_cmd_q_haelt_den_server_unter_macos_an(system, monkeypatch, tmp_path):
     """Ohne den Hook blieb die WAL-Datei liegen (1,1 MB in der Probe)."""
     system('darwin')
-    ablauf = _fenster_starten(monkeypatch, tmp_path, cmd_q=True)
+    ablauf = _fenster_starten(monkeypatch, tmp_path, 'cmd_q')
     assert ablauf['beim_ende'] == [ablauf['server']]
 
 
 def test_cmd_q_gibt_unter_macos_die_instanz_frei(system, monkeypatch, tmp_path):
     """Sonst bliebe instanz.json mit Port und abgelaufenem Token liegen."""
     system('darwin')
-    ablauf = _fenster_starten(monkeypatch, tmp_path, cmd_q=True)
+    ablauf = _fenster_starten(monkeypatch, tmp_path, 'cmd_q')
     assert ablauf['instanz_beim_ende'] is False
 
 
-def test_fenster_schliessen_haelt_unter_macos_nur_einmal_an(system, monkeypatch, tmp_path):
+def test_beenden_haelt_unter_macos_nur_einmal_an(system, monkeypatch, tmp_path):
     system('darwin')
-    ablauf = _fenster_starten(monkeypatch, tmp_path, cmd_q=False)
+    ablauf = _fenster_starten(monkeypatch, tmp_path, 'beenden')
     assert ablauf['angehalten'] == [ablauf['server']]
+
+
+def test_roter_knopf_versteckt_unter_macos_nur_das_fenster(system, monkeypatch, tmp_path):
+    """Wie bei Mac-Apps üblich: Fenster zu heißt nicht Programm zu. Die App
+    bleibt mit Punkt im Dock aktiv, der Server läuft weiter (Nutzer, 29.10.2026)."""
+    system('darwin')
+    ablauf = _fenster_starten(monkeypatch, tmp_path, 'zu')
+    assert ablauf['zu'] == [False]            # pywebview bricht das Schließen ab
+    assert ablauf['fenster'].sichtbar is False
+    assert ablauf['nach_zu'] == []            # nichts angehalten
+
+
+def test_dock_holt_das_fenster_zurueck(system, monkeypatch, tmp_path):
+    system('darwin')
+    ablauf = _fenster_starten(monkeypatch, tmp_path, 'zu', 'dock')
+    assert ablauf['fenster'].sichtbar is True
+
+
+def test_nach_dem_roten_knopf_beendet_cmd_q_wie_bisher(system, monkeypatch, tmp_path):
+    system('darwin')
+    ablauf = _fenster_starten(monkeypatch, tmp_path, 'zu', 'dock', 'zu', 'cmd_q')
+    assert ablauf['beim_ende'] == [ablauf['server']]
+    assert ablauf['instanz_beim_ende'] is False
 
 
 def test_unter_windows_haelt_der_finally_block_an(system, monkeypatch, tmp_path):
     system('win32')
-    ablauf = _fenster_starten(monkeypatch, tmp_path, cmd_q=False)
+    ablauf = _fenster_starten(monkeypatch, tmp_path, 'zu')
     assert list(ablauf['fenster'].events.closing) == []
+    assert 'mac' not in ablauf
     assert ablauf['angehalten'] == [ablauf['server']]
 
 
-def test_menue_unter_macos_ohne_zweites_beenden(system, monkeypatch, tmp_path):
-    """Das App-Menü von macOS hat „Beenden“ mit Cmd-Q schon."""
+def test_menue_unter_macos_heisst_ablage_ohne_zweites_beenden(system, monkeypatch, tmp_path):
+    """„Ablage“ ist Apples deutscher Name für das Menü „File“; „Beenden“ mit
+    Cmd-Q steht schon im App-Menü."""
     system('darwin')
-    assert _menue(_fenster_starten(monkeypatch, tmp_path, cmd_q=False))['Datei'] == [
-        'Drucken', '—', 'Mit einem Server verbinden …']
+    menue = _menue(_fenster_starten(monkeypatch, tmp_path))
+    assert list(menue) == ['Ablage', 'Hilfe']
+    assert menue['Ablage'] == ['Fenster zeigen', '—', 'Drucken', '—',
+                               'Mit einem Server verbinden …']
+
+
+def _aktion(ablauf, menue, titel):
+    eintrag = next(m for m in ablauf['menue'] if m.titel == menue)
+    return next(e for e in eintrag.inhalt if e.titel == titel).inhalt
+
+
+@pytest.mark.parametrize('menue, titel', [
+    ('Ablage', 'Fenster zeigen'), ('Ablage', 'Drucken'), ('Ablage', 'Mit einem Server verbinden …'),
+    ('Hilfe', 'Passwort vergessen …'), ('Hilfe', f'Über {desktop.TITEL}'),
+])
+def test_menue_holt_das_versteckte_fenster_zurueck(system, monkeypatch, tmp_path, menue, titel):
+    """Nach dem roten Knopf bleibt die Menüleiste; eine Aktion, die im
+    Fenster wirkt, darf dann nicht unsichtbar ins Leere laufen (Review C, R1/R2).
+    Cmd-Tab zur App schickt kein Ereignis wie der Klick aufs Dock-Symbol."""
+    system('darwin')
+    ablauf = _fenster_starten(monkeypatch, tmp_path, 'zu')
+    assert ablauf['fenster'].sichtbar is False
+    _aktion(ablauf, menue, titel)()
+    assert ablauf['fenster'].sichtbar is True
 
 
 def test_menue_unter_windows_wortgleich(system, monkeypatch, tmp_path):
     system('win32')
-    assert _menue(_fenster_starten(monkeypatch, tmp_path, cmd_q=False)) == {
+    assert _menue(_fenster_starten(monkeypatch, tmp_path)) == {
         'Datei': ['Drucken', '—', 'Mit einem Server verbinden …', '—', 'Beenden'],
         'Hilfe': ['Passwort vergessen …', 'Datenordner anzeigen', '—',
                   'Über NebenkostenFix']}
+
+
+def test_standardmenues_unter_macos_auf_deutsch(system, monkeypatch, tmp_path):
+    """pywebview baut App-, Bearbeiten- und Ansicht-Menü sonst englisch."""
+    system('darwin')
+    texte = _fenster_starten(monkeypatch, tmp_path)['optionen']['localization']
+    assert texte == desktop.MENUE_TEXTE_MACOS
+    assert {texte['cocoa.menu.edit'], texte['cocoa.menu.view'], texte['cocoa.menu.paste']} == {
+        'Bearbeiten', 'Darstellung', 'Einsetzen'}
+    # Titel des Sichern-Dialogs (Datenauszug, Umzugspaket), sonst „Save file“
+    assert texte['global.saveFile'] == 'Sichern' and texte['global.cancel'] == 'Abbrechen'
+
+
+def test_standardmenues_unter_windows_unveraendert(system, monkeypatch, tmp_path):
+    system('win32')
+    assert 'localization' not in _fenster_starten(monkeypatch, tmp_path)['optionen']
 
 
 def test_datenordner_anzeigen_nimmt_das_standardprogramm(system, monkeypatch, tmp_path):
     system('darwin')
     geoeffnet = []
     monkeypatch.setattr(desktop, 'standardprogramm_oeffnen', geoeffnet.append)
-    ablauf = _fenster_starten(monkeypatch, tmp_path, cmd_q=False)
+    ablauf = _fenster_starten(monkeypatch, tmp_path)
     hilfe = next(m for m in ablauf['menue'] if m.titel == 'Hilfe')
     next(e for e in hilfe.inhalt if e.titel == 'Datenordner anzeigen').inhalt()
     assert geoeffnet == [tmp_path / 'daten']
@@ -416,12 +506,118 @@ def test_webview_speicher_unter_macos_ohne_eigenen_ordner(system, monkeypatch, t
     """WKWebView ignoriert ``storage_path`` (pywebview#1714) und legt die
     Daten nach der Bundle-ID ab; ein Ordner „WebView2“ bliebe leer."""
     system('darwin')
-    optionen = _fenster_starten(monkeypatch, tmp_path, cmd_q=False)['optionen']
+    optionen = _fenster_starten(monkeypatch, tmp_path)['optionen']
     assert 'storage_path' not in optionen and optionen['private_mode'] is False
 
 
 def test_webview_speicher_unter_windows_wie_bisher(system, monkeypatch, tmp_path):
     system('win32')
-    optionen = _fenster_starten(monkeypatch, tmp_path, cmd_q=False)['optionen']
+    optionen = _fenster_starten(monkeypatch, tmp_path)['optionen']
     assert optionen['storage_path'] == str(tmp_path / 'lokal' / 'NebenkostenFix' / 'WebView2')
     assert optionen['private_mode'] is False
+
+
+# --- Menüleiste und Fenster ohne AppKit --------------------------------------
+
+class _Eintrag:
+    def __init__(self, titel, aktion=None, untermenue=None):
+        self._titel, self._aktion, self._untermenue = titel, aktion, untermenue
+
+    def title(self):
+        return self._titel
+
+    def setTitle_(self, titel):
+        self._titel = titel
+
+    def action(self):
+        return self._aktion
+
+    def submenu(self):
+        return self._untermenue
+
+
+class _Menue:
+    """Die Methoden von NSMenu, die ``_menueleiste_ordnen`` braucht."""
+    def __init__(self, eintraege):
+        self.eintraege = list(eintraege)
+
+    def itemArray(self):
+        return list(self.eintraege)
+
+    def itemAtIndex_(self, index):
+        return self.eintraege[index]
+
+    def indexOfItemWithTitle_(self, titel):
+        return next((i for i, e in enumerate(self.eintraege) if e.title() == titel), -1)
+
+    def removeItemAtIndex_(self, index):
+        del self.eintraege[index]
+
+    def insertItem_atIndex_(self, eintrag, index):
+        self.eintraege.insert(index, eintrag)
+
+
+def _leiste_wie_pywebview(selektor=str):
+    """So baut pywebview 6.2.1 die Leiste mit den deutschen Texten: Bearbeiten
+    und Darstellung an Index 1, eigene Menüs hinten, der App-Name hinten an.
+    Menüs ohne eigenen Titel heißen dort „NSMenuItem“. ``action()`` liefert
+    mit PyObjC 12 einen ``str``, ältere Fassungen ``bytes``."""
+    def aktion(name):
+        return name.encode('ascii') if selektor is bytes else name
+    app = _Menue([_Eintrag('Über NebenkostenFix', aktion('orderFrontStandardAboutPanel:')),
+                  _Eintrag('Dienste'),
+                  _Eintrag('ausblenden NebenkostenFix', aktion('hide:')),
+                  _Eintrag('Andere ausblenden', aktion('hideOtherApplications:')),
+                  _Eintrag('Alle einblenden', aktion('unhideAllApplications:')),
+                  _Eintrag('beenden NebenkostenFix', aktion('terminate:'))])
+    return _Menue([_Eintrag('NSMenuItem', untermenue=app), _Eintrag('NSMenuItem'),
+                   _Eintrag('NSMenuItem'), _Eintrag('Ablage'), _Eintrag('Hilfe')])
+
+
+def test_menueleiste_in_der_reihenfolge_von_macos():
+    leiste = _leiste_wie_pywebview()
+    desktop._menueleiste_ordnen(leiste)
+    assert [e.title() for e in leiste.itemArray()] == [
+        'NSMenuItem', 'Ablage', 'NSMenuItem', 'NSMenuItem', 'Hilfe']
+    desktop._menueleiste_ordnen(leiste)   # pywebview baut die Leiste neu: bleibt so
+    assert [e.title() for e in leiste.itemArray()][1] == 'Ablage'
+
+
+@pytest.mark.parametrize('selektor', [str, bytes])
+def test_app_menue_mit_dem_namen_vorn(selektor):
+    leiste = _leiste_wie_pywebview(selektor)
+    desktop._menueleiste_ordnen(leiste)
+    titel = [e.title() for e in leiste.itemAtIndex_(0).submenu().itemArray()]
+    assert 'NebenkostenFix ausblenden' in titel and 'NebenkostenFix beenden' in titel
+    assert 'Über NebenkostenFix' in titel
+
+
+def test_mac_fenster_ohne_appkit():
+    fenster = _Fenster()
+    beendet = []
+    mac = desktop.MacFenster(fenster, lambda: beendet.append(True))
+    assert mac.schliessen() is False and fenster.sichtbar is False and beendet == []
+    mac.wieder_oeffnen(sichtbar=True)          # schon ein Fenster da: nichts tun
+    assert fenster.sichtbar is False
+    mac.wieder_oeffnen(sichtbar=False)
+    assert fenster.sichtbar is True
+    mac.beenden_angefordert()
+    assert mac.schliessen() is None and beendet == [True]
+
+
+def test_pywebview_hat_die_stellen_fuer_die_anpassung():
+    """``_macos_anpassen`` greift in pywebview ein (Delegate, Menüaufbau);
+    eine öffentliche Stelle dafür gibt es nicht. Ändert ein Update sie, wird
+    das hier rot statt erst auf dem Mac sichtbar."""
+    cocoa = pytest.importorskip('webview.platforms.cocoa')
+    assert hasattr(cocoa.BrowserView, '_recreate_menus')
+    assert hasattr(cocoa.BrowserView, '_shared_app_delegate')
+    assert hasattr(cocoa.BrowserView.AppDelegate, 'applicationShouldTerminate_')
+
+
+def test_macos_anpassung_nur_einmal(monkeypatch):
+    """Ein zweiter Aufruf würde die ObjC-Klasse neu anlegen (objc.error) und
+    den Menüaufbau doppelt umhüllen (Review C, R5)."""
+    monkeypatch.setattr(desktop, '_MACOS_ANGEPASST', True)
+    desktop._macos_anpassen(object())   # kehrt zurück, ohne pywebview anzufassen
+
