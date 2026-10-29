@@ -178,6 +178,18 @@ def test_genau_ein_viertel_ist_nicht_ueberschritten(haus):
     b = _einziger(haus)
     assert '(25,0 %)' in b['text'] and 'Bis zu einem Viertel' in b['text']
     assert 'ausschließlich nach Fläche' not in b['text']
+    assert 'So schätzt die App nicht: sie setzt ohne zwei Ablesungen 0 an.' in b['text']
+
+
+def test_luecke_bis_ein_viertel_sagt_hochrechnen_ohne_widerspruch(haus):
+    # Die Lücke rechnet der Kern hoch -- „die App schätzt nicht“ wäre falsch.
+    _zwei(haus, 80, 20, ((D(2024, 1, 1), 0), (D(2024, 3, 1), 50)))
+    text = _einziger(haus)['text']
+    assert 'den Rest rechnet die Abrechnung hoch' in text
+    assert 'schätzt aber nicht selbst' not in text
+    assert ('aus vergleichbaren früheren Zeiträumen oder Räumen. So schätzt die App '
+            'nicht: sie rechnet Lücken nach Tagen bzw. Gradtagen hoch.') in text
+    assert 'setzt ohne zwei Ablesungen 0 an' not in text
 
 
 def test_knapp_ueber_ein_viertel_erscheint_nicht_als_25(haus):

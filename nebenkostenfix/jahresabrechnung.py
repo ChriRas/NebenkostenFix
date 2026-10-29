@@ -250,8 +250,15 @@ def _schaetzquote(rechnungen, mieter, von, bis) -> list:
                      'verteilen. Das kann die App noch nicht – verschicken Sie die Abrechnung '
                      'für diese Anlage so nicht.')
         else:
+            # Der Kern schätzt durchaus, nur nicht nach § 9a Abs. 1: der Satz nennt, was er tut.
+            tut = []
+            if any(w['abgedeckt'] is None for w in q['wohnungen']):
+                tut.append('setzt ohne zwei Ablesungen 0 an')
+            if any(w['abgedeckt'] is not None for w in q['wohnungen']):
+                tut.append('rechnet Lücken nach Tagen bzw. Gradtagen hoch')
             text += (' Bis zu einem Viertel der Fläche erlaubt § 9a Abs. 1 HeizkostenV eine '
-                     'Schätzung; die App schätzt aber nicht selbst.')
+                     'Schätzung aus vergleichbaren früheren Zeiträumen oder Räumen. So schätzt '
+                     f'die App nicht: sie {" und ".join(tut)}.')
         befunde.append(_befund(
             'schaetzquote', text,
             'Tragen Sie die fehlenden Ablesungen nach oder prüfen Sie die Zählerstände.',
