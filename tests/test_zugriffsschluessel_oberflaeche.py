@@ -70,8 +70,11 @@ def test_die_seite_hat_die_karte():
                     'zugriffsschluessel-wert'):
         assert f'id="{kennung}"' in karte, kennung
     assert 'value="lesen"' in karte and 'value="erfassen"' in karte
-    # Wer „API-Key“ sucht, soll die Karte finden; der deutsche Begriff führt.
-    assert '<h3>Zugriffsschlüssel (API-Key)</h3>' in karte
+    # Die Überschrift folgt dem Glossar (Review zu #48). Wer „API-Key“
+    # sucht, findet die Karte über das Handbuch.
+    assert '<h3>Zugriffsschlüssel</h3>' in karte
+    handbuch = (WURZEL / 'docs' / 'handbuch' / 'handbuch.md').read_text(encoding='utf-8')
+    assert '**Zugriffsschlüssel** (englisch API-Key)' in handbuch
     # Der Schlüssel erscheint nur einmal, darum keine Spalte mit seinen
     # ersten Zeichen.
     assert 'Beginnt mit' not in karte
