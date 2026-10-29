@@ -1125,6 +1125,18 @@ def test_datenordner_schalter_erzwingt_lokal(lokal, monkeypatch):
     assert lokal_gestartet == [lokal / 'daten']
 
 
+
+def test_webview2_spricht_deutsch(lokal, monkeypatch):
+    """Formulare: Kalender, Datei-Knopf und Blasen folgen sonst der
+    Windows-Anzeigesprache; ein eigener Wert des Nutzers bleibt stehen."""
+    monkeypatch.setattr(desktop, 'fenster_starten', lambda ordner: 0)
+    monkeypatch.delenv('WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS', raising=False)
+    assert desktop.main(['--datenordner', str(lokal / 'daten')]) == 0
+    assert os.environ['WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS'] == '--lang=de-DE'
+    monkeypatch.setenv('WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS', '--lang=fr-FR')
+    assert desktop.main(['--datenordner', str(lokal / 'daten')]) == 0
+    assert os.environ['WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS'] == '--lang=fr-FR'
+
 def test_ohne_server_eintrag_bleibt_alles_lokal(lokal, monkeypatch):
     lokal_gestartet = []
     monkeypatch.setattr(desktop, 'server_fenster_starten',

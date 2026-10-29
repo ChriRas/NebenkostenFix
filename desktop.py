@@ -975,6 +975,8 @@ def main(argv: list[str] | None = None) -> int:
     if argumente.selbsttest:
         ordner = Path(argumente.datenordner or tempfile.mkdtemp(prefix='nk-selbsttest-'))
         return selbsttest(ordner, argumente.bericht)
+    # Datei-Knopf, Kalender und Blasen folgen sonst der Windows-Anzeigesprache.
+    os.environ.setdefault('WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS', '--lang=de-DE')
     if not argumente.datenordner:
         # Servermodus (#45) vor jeder Frage nach dem Datenordner: er wird
         # weder geöffnet noch angelegt. --datenordner heißt immer lokal.
