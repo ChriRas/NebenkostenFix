@@ -473,6 +473,20 @@ class Lauf:
             'tenant_id': mieter, 'amount': '80.00', 'type': 'Nebenkostenvorauszahlung',
             'payment_date': '2026-01-03'}, schluessel=erfassen)
 
+        # Eine Serie ab einem vorhandenen Soll laesst es stehen: berichtigen
+        # darf nur der Mensch (Review zu #48).
+        self._ruf('POST', f'/api/tenants/{mieter}/vorauszahlung_soll',
+                  {'gueltig_ab': '2026-01-01', 'betrag': '80.00'})
+        serie = self._ruf('POST', '/api/payments', {
+            'tenant_id': mieter, 'amount': '1.00', 'type': 'Nebenkostenvorauszahlung',
+            'payment_date': '2026-01-01', 'end_date': '2026-02-28', 'is_recurring': True},
+            schluessel=erfassen)
+        soll = self._ruf('GET', f'/api/tenants/{mieter}/vorauszahlungen',
+                         schluessel=lesen)['soll']
+        if not serie.get('soll_unveraendert') or \
+                [(s['gueltig_ab'], s['betrag']) for s in soll] != [('2026-01-01', '80.00')]:
+            raise Abbruch(f'Die Serie mit Schluessel hat das Soll veraendert: {soll!r}')
+
         # Was nur die Oberflaeche darf
         self._erwarte(403, 'DELETE', f'/api/invoices/{mit_beleg}', erfassen)
         self._erwarte(403, 'GET', '/api/export', erfassen)
@@ -485,7 +499,7 @@ class Lauf:
             self._ruf('DELETE', f'/api/zugriffsschluessel/{eintrag["id"]}')
         self._erwarte(401, 'GET', '/api/properties', erfassen)
         return ('lesen, pruefen, Rechnung mit Beleg, Sammelbeleg, Zaehlerstand, '
-                'Zahlung; Sperren 403, nach dem Widerruf 401')
+                'Zahlung, Soll bleibt; Sperren 403, nach dem Widerruf 401')
 
     def _bindziele(self) -> list[str]:
         """Wohin docker-compose.yml die Bind-Mounts im Container legt.

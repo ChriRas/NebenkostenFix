@@ -18,7 +18,10 @@ bis jemand sie bewusst in eine Liste schreibt. ``NIE_PER_SCHLUESSEL`` ist
 das zweite Netz: was dort steht, darf in keine der beiden Listen, das prueft
 ``tests/test_zugriffsschluessel.py``, ebenso dass jede DELETE-Route dort
 steht. „erfassen“ heisst anlegen, nie aendern: ``AENDERT_BESTEHENDES`` sperrt
-Felder, mit denen ein Anlege-Endpunkt nebenbei Vorhandenes umschreibt.
+Felder, mit denen ein Anlege-Endpunkt nebenbei Vorhandenes umschreibt. Wo
+das am Bestand haengt und nicht an einem Feld, fragt der Endpunkt selbst
+nach ``aktueller()``: eine Zahlungsserie mit Schluessel legt ein Soll an,
+berichtigt aber keins (``add_payment`` in app.py).
 
 Verwalten (anlegen, auflisten, widerrufen) geht nur mit Sitzung, also nur
 durch den Menschen in der Oberflaeche. Im offenen Modus (NK-198) gibt es
