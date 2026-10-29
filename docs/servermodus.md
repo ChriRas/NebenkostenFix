@@ -31,6 +31,10 @@ Server im eigenen Fenster, wie ein Browser, nur ohne Adressleiste.
   „(unverschlüsselt)“. Nach der Prüfung folgt er der geprüften Adresse, also ohne den
   Zusatz, wenn der Server von `http://` auf `https://` weiterleitet. Dazu zeigen Kopfzeile
   und Einstellungen die Verbindung (siehe „Woran man den Servermodus erkennt“).
+- **Unter macOS (#44):** Das Menü heißt „Ablage“ und beginnt mit „Fenster zeigen“,
+  beendet wird mit Cmd-Q im App-Menü. Der rote Knopf versteckt das Fenster nur, wie im
+  lokalen Modus. Die INI liegt in `~/Library/Application Support/NebenkostenFix/`. Ein
+  Update installiert die Mac-App nicht selbst, sie bietet deshalb auch keins an.
 - **Updates:** Auch im Servermodus sucht die App beim Start nach einer neuen Version (von
   der Projektseite, nicht vom Server). Sie fragt vor der Installation und startet danach
   wieder im Servermodus. Gemerkt wird der Zeitpunkt der Suche im lokalen App-Ordner, nicht
@@ -175,7 +179,8 @@ die Anmeldung zusätzlich den Ordner `WebView2`).
   nicht, weil der Datenordner zu bleibt. Die App sucht dort höchstens einmal in
   24 Stunden und fragt vor jeder Installation.
 - Eine Server-Seite kann die Rückfrage zum Rückweg nach einer Ablehnung erneut öffnen, frühestens
-  nach 10 Sekunden und nie zwei zugleich. Dazwischen sind Menü und Datei → Beenden erreichbar.
+  nach 10 Sekunden und nie zwei zugleich. Dazwischen sind Menü und Datei → Beenden erreichbar
+  (unter macOS Cmd-Q, siehe „Unter macOS“ oben).
 - Nicht im MVP: mehrere Server, Installer-Schalter
   `/SERVER=`, Ausnahmen für selbstsignierte Zertifikate, Anmeldung über einen
   Identitätsanbieter, Offline-Zwischenspeicher, eigener Umzugsassistent, Unterpfad hinter

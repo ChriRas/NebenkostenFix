@@ -200,7 +200,7 @@ class EineInstanz:
 def _meldung(text: str, frage: bool = False, hinweis: bool = False) -> bool:
     """Meldung im Stil des Systems; unter Windows eine MessageBox."""
     if aktualisierung.betriebssystem() == 'darwin':
-        return _meldung_macos(text, frage)
+        return _meldung_macos(text, frage, hinweis)
     if sys.platform == 'win32':  # pragma: no cover - Windows
         import ctypes
         # JA/NEIN + Frage, Hinweis (i) bzw. Fehler
@@ -210,7 +210,7 @@ def _meldung(text: str, frage: bool = False, hinweis: bool = False) -> bool:
     return False
 
 
-def _meldung_macos(text: str, frage: bool) -> bool:
+def _meldung_macos(text: str, frage: bool, hinweis: bool = False) -> bool:
     """Titel und Text gehen als Argumente an ``on run argv``, nie ins
     Skript: Ein Anführungszeichen im Pfad führt nichts aus."""
     if frage:
@@ -220,7 +220,8 @@ def _meldung_macos(text: str, frage: bool) -> bool:
                   'end run']
     else:
         zeilen = ['on run argv',
-                  'display alert (item 1 of argv) message (item 2 of argv) as critical',
+                  'display alert (item 1 of argv) message (item 2 of argv) as '
+                  + ('informational' if hinweis else 'critical'),
                   'end run']
     befehl = ['/usr/bin/osascript']
     for zeile in zeilen:
@@ -551,7 +552,8 @@ class ServerBruecke:
     Mit Absicht keine Unterklasse von ``Bruecke`` -- pywebview gäbe sonst
     Ordnerwahl, Umzug und Umschalten an eine Seite, die vom Server kommt.
     Jede Methode prüft zuerst, ob das Fenster noch dort ist. ``lokal_arbeiten``
-    öffnet nur die Rückfrage von Windows, wie Datei → Auf diesem Rechner arbeiten.
+    öffnet nur die Rückfrage des Systems, wie Datei → Auf diesem Rechner arbeiten
+    (unter macOS Ablage → …).
     """
 
     def __init__(self, basis: str):
@@ -581,7 +583,7 @@ class ServerBruecke:
 
     def lokal_arbeiten(self) -> bool:
         """#45: Rückweg aus den Einstellungen. Ohne Parameter; ob es geschieht,
-        entscheidet der Nutzer im Dialog von Windows."""
+        entscheidet der Nutzer im Dialog des Systems."""
         if self._zurueck is None or not _fenster_bei(self._fenster, self._basis):
             return False
         # Ruft die Seite nach jedem „Nein“ sofort wieder, käme man nie ans Menü.
@@ -834,7 +836,8 @@ class MacFenster:
     """Fenster zu heißt unter macOS nicht Programm zu: Der rote Knopf
     versteckt das Fenster, die App bleibt mit Punkt im Dock aktiv, ein Klick
     aufs Dock-Symbol holt es zurück. Erst Beenden (Cmd-Q, Dock, Abmelden)
-    hält den Server an. pywebview ruft in beiden Fällen ``closing`` auf; was
+    räumt über ``beim_beenden`` auf: lokal hält es den Server an, im
+    Servermodus gibt es die Sperre frei. pywebview ruft in beiden Fällen ``closing`` auf; was
     gemeint ist, erfährt diese Klasse vom App-Delegate (_macos_anpassen)."""
 
     def __init__(self, fenster, beim_beenden):
@@ -909,6 +912,48 @@ def _macos_anpassen(mac_fenster: MacFenster) -> None:  # pragma: no cover - brau
     cocoa.BrowserView._shared_app_delegate = NebenkostenFixAppDelegate.alloc().init()
 
 
+def _nach_systemart(fenster, nach_vorne, beim_beenden):
+    """Was beide Fenster, lokal und im Servermodus, unter macOS anders
+    machen (#44): Der rote Knopf versteckt nur, Cmd-Q räumt über
+    ``beim_beenden`` auf, und was im Fenster wirkt, holt es erst nach vorn.
+
+    Liefert ``im_fenster``, ``erstes_menue(eintraege)`` und die Optionen für
+    ``webview.start``. Einmal je Prozess und vor ``webview.start`` aufrufen:
+    Ein zweiter Aufruf hängte sein Fenster nicht mehr an den App-Delegate
+    (siehe ``_macos_anpassen``), Cmd-Q versteckte es dann nur."""
+    from webview.menu import Menu, MenuAction, MenuSeparator
+
+    macos = aktualisierung.betriebssystem() == 'darwin'
+    if macos:
+        mac_fenster = MacFenster(fenster, beim_beenden)
+        fenster.events.closing += mac_fenster.schliessen
+        _macos_anpassen(mac_fenster)
+
+    def im_fenster(aktion):
+        """Unter macOS kann das Fenster versteckt sein (roter Knopf), die
+        Menüleiste bleibt: Was im Fenster wirkt, holt es erst nach vorn."""
+        if not macos:
+            return aktion
+
+        def vorn_dann_aktion():
+            nach_vorne()
+            return aktion()
+        return vorn_dann_aktion
+
+    def erstes_menue(eintraege):
+        if macos:   # Cmd-Tab zur App holt das Fenster nicht von selbst zurück
+            return Menu(ABLAGE, [MenuAction('Fenster zeigen', nach_vorne), MenuSeparator()]
+                        + eintraege)
+        # Windows braucht „Beenden“; macOS hat es mit Cmd-Q im App-Menü.
+        return Menu('Datei', eintraege + [MenuSeparator(), MenuAction('Beenden', fenster.destroy)])
+
+    # Unter macOS deutsche Standardmenüs. WKWebView ignoriert storage_path und
+    # legt die Daten nach der Bundle-ID ab (pywebview#1714); der Ordner bliebe leer.
+    optionen = {'localization': MENUE_TEXTE_MACOS} if macos else {
+        'storage_path': str(windows_ordner.lokaler_ordner() / 'WebView2')}
+    return im_fenster, erstes_menue, optionen
+
+
 def fenster_starten(datenordner: Path) -> int:  # pragma: no cover - braucht GUI
     import webview
     from webview.menu import Menu, MenuAction, MenuSeparator
@@ -963,42 +1008,22 @@ def fenster_starten(datenordner: Path) -> int:  # pragma: no cover - braucht GUI
         if 'basis' in zustand:
             fenster.load_url(f"{zustand['basis']}/huelle/passwort")
 
-    macos = aktualisierung.betriebssystem() == 'darwin'
-    if macos:
-        # Cmd-Q beendet den Prozess, ohne dass webview.start zurückkehrt;
-        # vorher kommt nur noch closing (#44).
-        def beim_beenden():
-            if 'server' in zustand:
-                anhalten(zustand.pop('server'), zustand['app_modul'])
-            instanz.freigeben()
-        mac_fenster = MacFenster(fenster, beim_beenden)
-        fenster.events.closing += mac_fenster.schliessen
-        _macos_anpassen(mac_fenster)
+    # Cmd-Q beendet unter macOS den Prozess, ohne dass webview.start
+    # zurückkehrt; vorher kommt nur noch closing (#44).
+    def beim_beenden():
+        if 'server' in zustand:
+            anhalten(zustand.pop('server'), zustand['app_modul'])
+        instanz.freigeben()
 
-    def im_fenster(aktion):
-        """Unter macOS kann das Fenster versteckt sein (roter Knopf), die
-        Menüleiste bleibt: Was im Fenster wirkt, holt es erst nach vorn."""
-        if not macos:
-            return aktion
-
-        def vorn_dann_aktion():
-            nach_vorne()
-            aktion()
-        return vorn_dann_aktion
-
-    datei = [
-        MenuAction('Drucken', im_fenster(lambda: fenster.evaluate_js('window.print()'))),
-        MenuSeparator(),
-        # #45: der Weg zum Server, auch wenn die Übersicht schon Objekte zeigt.
-        MenuAction('Mit einem Server verbinden …',
-                   im_fenster(lambda: fenster.evaluate_js('zeigeServerKarte()'))),
-    ]
-    if macos:   # Cmd-Tab zur App holt das Fenster nicht von selbst zurück
-        datei = [MenuAction('Fenster zeigen', nach_vorne), MenuSeparator()] + datei
-    else:       # macOS hat „Beenden“ mit Cmd-Q im App-Menü
-        datei += [MenuSeparator(), MenuAction('Beenden', fenster.destroy)]
+    im_fenster, erstes_menue, optionen = _nach_systemart(fenster, nach_vorne, beim_beenden)
     menue = [
-        Menu(ABLAGE if macos else 'Datei', datei),
+        erstes_menue([
+            MenuAction('Drucken', im_fenster(lambda: fenster.evaluate_js('window.print()'))),
+            MenuSeparator(),
+            # #45: der Weg zum Server, auch wenn die Übersicht schon Objekte zeigt.
+            MenuAction('Mit einem Server verbinden …',
+                       im_fenster(lambda: fenster.evaluate_js('zeigeServerKarte()'))),
+        ]),
         Menu('Hilfe', [
             MenuAction('Passwort vergessen …', im_fenster(passwort_seite)),
             MenuAction('Datenordner anzeigen',
@@ -1009,10 +1034,6 @@ def fenster_starten(datenordner: Path) -> int:  # pragma: no cover - braucht GUI
                        im_fenster(lambda: fenster.evaluate_js("zeigeHilfe('hilfe-ueber')"))),
         ]),
     ]
-    # Unter macOS deutsche Standardmenüs. WKWebView ignoriert storage_path und
-    # legt die Daten nach der Bundle-ID ab (pywebview#1714); der Ordner bliebe leer.
-    optionen = {'localization': MENUE_TEXTE_MACOS} if macos else {
-        'storage_path': str(windows_ordner.lokaler_ordner() / 'WebView2')}
     try:
         webview.start(hochfahren, menu=menue, private_mode=False, **optionen)
     finally:
@@ -1026,6 +1047,7 @@ def fenster_starten(datenordner: Path) -> int:  # pragma: no cover - braucht GUI
 
 def offline_seite(meldung: str, adresse: str) -> str:
     """Servermodus ohne Verbindung. Keine Knöpfe: der Weg führt über das Menü."""
+    datei = ABLAGE if aktualisierung.betriebssystem() == 'darwin' else 'Datei'
     schleife = ''
     if adresse.startswith('http://'):
         schleife = ('<p>Sie werden immer wieder zur Anmeldung geschickt? Dann erwartet der '
@@ -1035,8 +1057,8 @@ def offline_seite(meldung: str, adresse: str) -> str:
         'body{font-family:"Segoe UI",system-ui,sans-serif;background:#F3F4F6;color:#111827;'
         'padding:48px;line-height:1.6}h1{font-size:22px}</style></head><body>'
         '<h1>Keine Verbindung zum Server</h1>'
-        f'<p>{html.escape(meldung)} Versuchen Sie es über <em>Datei → Neu laden</em> erneut. '
-        'Mit <em>Datei → Auf diesem Rechner arbeiten …</em> kommen Sie zurück zu Ihren '
+        f'<p>{html.escape(meldung)} Versuchen Sie es über <em>{datei} → Neu laden</em> erneut. '
+        f'Mit <em>{datei} → Auf diesem Rechner arbeiten …</em> kommen Sie zurück zu Ihren '
         f'lokalen Daten.</p>{schleife}'
         f'<p><code>{html.escape(adresse)}</code></p></body></html>')
 
@@ -1144,16 +1166,21 @@ def server_fenster_starten(adresse: str) -> int:
         _meldung(f'{TITEL} {SOFTWARE_VERSION}. Verbunden mit {zustand["basis"] or adresse}.',
                  hinweis=True)
 
+    def nach_vorne():
+        fenster.restore()
+        fenster.show()
+
+    # Kein lokaler Server: Beim Beenden ist nur die Sperre freizugeben.
+    im_fenster, erstes_menue, optionen = _nach_systemart(fenster, nach_vorne, instanz.freigeben)
     # Kein evaluate_js in die Seite (fremder Code, womöglich andere Version),
     # kein „Passwort vergessen“ (lokale Route).
     menue = [
-        Menu('Datei', [
-            MenuAction('Drucken', lambda: fenster.evaluate_js('window.print()')),
-            MenuAction('Neu laden', lambda: threading.Thread(target=laden, daemon=True).start()),
+        erstes_menue([
+            MenuAction('Drucken', im_fenster(lambda: fenster.evaluate_js('window.print()'))),
+            MenuAction('Neu laden', im_fenster(
+                lambda: threading.Thread(target=laden, daemon=True).start())),
             MenuSeparator(),
-            MenuAction('Auf diesem Rechner arbeiten …', zurueck),
-            MenuSeparator(),
-            MenuAction('Beenden', fenster.destroy),
+            MenuAction('Auf diesem Rechner arbeiten …', im_fenster(zurueck)),
         ]),
         Menu('Hilfe', [MenuAction(f'Über {marke.PRODUKT}', ueber)]),
     ]
@@ -1163,9 +1190,8 @@ def server_fenster_starten(adresse: str) -> int:
         # Das Update kommt von der Projektseite, nicht vom Server: auch offline.
         threading.Thread(target=update_anbieten, args=(fenster,), daemon=True).start()
 
-    speicher = windows_ordner.lokaler_ordner() / 'WebView2'
     try:
-        webview.start(hochfahren, menu=menue, private_mode=False, storage_path=str(speicher))
+        webview.start(hochfahren, menu=menue, private_mode=False, **optionen)
     finally:
         instanz.freigeben()
     if zustand.get('neustart'):

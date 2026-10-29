@@ -158,6 +158,20 @@ def test_frage_unter_macos(system, aufrufe, ausgabe, code, antwort):
     assert '"Nein"' in skript and '"Ja"' in skript
 
 
+def test_hinweis_unter_macos_mit_dem_symbol_fuer_information(system, aufrufe):
+    """„Über NebenkostenFix“ im Servermodus ist kein Fehler (#45)."""
+    system('darwin')
+    desktop._meldung('NebenkostenFix 0.18.0.', hinweis=True)
+    skript = ' '.join(aufrufe.liste[0][0][1:-2])
+    assert 'as informational' in skript and 'critical' not in skript
+
+
+def test_fehler_unter_macos_weiter_mit_dem_symbol_fuer_fehler(system, aufrufe):
+    system('darwin')
+    desktop._meldung('Ordner fehlt.')
+    assert 'as critical' in ' '.join(aufrufe.liste[0][0][1:-2])
+
+
 @pytest.mark.skipif(sys.platform == 'win32', reason='unter Windows kommt die MessageBox')
 def test_meldung_unter_linux_nur_im_protokoll(system, aufrufe):
     system('linux')
@@ -292,15 +306,22 @@ class _Ereignis(list):
 
 class _Fenster:
     def __init__(self):
-        self.events = types.SimpleNamespace(closing=_Ereignis())
+        self.events = types.SimpleNamespace(closing=_Ereignis(), loaded=_Ereignis())
         self.skripte = []
         self.sichtbar = True
+        self.html = []
 
     def load_url(self, adresse):
         pass
 
     def load_html(self, text):
+        self.html.append(text)
+
+    def set_title(self, titel):
         pass
+
+    def create_confirmation_dialog(self, titel, text):
+        return False
 
     def evaluate_js(self, skript):
         self.skripte.append(skript)
@@ -315,11 +336,11 @@ class _Fenster:
         self.sichtbar = True
 
     def restore(self):
-        pass
+        self.nach_vorn = getattr(self, 'nach_vorn', 0) + 1
 
 
-def _fenster_starten(monkeypatch, tmp_path, *schritte):
-    """fenster_starten mit einem nachgebauten pywebview. Die Schritte:
+def _webview_nachbauen(monkeypatch, tmp_path, starten, *schritte):
+    """Ruft ``starten`` mit einem nachgebauten pywebview. Die Schritte:
 
     ``zu``     roter Knopf oder Cmd-W: pywebview ruft ``closing`` auf,
     ``dock``   Klick aufs Dock-Symbol ohne sichtbares Fenster,
@@ -354,6 +375,9 @@ def _fenster_starten(monkeypatch, tmp_path, *schritte):
                     ablauf['beim_ende'] = list(ablauf['angehalten'])
                     ablauf['instanz_beim_ende'] = (
                         tmp_path / 'lokal' / 'NebenkostenFix' / 'instanz.json').exists()
+                    probe = desktop.EineInstanz(tmp_path / 'lokal' / 'NebenkostenFix')
+                    ablauf['sperre_frei_beim_ende'] = probe.erwerben()
+                    probe.freigeben()
                     raise SystemExit(0)
 
     class Eintrag:
@@ -369,18 +393,36 @@ def _fenster_starten(monkeypatch, tmp_path, *schritte):
     monkeypatch.setitem(sys.modules, 'webview', webview)
     monkeypatch.setitem(sys.modules, 'webview.menu', menue)
 
+    monkeypatch.setattr(desktop, 'anhalten',
+                        lambda s, modul: ablauf['angehalten'].append(s))
+    monkeypatch.setattr(desktop, 'neu_starten', lambda: ablauf.__setitem__('neu_gestartet', True))
+    try:
+        starten()
+    except SystemExit:
+        pass
+    ablauf['fenster'] = fenster
+    return ablauf
+
+
+def _fenster_starten(monkeypatch, tmp_path, *schritte):
+    """fenster_starten (lokal) mit einem nachgebauten pywebview."""
     server = types.SimpleNamespace(effective_port=1234)
     monkeypatch.setattr(desktop, 'anwendung_laden', lambda ordner: types.SimpleNamespace(app=None))
     monkeypatch.setattr(desktop, 'server_starten', lambda wsgi: (server, None))
-    monkeypatch.setattr(desktop, 'anhalten',
-                        lambda s, modul: ablauf['angehalten'].append(s))
-    try:
-        desktop.fenster_starten(tmp_path / 'daten')
-    except SystemExit:
-        pass
+    ablauf = _webview_nachbauen(monkeypatch, tmp_path,
+                                lambda: desktop.fenster_starten(tmp_path / 'daten'), *schritte)
     ablauf['server'] = server
-    ablauf['fenster'] = fenster
     return ablauf
+
+
+def _server_fenster_starten(monkeypatch, tmp_path, *schritte):
+    """server_fenster_starten (Servermodus, #45) ohne Netz: Der Server
+    antwortet nicht, das Fenster zeigt die Offline-Seite."""
+    monkeypatch.setattr(desktop, 'server_pruefen', lambda adresse: (False, 'Offline.', None))
+    monkeypatch.setattr(desktop, 'update_anbieten', lambda fenster: None)
+    return _webview_nachbauen(
+        monkeypatch, tmp_path, lambda: desktop.server_fenster_starten('https://nas.example'),
+        *schritte)
 
 
 def _menue(ablauf):
@@ -515,6 +557,96 @@ def test_webview_speicher_unter_windows_wie_bisher(system, monkeypatch, tmp_path
     optionen = _fenster_starten(monkeypatch, tmp_path)['optionen']
     assert optionen['storage_path'] == str(tmp_path / 'lokal' / 'NebenkostenFix' / 'WebView2')
     assert optionen['private_mode'] is False
+
+
+# --- Servermodus (#45) wie eine Mac-App --------------------------------------
+
+def test_server_menue_unter_macos_heisst_ablage_ohne_zweites_beenden(
+        system, monkeypatch, tmp_path):
+    system('darwin')
+    assert _menue(_server_fenster_starten(monkeypatch, tmp_path)) == {
+        'Ablage': ['Fenster zeigen', '—', 'Drucken', 'Neu laden', '—',
+                   'Auf diesem Rechner arbeiten …'],
+        'Hilfe': ['Über NebenkostenFix']}
+
+
+def test_server_menue_unter_windows_wortgleich(system, monkeypatch, tmp_path):
+    system('win32')
+    assert _menue(_server_fenster_starten(monkeypatch, tmp_path)) == {
+        'Datei': ['Drucken', 'Neu laden', '—', 'Auf diesem Rechner arbeiten …', '—', 'Beenden'],
+        'Hilfe': ['Über NebenkostenFix']}
+
+
+def test_roter_knopf_versteckt_im_servermodus_nur_das_fenster(system, monkeypatch, tmp_path):
+    system('darwin')
+    ablauf = _server_fenster_starten(monkeypatch, tmp_path, 'zu')
+    assert ablauf['zu'] == [False]
+    assert ablauf['fenster'].sichtbar is False
+
+
+def test_dock_holt_das_server_fenster_zurueck(system, monkeypatch, tmp_path):
+    system('darwin')
+    ablauf = _server_fenster_starten(monkeypatch, tmp_path, 'zu', 'dock')
+    assert ablauf['fenster'].sichtbar is True
+
+
+def test_cmd_q_gibt_im_servermodus_die_instanz_frei(system, monkeypatch, tmp_path):
+    system('darwin')
+    ablauf = _server_fenster_starten(monkeypatch, tmp_path, 'zu', 'cmd_q')
+    assert ablauf['sperre_frei_beim_ende'] is True
+    assert ablauf['angehalten'] == []         # im Servermodus läuft kein lokaler Server
+
+
+@pytest.mark.parametrize('titel', ['Fenster zeigen', 'Drucken', 'Neu laden',
+                                   'Auf diesem Rechner arbeiten …'])
+def test_server_menue_holt_das_versteckte_fenster_zurueck(system, monkeypatch, tmp_path, titel):
+    system('darwin')
+    ablauf = _server_fenster_starten(monkeypatch, tmp_path, 'zu')
+    _aktion(ablauf, 'Ablage', titel)()
+    assert ablauf['fenster'].sichtbar is True
+
+
+def test_servermodus_unter_macos_mit_deutschen_standardmenues(system, monkeypatch, tmp_path):
+    system('darwin')
+    optionen = _server_fenster_starten(monkeypatch, tmp_path)['optionen']
+    assert optionen['localization'] == desktop.MENUE_TEXTE_MACOS
+    assert 'storage_path' not in optionen and optionen['private_mode'] is False
+
+
+def test_servermodus_unter_windows_ohne_mac_anpassung(system, monkeypatch, tmp_path):
+    system('win32')
+    ablauf = _server_fenster_starten(monkeypatch, tmp_path, 'zu')
+    assert 'mac' not in ablauf and list(ablauf['fenster'].events.closing) == []
+    assert ablauf['optionen'] == {
+        'private_mode': False,
+        'storage_path': str(tmp_path / 'lokal' / 'NebenkostenFix' / 'WebView2')}
+
+
+@pytest.mark.parametrize('starten, menue, titel', [
+    (_fenster_starten, 'Datei', 'Drucken'),
+    (_server_fenster_starten, 'Datei', 'Drucken'),
+    (_server_fenster_starten, 'Datei', 'Auf diesem Rechner arbeiten …'),
+])
+def test_menue_unter_windows_holt_das_fenster_nicht_nach_vorn(
+        system, monkeypatch, tmp_path, starten, menue, titel):
+    """Nur unter macOS umhüllt im_fenster die Aktion."""
+    system('win32')
+    ablauf = starten(monkeypatch, tmp_path)
+    _aktion(ablauf, menue, titel)()
+    assert getattr(ablauf['fenster'], 'nach_vorn', 0) == 0
+
+
+def test_offline_seite_nennt_unter_macos_die_ablage(system):
+    system('darwin')
+    seite = desktop.offline_seite('Offline.', 'https://nas.example')
+    assert 'Ablage → Neu laden' in seite and 'Ablage → Auf diesem Rechner arbeiten' in seite
+    assert 'Datei →' not in seite
+
+
+def test_offline_seite_unter_windows_wortgleich(system):
+    system('win32')
+    seite = desktop.offline_seite('Offline.', 'https://nas.example')
+    assert 'Datei → Neu laden' in seite and 'Datei → Auf diesem Rechner arbeiten' in seite
 
 
 # --- Menüleiste und Fenster ohne AppKit --------------------------------------
