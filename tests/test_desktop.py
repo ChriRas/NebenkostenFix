@@ -13,6 +13,7 @@ import json
 import os
 import subprocess
 import sys
+import types
 from pathlib import Path
 
 import pytest
@@ -586,3 +587,382 @@ def test_oeffnen_bekannte_typen_wie_bisher(oeffnen_umgebung):
     assert mit.suffix == '.html' and '#page=2' in mit.read_text(encoding='utf-8')
     assert [p.name for p in gestartet] == ['foto.JPG', 'scan.png', 'beleg.heic', 'r.pdf', 'r.html']
     assert bruecke._fenster.dialoge == []
+
+
+# --- Servermodus (#45, Commit 3) ---------------------------------------------
+
+@pytest.mark.parametrize('eingabe, erwartet', [
+    ('nk.example', 'https://nk.example'),
+    ('  https://NK.example/  ', 'https://nk.example'),
+    ('http://192.168.1.5:8080', 'http://192.168.1.5:8080'),
+    ('nk.example:6060', 'https://nk.example:6060'),
+    ('http://[::1]:8080/', 'http://[::1]:8080'),
+    ('https://nk.example/nk', None),
+    ('https://nk.example/?x=1', None),
+    ('https://nk.example/#a', None),
+    ('https://benutzer:geheim@nk.example', None),
+    ('https://benutzer@nk.example', None),
+    ('ftp://nk.example', None),
+    ('file:///C:/daten', None),
+    ('javascript:alert(1)', None),
+    ('https://', None),
+    ('https://nk.example:99999', None),
+    ('https://mein server', None),
+    ('', None),
+    (None, None),
+])
+def test_adresse_normieren(eingabe, erwartet):
+    assert desktop.adresse_normieren(eingabe) == erwartet
+
+
+@pytest.fixture
+def testserver():
+    """Ein echter HTTP-Server auf 127.0.0.1; ``antworten[pfad]`` = (Status, Köpfe, Inhalt)."""
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    antworten = {}
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            status, koepfe, inhalt = antworten.get(self.path, (404, {}, b'nicht da'))
+            self.send_response(status)
+            for name, wert in koepfe.items():
+                self.send_header(name, wert)
+            self.send_header('Content-Length', str(len(inhalt)))
+            self.end_headers()
+            self.wfile.write(inhalt)
+
+        def log_message(self, *_):
+            pass
+
+    server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    faden = threading.Thread(target=server.serve_forever, daemon=True)
+    faden.start()
+    try:
+        yield f'http://127.0.0.1:{server.server_address[1]}', antworten
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+GESUND = (200, {'Content-Type': 'application/json'},
+          b'{"status": "ok", "message": "NebenkostenFix l\\u00e4uft."}')
+
+
+def test_server_pruefen_ok(testserver):
+    basis, antworten = testserver
+    antworten['/api/health'] = GESUND
+    assert desktop.server_pruefen(basis + '/') == (True, None, basis)
+
+
+@pytest.mark.parametrize('antwort', [
+    (404, {}, b'nicht da'),
+    (500, {}, b'kaputt'),
+    (200, {'Content-Type': 'text/html'}, b'<html>Router</html>'),
+    (200, {}, b'{"status": "ok"}'),
+    (200, {}, b'["ok"]'),
+    (200, {}, b'\xff\xfe'),
+])
+def test_server_pruefen_kein_nebenkostenfix(testserver, antwort):
+    basis, antworten = testserver
+    antworten['/api/health'] = antwort
+    assert desktop.server_pruefen(basis) == (False, desktop.KEIN_NK, None)
+
+
+def test_server_pruefen_folgt_keiner_fremden_weiterleitung(testserver):
+    basis, antworten = testserver
+    antworten['/api/health'] = (302, {'Location': 'https://boese.example/api/health'}, b'')
+    ok, meldung, ende = desktop.server_pruefen(basis)
+    assert (ok, ende) == (False, None)
+    assert meldung == desktop.WEITERLEITUNG.format(ziel='https://boese.example/api/health')
+
+
+def test_server_pruefen_nicht_erreichbar():
+    import socket
+    with socket.socket() as frei:
+        frei.bind(('127.0.0.1', 0))
+        port = frei.getsockname()[1]
+    assert desktop.server_pruefen(f'http://127.0.0.1:{port}', zeit=2) == \
+        (False, desktop.NICHT_ERREICHBAR, None)
+
+
+def test_server_pruefen_ohne_pfad():
+    assert desktop.server_pruefen('https://nk.example/nk') == (False, desktop.OHNE_PFAD, None)
+
+
+class _Oeffner:
+    """Ersatz für build_opener: je Adresse eine Ausnahme oder eine Antwort."""
+
+    def __init__(self, ergebnisse):
+        self.ergebnisse = ergebnisse
+        self.aufrufe = []
+
+    def open(self, adresse, timeout=None):
+        import io
+        self.aufrufe.append(adresse)
+        ergebnis = self.ergebnisse[adresse]
+        if isinstance(ergebnis, Exception):
+            raise ergebnis
+        return io.BytesIO(ergebnis)
+
+
+def _oeffner(monkeypatch, ergebnisse):
+    oeffner = _Oeffner(ergebnisse)
+    monkeypatch.setattr(desktop.urllib.request, 'build_opener', lambda *_: oeffner)
+    return oeffner
+
+
+@pytest.mark.parametrize('fehler, meldung', [
+    ('zertifikat', 'ZERTIFIKAT'),
+    ('ssl', 'VERSCHLUESSELUNG'),
+    ('roh_ssl', 'VERSCHLUESSELUNG'),
+    ('zeit', 'NICHT_ERREICHBAR'),
+    ('url', 'NICHT_ERREICHBAR'),
+])
+def test_server_pruefen_ssl_und_netzfehler(monkeypatch, fehler, meldung):
+    import ssl
+    import urllib.error
+    ausnahme = {
+        'zertifikat': urllib.error.URLError(ssl.SSLCertVerificationError('selbstsigniert')),
+        'ssl': urllib.error.URLError(ssl.SSLError('wrong version number')),
+        'roh_ssl': ssl.SSLError('wrong version number'),
+        'zeit': TimeoutError(),
+        'url': urllib.error.URLError(OSError('Name unbekannt')),
+    }[fehler]
+    _oeffner(monkeypatch, {'https://nk.example/api/health': ausnahme})
+    assert desktop.server_pruefen('nk.example') == (False, getattr(desktop, meldung), None)
+
+
+def test_server_pruefen_uebernimmt_nur_http_nach_https(monkeypatch):
+    import urllib.error
+
+    def weiter(von, nach):
+        return urllib.error.HTTPError(von, 301, 'Moved', {'Location': nach}, None)
+
+    oeffner = _oeffner(monkeypatch, {
+        'http://nk.example/api/health': weiter('http://nk.example/api/health',
+                                               'https://nk.example/api/health'),
+        'https://nk.example/api/health': GESUND[2],
+        'http://nk.example:8080/api/health': weiter('http://nk.example:8080/api/health',
+                                                    'https://nk.example/api/health'),
+        'http://andere.example/api/health': weiter('http://andere.example/api/health',
+                                                   'https://nk.example/api/health'),
+    })
+    assert desktop.server_pruefen('http://nk.example') == (True, None, 'https://nk.example')
+    assert oeffner.aufrufe == ['http://nk.example/api/health', 'https://nk.example/api/health']
+    for anders in ('http://nk.example:8080', 'http://andere.example'):
+        ok, meldung, _ = desktop.server_pruefen(anders)
+        assert not ok and meldung.startswith('Der Server leitet'), anders
+
+
+def test_server_bruecke_hat_nur_drei_methoden():
+    """Die Server-Seite bekommt weder Ordnerwahl noch Umzug noch Umschalten."""
+    import inspect
+    bruecke = desktop.ServerBruecke('https://nk.example')
+    oeffentlich = {name for name in dir(bruecke) if not name.startswith('_')}
+    assert oeffentlich == {'speichern', 'oeffnen', 'extern_oeffnen'}
+    assert all(inspect.ismethod(getattr(bruecke, name)) for name in oeffentlich)
+    assert not isinstance(bruecke, desktop.Bruecke)
+
+
+class _UrlFenster(_SpeicherFenster):
+    def __init__(self, ziel, url):
+        super().__init__(ziel)
+        self.url = url
+
+    def get_current_url(self):
+        if isinstance(self.url, Exception):
+            raise self.url
+        return self.url
+
+
+def test_server_bruecke_verweigert_fremden_ursprung(oeffnen_umgebung, monkeypatch):
+    import base64
+    import webbrowser
+    from nebenkostenfix import marke
+    _, gestartet, tmp_path = oeffnen_umgebung
+    extern = []
+    monkeypatch.setattr(webbrowser, 'open', lambda adresse: extern.append(adresse) or True)
+    inhalt = base64.b64encode(b'%PDF').decode()
+    bruecke = desktop.ServerBruecke('https://nk.example')
+    for fremd in ('https://boese.example/', 'http://nk.example/', 'https://nk.example:444/',
+                  'https://nk.example.boese.example/', None, RuntimeError('zu')):
+        bruecke._fenster = _UrlFenster(tmp_path / 'gespeichert.bin', fremd)
+        assert bruecke.speichern('a.pdf', inhalt) is None
+        assert bruecke.oeffnen('a.pdf', inhalt) is None
+        assert bruecke.extern_oeffnen(marke.REPO_URL) is False
+        assert bruecke._fenster.dialoge == []
+    assert gestartet == [] and extern == []
+    assert not (tmp_path / 'gespeichert.bin').exists()
+    assert not list((tmp_path / 'temp').rglob('*.pdf'))
+
+    bruecke._fenster = _UrlFenster(tmp_path / 'gespeichert.bin', 'HTTPS://NK.example:443/#/x')
+    assert bruecke.speichern('a.pdf', inhalt) == str(tmp_path / 'gespeichert.bin')
+    assert Path(bruecke.oeffnen('a.pdf', inhalt)).name == 'a.pdf'
+    assert bruecke.extern_oeffnen(marke.REPO_URL) is True
+    assert len(gestartet) == 1 and extern == [marke.REPO_URL]
+
+
+class _Ereignis:
+    def __init__(self):
+        self.handler = []
+
+    def __iadd__(self, handler):
+        self.handler.append(handler)
+        return self
+
+
+class _ServerFenster:
+    """Ersatz für das Fenster im Servermodus: merkt sich, was es lädt."""
+
+    def __init__(self, titel, **einstellungen):
+        self.titel = titel
+        self.einstellungen = einstellungen
+        self.url = None
+        self.geladen = []
+        self.html = []
+        self.events = types.SimpleNamespace(loaded=_Ereignis())
+
+    def load_url(self, url):
+        self.geladen.append(url)
+        self.navigiert(url)
+
+    def navigiert(self, url):
+        self.url = url
+        for handler in self.events.loaded.handler:
+            handler(self)
+
+    def load_html(self, text):
+        self.html.append(text)
+
+    def get_current_url(self):
+        return self.url
+
+    def evaluate_js(self, _):
+        pass
+
+    def destroy(self):
+        pass
+
+
+@pytest.fixture
+def servermodus(lokal, monkeypatch):
+    """pywebview-Ersatz; jeder Weg zum lokalen Server oder Datenordner wirft."""
+    fenster = []
+
+    def create_window(titel, **einstellungen):
+        fenster.append(_ServerFenster(titel, **einstellungen))
+        return fenster[-1]
+
+    gestartet = {}
+
+    def start(funktion, **einstellungen):
+        gestartet.update(einstellungen)
+        funktion()
+
+    monkeypatch.setitem(sys.modules, 'webview', types.SimpleNamespace(
+        create_window=create_window, start=start, SAVE_DIALOG=30))
+    monkeypatch.setitem(sys.modules, 'webview.menu', types.SimpleNamespace(
+        Menu=lambda *a: a, MenuAction=lambda *a: a, MenuSeparator=lambda: None))
+
+    def verboten(*_, **__):
+        raise AssertionError('lokaler Weg im Servermodus')
+
+    for name in ('anwendung_laden', 'server_starten', 'datenordner_bestimmen',
+                 'fenster_starten', 'anhalten', 'selbsttest'):
+        monkeypatch.setattr(desktop, name, verboten)
+    monkeypatch.setattr(windows_ordner, 'schreibprobe', verboten)
+    monkeypatch.setattr(windows_ordner, 'dokumente_ordner', lambda: lokal / 'Dokumente')
+    return fenster, gestartet
+
+
+def test_servermodus_startet_keinen_lokalen_server(servermodus, testserver):
+    fenster, gestartet = servermodus
+    basis, antworten = testserver
+    antworten['/api/health'] = GESUND
+    windows_ordner.einstellungen_schreiben(server=basis)
+    assert desktop.main([]) == 0
+    (offen,) = fenster
+    assert offen.geladen == [basis + '/']
+    host = basis.split('://')[1]
+    assert offen.titel == f'NebenkostenFix – verbunden mit {host} (unverschlüsselt)'
+    assert isinstance(offen.einstellungen['js_api'], desktop.ServerBruecke)
+    assert 'html' in offen.einstellungen and 'url' not in offen.einstellungen
+    assert gestartet['storage_path'].endswith('WebView2')
+
+    # Navigationssperre: eine fremde Seite führt zurück zum Server.
+    offen.navigiert('https://boese.example/falle')
+    assert offen.geladen == [basis + '/', basis + '/']
+    offen.navigiert(basis + '/#/abrechnung')
+    assert offen.geladen == [basis + '/', basis + '/']
+
+
+def test_servermodus_ohne_server_zeigt_offline_seite(servermodus):
+    import socket
+    fenster, _ = servermodus
+    with socket.socket() as frei:
+        frei.bind(('127.0.0.1', 0))
+        port = frei.getsockname()[1]
+    windows_ordner.einstellungen_schreiben(server=f'http://127.0.0.1:{port}')
+    assert desktop.main([]) == 0
+    (offen,) = fenster
+    assert offen.geladen == []
+    (seite,) = offen.html
+    assert 'Keine Verbindung zum Server' in seite and 'Datei → Neu laden' in seite
+    assert 'erwartet der Server https' in seite  # http: Hinweis auf die Anmeldeschleife
+    offen.navigiert('https://boese.example/')  # ohne Verbindung keine Sperre nötig
+    assert offen.geladen == []
+
+
+def test_offline_seite_maskiert():
+    seite = desktop.offline_seite('<b>x</b>', 'https://nk.example/<script>')
+    assert '<b>x</b>' not in seite and '<script>' not in seite
+    assert 'erwartet der Server https' not in seite
+
+
+def _schnappschuss(ordner: Path):
+    return sorted((str(p.relative_to(ordner)), p.stat().st_size, p.stat().st_mtime_ns)
+                  for p in [ordner, *ordner.rglob('*')])
+
+
+def test_servermodus_beruehrt_datenordner_nicht(servermodus, testserver, lokal):
+    """Weder geöffnet noch angelegt noch verändert (#45, Datenerhalt)."""
+    import os as _os
+    basis, antworten = testserver
+    antworten['/api/health'] = GESUND
+    daten = lokal / 'daten'
+    (daten / 'belege').mkdir(parents=True)
+    (daten / 'nebenkosten.db').write_bytes(b'SQLite format 3\x00' + b'\x00' * 100)
+    (daten / 'belege' / 'r.pdf').write_bytes(b'%PDF')
+    alt = 1_600_000_000_000_000_000
+    for pfad in [daten, *daten.rglob('*')]:
+        _os.utime(pfad, ns=(alt, alt))
+    windows_ordner.einstellungen_schreiben(datenordner=daten, server=basis)
+    vorher = _schnappschuss(daten)
+    assert desktop.main([]) == 0
+    assert _schnappschuss(daten) == vorher
+
+    # Ohne eingetragenen Datenordner wird auch die Vorgabe nicht angelegt.
+    windows_ordner.einstellungen_schreiben(datenordner='')
+    assert desktop.main([]) == 0
+    assert not (lokal / 'Dokumente').exists()
+
+
+def test_datenordner_schalter_erzwingt_lokal(lokal, monkeypatch):
+    windows_ordner.einstellungen_schreiben(server='https://nk.example')
+    lokal_gestartet = []
+    monkeypatch.setattr(desktop, 'server_fenster_starten',
+                        lambda *_: pytest.fail('Servermodus trotz --datenordner'))
+    monkeypatch.setattr(desktop, 'fenster_starten', lambda ordner: lokal_gestartet.append(ordner) or 0)
+    assert desktop.main(['--datenordner', str(lokal / 'daten')]) == 0
+    assert lokal_gestartet == [lokal / 'daten']
+
+
+def test_ohne_server_eintrag_bleibt_alles_lokal(lokal, monkeypatch):
+    lokal_gestartet = []
+    monkeypatch.setattr(desktop, 'server_fenster_starten',
+                        lambda *_: pytest.fail('Servermodus ohne Eintrag'))
+    monkeypatch.setattr(desktop, 'datenordner_bestimmen', lambda **_: lokal / 'daten')
+    monkeypatch.setattr(desktop, 'fenster_starten', lambda ordner: lokal_gestartet.append(ordner) or 0)
+    assert desktop.main([]) == 0
+    assert lokal_gestartet == [lokal / 'daten']

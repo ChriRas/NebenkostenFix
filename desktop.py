@@ -36,10 +36,12 @@ import logging
 import os
 import re
 import secrets
+import ssl
 import sys
 import tempfile
 import threading
 import time
+import http.client
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -49,6 +51,7 @@ from pathlib import Path
 from nebenkostenfix import aktualisierung
 from nebenkostenfix import marke
 from nebenkostenfix import windows_ordner
+from nebenkostenfix.abrechnung_version import SOFTWARE_VERSION
 
 protokoll = logging.getLogger(__name__)
 
@@ -167,11 +170,12 @@ class EineInstanz:
 
 # --- Datenordner --------------------------------------------------------------
 
-def _meldung(text: str, frage: bool = False) -> bool:
+def _meldung(text: str, frage: bool = False, hinweis: bool = False) -> bool:
     """Meldung im Stil des Systems; unter Windows eine MessageBox."""
     if sys.platform == 'win32':  # pragma: no cover - Windows
         import ctypes
-        stil = 0x04 | 0x20 if frage else 0x10  # JA/NEIN + Frage bzw. Fehler
+        # JA/NEIN + Frage, Hinweis (i) bzw. Fehler
+        stil = 0x04 | 0x20 if frage else (0x40 if hinweis else 0x10)
         return ctypes.windll.user32.MessageBoxW(None, text, TITEL, stil) == 6
     protokoll.warning('%s', text)
     return False
@@ -295,6 +299,157 @@ class Bruecke:
             windows_ordner.einstellungen_schreiben(sicherungsziele=ziele)
         os.environ['BACKUP_ZIELE'] = os.pathsep.join(ziele)
         return ordner
+
+
+# --- Servermodus (#45): die App als Fenster auf einen NebenkostenFix-Server ---
+
+NICHT_ERREICHBAR = ('Der Server ist nicht erreichbar. Stimmt die Adresse, und ist der '
+                    'Server eingeschaltet?')
+KEIN_NK = 'Unter dieser Adresse antwortet kein NebenkostenFix.'
+ZERTIFIKAT = ('Das Zertifikat des Servers ist nicht vertrauenswürdig. Die Verbindung '
+              'wurde nicht aufgebaut.')
+VERSCHLUESSELUNG = ('Eine verschlüsselte Verbindung ist nicht möglich. Läuft der Server '
+                    'ohne https? Dann tragen Sie die Adresse mit http:// ein.')
+WEITERLEITUNG = ('Der Server leitet auf eine andere Adresse weiter ({ziel}). Bitte tragen '
+                 'Sie diese Adresse direkt ein.')
+OHNE_PFAD = 'Bitte nur die Adresse ohne Pfad eintragen, zum Beispiel https://server:8080.'
+STANDARDPORT = {'http': 80, 'https': 443}
+
+
+def adresse_normieren(text) -> str | None:
+    """``schema://host[:port]`` oder None. Ohne Schema gilt https; kein Pfad,
+    weil die Oberfläche absolute Pfade (``/api/...``) nutzt."""
+    text = str(text or '').strip()
+    if not text:
+        return None
+    if '://' not in text:
+        text = 'https://' + text
+    try:
+        teile = urllib.parse.urlsplit(text)
+        port = teile.port
+    except ValueError:
+        return None
+    schema = teile.scheme.lower()
+    if schema not in STANDARDPORT or not teile.hostname or '@' in teile.netloc \
+            or not re.fullmatch(r'[\w.\-:\[\]%]+', teile.netloc) \
+            or teile.path not in ('', '/') or teile.query or teile.fragment:
+        return None
+    host = teile.hostname
+    if ':' in host:
+        host = f'[{host}]'  # IPv6
+    return f'{schema}://{host}' + (f':{port}' if port is not None else '')
+
+
+def _ursprung(url) -> tuple | None:
+    try:
+        teile = urllib.parse.urlsplit(str(url or ''))
+        schema = teile.scheme.lower()
+        port = teile.port or STANDARDPORT.get(schema)
+    except ValueError:
+        return None
+    if schema not in STANDARDPORT or not teile.hostname:
+        return None
+    return schema, teile.hostname.lower(), port
+
+
+def _gleicher_ursprung(url, basis) -> bool:
+    eigen = _ursprung(url)
+    return eigen is not None and eigen == _ursprung(basis)
+
+
+def _nach_https(basis: str, ziel: str) -> str | None:
+    """Die eine Weiterleitung, die die Prüfung übernimmt: http://host →
+    https://host, gleicher Host, beide Male der Standardport."""
+    alt, neu = _ursprung(basis), _ursprung(ziel)
+    if alt and neu and alt == ('http', neu[1], 80) and neu[0] == 'https' and neu[2] == 443:
+        host = neu[1]
+        return f'https://[{host}]' if ':' in host else f'https://{host}'
+    return None
+
+
+class _KeineWeiterleitung(urllib.request.HTTPRedirectHandler):
+    """Weiterleitungen kommen als HTTPError an, statt still gefolgt zu werden."""
+
+    def redirect_request(self, *args, **kwargs):
+        return None
+
+
+def _ssl_meldung(grund) -> str | None:
+    if isinstance(grund, ssl.SSLCertVerificationError):
+        return ZERTIFIKAT
+    if isinstance(grund, ssl.SSLError):
+        return VERSCHLUESSELUNG
+    return None
+
+
+def server_pruefen(adresse, zeit: float = 5, _weiter: bool = True):
+    """``(ok, meldung, endadresse)``: antwortet unter der Adresse ein
+    NebenkostenFix? ``/api/health`` ist seit 0.9.0 gleich."""
+    basis = adresse_normieren(adresse)
+    if basis is None:
+        return False, OHNE_PFAD, None
+    oeffner = urllib.request.build_opener(_KeineWeiterleitung)
+    try:
+        # Bandit-Ausnahme (B310): adresse_normieren lässt nur http und https zu
+        with oeffner.open(basis + '/api/health', timeout=zeit) as antwort:  # nosec B310
+            inhalt = json.loads(antwort.read(65536))
+    except urllib.error.HTTPError as fehler:  # vor URLError: Unterklasse davon
+        if 300 <= fehler.code < 400:
+            ziel = urllib.parse.urljoin(basis + '/api/health',
+                                        fehler.headers.get('Location') or '')
+            https = _nach_https(basis, ziel)
+            if https and _weiter:
+                return server_pruefen(https, zeit, _weiter=False)
+            return False, WEITERLEITUNG.format(ziel=ziel[:200]), None
+        return False, KEIN_NK, None
+    except urllib.error.URLError as fehler:
+        return False, _ssl_meldung(fehler.reason) or NICHT_ERREICHBAR, None
+    except ssl.SSLError as fehler:  # vor OSError: Unterklasse davon
+        return False, _ssl_meldung(fehler), None
+    except OSError:  # auch TimeoutError
+        return False, NICHT_ERREICHBAR, None
+    except (ValueError, http.client.HTTPException):  # kein JSON, kaputte Antwort
+        return False, KEIN_NK, None
+    if not (isinstance(inhalt, dict) and inhalt.get('status') == 'ok' and 'message' in inhalt):
+        return False, KEIN_NK, None
+    return True, None, basis
+
+
+class ServerBruecke:
+    """Die Brücke im Servermodus: nur Speichern, Öffnen und die Projektseite.
+
+    Mit Absicht keine Unterklasse von ``Bruecke`` -- pywebview gäbe sonst
+    Ordnerwahl, Umzug und Umschalten an eine Seite, die vom Server kommt.
+    Jede Methode prüft zuerst, ob das Fenster noch dort ist.
+    """
+
+    def __init__(self, basis: str):
+        self._fenster = None
+        self._basis = basis
+
+    def _innen(self) -> Bruecke | None:
+        try:
+            jetzt = self._fenster.get_current_url()
+        except Exception:  # noqa: BLE001 -- ohne Adresse kein Zugriff
+            jetzt = None
+        if not _gleicher_ursprung(jetzt, self._basis):
+            protokoll.warning('Brücke verweigert: Seite %s gehört nicht zu %s', jetzt, self._basis)
+            return None
+        innen = Bruecke()
+        innen._fenster = self._fenster
+        return innen
+
+    def speichern(self, dateiname: str, inhalt_base64: str):
+        innen = self._innen()
+        return innen.speichern(dateiname, inhalt_base64) if innen else None
+
+    def oeffnen(self, dateiname: str, inhalt_base64: str, seite=None):
+        innen = self._innen()
+        return innen.oeffnen(dateiname, inhalt_base64, seite) if innen else None
+
+    def extern_oeffnen(self, adresse: str):
+        innen = self._innen()
+        return innen.extern_oeffnen(adresse) if innen else False
 
 
 # --- Server -------------------------------------------------------------------
@@ -545,6 +700,91 @@ def fenster_starten(datenordner: Path) -> int:  # pragma: no cover - braucht GUI
     return 0
 
 
+def offline_seite(meldung: str, adresse: str) -> str:
+    """Servermodus ohne Verbindung. Keine Knöpfe: der Weg führt über das Menü."""
+    schleife = ''
+    if adresse.startswith('http://'):
+        schleife = ('<p>Sie werden immer wieder zur Anmeldung geschickt? Dann erwartet der '
+                    'Server https. Tragen Sie die Adresse mit https:// ein.</p>')
+    return (
+        '<!doctype html><html lang="de"><head><meta charset="utf-8"><style>'
+        'body{font-family:"Segoe UI",system-ui,sans-serif;background:#F3F4F6;color:#111827;'
+        'padding:48px;line-height:1.6}h1{font-size:22px}</style></head><body>'
+        '<h1>Keine Verbindung zum Server</h1>'
+        f'<p>{html.escape(meldung)} Versuchen Sie es über <em>Datei → Neu laden</em> erneut. '
+        'Mit <em>Datei → Auf diesem Rechner arbeiten …</em> kommen Sie zurück zu Ihren '
+        f'lokalen Daten.</p>{schleife}'
+        f'<p><code>{html.escape(adresse)}</code></p></body></html>')
+
+
+def server_fenster_starten(adresse: str) -> int:
+    """Servermodus (#45): kein lokaler Server, der Datenordner bleibt zu."""
+    import webview
+    from webview.menu import Menu, MenuAction, MenuSeparator
+
+    instanz = EineInstanz(windows_ordner.lokaler_ordner())
+    if not instanz.erwerben():
+        # Ohne eintragen: der zweite Start weckt niemanden, er meldet sich.
+        _meldung(f'{TITEL} läuft bereits.')
+        return 1
+
+    host = urllib.parse.urlsplit(adresse).netloc
+    zusatz = f' – verbunden mit {host}' + (' (unverschlüsselt)' if adresse.startswith('http://')
+                                           else '')
+    bruecke = ServerBruecke(adresse)
+    zustand = {'basis': None}
+    fenster = webview.create_window(
+        TITEL + zusatz, html=startseite(), js_api=bruecke,
+        width=1440, height=900, min_size=(1024, 700), text_select=True)
+    bruecke._fenster = fenster
+
+    def laden():
+        ok, meldung, endadresse = server_pruefen(adresse)
+        if ok:
+            zustand['basis'] = bruecke._basis = endadresse
+            fenster.load_url(endadresse + '/')
+        else:
+            zustand['basis'] = None
+            fenster.load_html(offline_seite(meldung, adresse))
+
+    def beim_laden(*_):
+        # Zweite Linie hinter der Ursprungsprüfung der Brücke: fremde Seiten
+        # bleiben nicht im Fenster.
+        if not zustand['basis']:
+            return
+        try:
+            jetzt = fenster.get_current_url()
+        except Exception:  # noqa: BLE001 -- Fenster schon zu
+            return
+        if jetzt and not _gleicher_ursprung(jetzt, zustand['basis']):
+            protokoll.warning('Fremde Seite %s, zurück zu %s', jetzt, zustand['basis'])
+            fenster.load_url(zustand['basis'] + '/')
+
+    fenster.events.loaded += beim_laden
+
+    def ueber():
+        _meldung(f'{TITEL} {SOFTWARE_VERSION}. Verbunden mit {zustand["basis"] or adresse}.',
+                 hinweis=True)
+
+    # Kein evaluate_js in die Seite (fremder Code, womöglich andere Version),
+    # kein „Passwort vergessen“ (lokale Route).
+    menue = [
+        Menu('Datei', [
+            MenuAction('Drucken', lambda: fenster.evaluate_js('window.print()')),
+            MenuAction('Neu laden', lambda: threading.Thread(target=laden, daemon=True).start()),
+            MenuSeparator(),
+            MenuAction('Beenden', fenster.destroy),
+        ]),
+        Menu('Hilfe', [MenuAction(f'Über {marke.PRODUKT}', ueber)]),
+    ]
+    speicher = windows_ordner.lokaler_ordner() / 'WebView2'
+    try:
+        webview.start(laden, menu=menue, private_mode=False, storage_path=str(speicher))
+    finally:
+        instanz.freigeben()
+    return 0
+
+
 def _ausgaben_umleiten() -> None:
     """Ohne Konsolenfenster (PyInstaller --windowed) gibt es kein stdout;
     Ausgaben gehen dann in eine Datei im lokalen Anwendungsordner."""
@@ -588,6 +828,12 @@ def main(argv: list[str] | None = None) -> int:
     if argumente.selbsttest:
         ordner = Path(argumente.datenordner or tempfile.mkdtemp(prefix='nk-selbsttest-'))
         return selbsttest(ordner, argumente.bericht)
+    if not argumente.datenordner:
+        # Servermodus (#45) vor jeder Frage nach dem Datenordner: er wird
+        # weder geöffnet noch angelegt. --datenordner heißt immer lokal.
+        server = windows_ordner.einstellungen_lesen()['server']
+        if server:
+            return server_fenster_starten(server)
     ordner = datenordner_bestimmen(vorgabe=argumente.datenordner)
     return fenster_starten(ordner)
 
