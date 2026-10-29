@@ -1538,7 +1538,8 @@ function ersterFokus(overlay) {
     const modal = overlay.querySelector('.modal') || overlay;
     const felder = fokussierbar(modal.querySelector('.modal-body') || modal)
         .filter(el => ['INPUT', 'SELECT', 'TEXTAREA'].includes(el.tagName));
-    const ziel = felder[0] || fokussierbar(modal)[0];
+    // data-autofokus: Ein Dialog ohne Eingabe nennt seinen Hauptknopf (Haftungshinweis, #45).
+    const ziel = modal.querySelector('[data-autofokus]') || felder[0] || fokussierbar(modal)[0];
     if (ziel && !modal.contains(document.activeElement)) ziel.focus();
 }
 

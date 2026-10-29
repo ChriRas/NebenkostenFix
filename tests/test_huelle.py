@@ -335,6 +335,33 @@ def test_haftung_serverknopf_nur_erstmals_in_der_app():
     assert _node(probe) == [False, False, True, False, False, False]
 
 
+def test_haftung_fokus_auf_verstanden_nicht_auf_dem_serverknopf():
+    """Wer den Hinweis mit Enter bestätigt, landet nicht im Server-Dialog."""
+    fuss = INDEX[INDEX.index('id="haftung-server"'):]
+    verstanden = fuss[fuss.rindex('<button', 0, fuss.index('>Verstanden<')):fuss.index('>Verstanden<')]
+    assert 'data-autofokus' in verstanden and 'haftungBestaetigen()' in verstanden
+    probe = _funktion('fokussierbar') + _funktion('ersterFokus') + '''
+        const fokus = [];
+        const knopf = (name, auto) => ({tagName: 'BUTTON', disabled: false, offsetParent: {},
+                                         auto, focus() { fokus.push(name); }});
+        const knoepfe = [knopf('server', false), knopf('verstanden', true)];
+        const koerper = {querySelectorAll: () => []};
+        const modal = {
+            querySelector: sel => sel === '.modal-body' ? koerper
+                : sel === '[data-autofokus]' ? knoepfe.find(k => k.auto) || null : null,
+            querySelectorAll: () => knoepfe,
+            contains: () => false,
+        };
+        const document = {activeElement: null};
+        ersterFokus({querySelector: () => modal});
+        knoepfe[1].auto = false;
+        ersterFokus({querySelector: () => modal});
+        console.log(JSON.stringify(fokus));
+    '''
+    # Mit data-autofokus der Hauptknopf; ohne bleibt es beim ersten Knopf wie bisher.
+    assert _node(probe) == ['verstanden', 'server']
+
+
 def test_haftung_server_waehlen_erst_nach_bestaetigung():
     # _funktion schneidet das vorangestellte async ab.
     probe = (_DOM + 'async ' + _funktion('haftungServerWaehlen') + 'async ' + _funktion('haftungBestaetigen') + '''
