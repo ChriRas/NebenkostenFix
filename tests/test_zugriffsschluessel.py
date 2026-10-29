@@ -18,6 +18,7 @@ festgehalten werden:
       Anmeldung aus, Schlüssel verwalten, Umzug, Sicherung, Export,
       Festsetzen, Löschen. Ein Wächtertest hält es von den Listen fern.
     - Falsche Schlüssel zählen im Anmeldeschutz (NK-128).
+    - „erfassen“ legt an und ändert nichts: auch kein vorhandenes Soll.
     - Schlüssel verwalten geht nur mit Sitzung, im offenen Modus gar nicht.
 """
 
@@ -352,6 +353,73 @@ def test_erfassen_schluessel_aendert_keine_bestehenden_rechnungen(auth_client, a
     db.session.expire_all()
     assert str(db.session.get(CostInvoice, vorhanden).rechnungsdatum) == '2025-02-01'
     assert CostInvoice.query.count() == 1
+
+
+# --- Vorauszahlungen: eine Serie setzt das Soll, ein Schlüssel überschreibt keins ---
+
+def _mieter_mit_soll(auth_client):
+    from datetime import date
+    from tests import billing_factories as f
+    mieter = f.tenant(f.apt(f.house(), 'EG', 50), 'Mieter A', date(2024, 1, 1), None)
+    antwort = auth_client.post(f'/api/tenants/{mieter.id}/vorauszahlung_soll',
+                               data={'gueltig_ab': '2024-01-01', 'betrag': '100'})
+    assert antwort.status_code == 201, antwort.get_data(as_text=True)
+    return mieter
+
+
+def _serie(mieter_id, betrag, ab='2024-01-01'):
+    return {'tenant_id': mieter_id, 'amount': betrag, 'type': 'Nebenkostenvorauszahlung',
+            'payment_date': ab, 'end_date': '2024-03-31', 'is_recurring': True}
+
+
+def _soll(mieter):
+    db.session.expire_all()
+    return [(str(s.gueltig_ab), str(s.betrag)) for s in mieter.vorauszahlung_soll]
+
+
+def test_erfassen_schluessel_ueberschreibt_kein_vorhandenes_soll(auth_client, anon_client):
+    """Review zu #48: Eine Serie ab dem Stichtag eines Solls berichtigte
+    dessen Betrag (100,00 € wurden 1,00 €). Mit Schlüssel bleibt das Soll,
+    die Zahlungen sind trotzdem erfasst, und die Antwort sagt es."""
+    from nebenkostenfix.models import Payment
+    neu = _anlegen(auth_client, umfang='erfassen')
+    mieter = _mieter_mit_soll(auth_client)
+    antwort = anon_client.post('/api/payments', json=_serie(mieter.id, '1.00'),
+                               headers=_kopf(neu['schluessel']))
+    assert antwort.status_code == 201, antwort.get_data(as_text=True)
+    assert _soll(mieter) == [('2024-01-01', '100.00')]
+    assert Payment.query.filter_by(tenant_id=mieter.id).count() == 3
+    daten = antwort.get_json()
+    assert daten['soll_unveraendert'] is True
+    assert '100,00 €' in daten['message'] and 'Oberfläche' in daten['message']
+
+
+def test_mit_sitzung_berichtigt_die_serie_das_soll_wie_bisher(auth_client):
+    mieter = _mieter_mit_soll(auth_client)
+    antwort = auth_client.post('/api/payments', json=_serie(mieter.id, '1.00'))
+    assert antwort.status_code == 201, antwort.get_data(as_text=True)
+    assert _soll(mieter) == [('2024-01-01', '1.00')]
+    assert 'soll_unveraendert' not in antwort.get_json()
+
+
+def test_erfassen_schluessel_legt_ein_neues_soll_an(auth_client, anon_client):
+    """Ein neuer Stichtag ist Anlegen: das alte Soll bleibt daneben stehen."""
+    neu = _anlegen(auth_client, umfang='erfassen')
+    mieter = _mieter_mit_soll(auth_client)
+    antwort = anon_client.post('/api/payments', json=_serie(mieter.id, '120.00', ab='2024-02-01'),
+                               headers=_kopf(neu['schluessel']))
+    assert antwort.status_code == 201, antwort.get_data(as_text=True)
+    assert _soll(mieter) == [('2024-01-01', '100.00'), ('2024-02-01', '120.00')]
+    assert 'soll_unveraendert' not in antwort.get_json()
+
+
+def test_gleiches_soll_mit_schluessel_ist_kein_hinweis(auth_client, anon_client):
+    neu = _anlegen(auth_client, umfang='erfassen')
+    mieter = _mieter_mit_soll(auth_client)
+    antwort = anon_client.post('/api/payments', json=_serie(mieter.id, '100.00'),
+                               headers=_kopf(neu['schluessel']))
+    assert antwort.status_code == 201
+    assert 'soll_unveraendert' not in antwort.get_json()
 
 
 def test_lese_schluessel_sieht_belege_laedt_aber_keine_hoch(auth_client, anon_client):

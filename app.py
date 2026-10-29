@@ -386,6 +386,7 @@ from nebenkostenfix import einstellungen
 from nebenkostenfix import haftung
 from nebenkostenfix import marke
 from nebenkostenfix import drittlizenzen
+from nebenkostenfix import zugriffsschluessel
 import platform
 from nebenkostenfix.aktualisierung import AktualisierungsFehler
 if not (os.environ.get('DATABASE_URL') or '').strip() or \
@@ -1447,12 +1448,14 @@ def delete_haushaltsgroesse(id):
 # Eine Serienbuchung legt die Zahlungen im Voraus an und zaehlt sie damit
 # sofort als Ist. Der vereinbarte Betrag steht deshalb in einer eigenen
 # Tabelle: nur gegen ihn laesst sich sagen, ob ein Monat offen ist.
-def _soll_setzen(tenant, gueltig_ab, betrag):
-    """Legt einen Stichtag an oder berichtigt ihn; True, wenn er neu ist."""
+def _soll_setzen(tenant, gueltig_ab, betrag, berichtigen=True):
+    """Legt einen Stichtag an oder berichtigt ihn; True, wenn er neu ist.
+    Ohne ``berichtigen`` bleibt ein vorhandener Stichtag, wie er ist."""
     vorhanden = next(
         (s for s in tenant.vorauszahlung_soll if s.gueltig_ab == gueltig_ab), None)
     if vorhanden:
-        vorhanden.betrag = betrag
+        if berichtigen:
+            vorhanden.betrag = betrag
         return vorhanden, False
     eintrag = VorauszahlungSoll(tenant_id=tenant.id, gueltig_ab=gueltig_ab, betrag=betrag)
     db.session.add(eintrag)
@@ -4568,12 +4571,22 @@ def add_payment():
                 break
         # NK-261: die Serie ist der vereinbarte Betrag; er bleibt als Soll
         # stehen. Vor dem Einzug gibt es kein Soll (wie in der Route dazu).
+        # Ein Zugriffsschluessel erfasst nur: ein vorhandenes Soll berichtigt
+        # der Mensch in der Oberflaeche (Review zu #48).
         tenant = db.session.get(Tenant, tenant_id)
+        antwort = {'message': f'{created_count} Zahlungen erfolgreich erfasst'}
         if (type_ == 'Nebenkostenvorauszahlung' and tenant is not None
                 and start_date >= tenant.move_in_date):
-            _soll_setzen(tenant, start_date, amount)
+            soll, _ = _soll_setzen(tenant, start_date, amount,
+                                   berichtigen=zugriffsschluessel.aktueller() is None)
+            if soll.betrag != amount:
+                from nebenkostenfix.rechenkern import euro_text
+                antwort['soll_unveraendert'] = True
+                antwort['message'] += (
+                    f'. Das vereinbarte Soll von {euro_text(soll.betrag)} bleibt; '
+                    'ändern lässt es sich nur in der Oberfläche.')
         db.session.commit()
-        return jsonify({'message': f'{created_count} Zahlungen erfolgreich erfasst'}), 201
+        return jsonify(antwort), 201
     else:
         payment = Payment(
             tenant_id=tenant_id,
