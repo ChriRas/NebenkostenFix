@@ -356,6 +356,7 @@ function initApp() {
     fetchVermieterdaten();
     ladeKonten();
     ladeSicherungsStatus();
+    serverAnzeige();
     ladeUmzug();
     ladeGesperrteMieter();
     ladeUpdateEinstellung();
@@ -504,8 +505,17 @@ const huelle = {
         if (!this.kann('server_verbinden')) return null;
         return await window.pywebview.api.server_verbinden(adresse);
     },
+
+    // #45: Rückweg im Servermodus. Bestätigt wird nur im Dialog von Windows, nie in der Seite.
+    async lokalArbeiten() {
+        if (!this.kann('lokal_arbeiten')) return false;
+        return await window.pywebview.api.lokal_arbeiten();
+    },
 };
 window.huelle = huelle;
+
+// pywebview hängt die Brücke womöglich erst nach dem ersten Zeichnen an (#45).
+window.addEventListener('pywebviewready', () => { serverAnzeige(); });
 
 // Links mit target="_blank" oder download landen in der App bei der Huelle.
 // Im Browser bleibt der Klick unberuehrt.
@@ -6663,17 +6673,52 @@ function umzugHinweis(text) {
     return fehler;
 }
 
-// #45: aus dem Leerzustand zur Verbindungskarte.
+// #45: Im Servermodus zeigen Kopf und Einstellungen, wessen Daten das sind.
+// Die Adresse kommt aus location: Die Brücke antwortet nur, solange sie gleich der geprüften ist.
+function serverAnzeige() {
+    const verbunden = huelle.kann('lokal_arbeiten');
+    const chip = document.getElementById('kopf-server');
+    const karte = document.getElementById('server-verbunden-karte');
+    if (!chip || !karte) return;
+    chip.hidden = !verbunden;
+    karte.style.display = verbunden ? '' : 'none';
+    if (!verbunden) return;
+    const offen = location.protocol === 'http:';
+    chip.classList.toggle('unverschluesselt', offen);
+    document.getElementById('kopf-server-text').textContent =
+        `Verbunden mit ${location.host}` + (offen ? ' (unverschlüsselt)' : '');
+    document.getElementById('server-verbunden-adresse').textContent = location.origin;
+    document.getElementById('server-verbunden-unverschluesselt').hidden = !offen;
+}
+
+// #45: zur Verbindungskarte, im Servermodus zur Karte „Mit einem Server verbunden“.
 function zeigeServerKarte() {
     wechsleZuTab('settings');
     zeigeEinstellungsgruppe('sicherung');
-    const karte = document.getElementById('server-karte');
+    const verbunden = huelle.kann('lokal_arbeiten');
+    const karte = document.getElementById(verbunden ? 'server-verbunden-karte' : 'server-karte');
     if (!karte) return;
     karte.style.display = '';
     karte.scrollIntoView({ block: 'start' });
-    document.getElementById('server-adresse').focus();
+    document.getElementById(verbunden ? 'btn-lokal-arbeiten' : 'server-adresse').focus();
 }
 window.zeigeServerKarte = zeigeServerKarte;
+
+async function lokalArbeiten(knopf) {
+    const meldung = document.getElementById('server-verbunden-meldung');
+    meldung.textContent = '';
+    knopf.disabled = true;
+    try {
+        if (await huelle.lokalArbeiten()) {
+            meldung.textContent = 'NebenkostenFix startet jetzt neu.';
+            return;  // das Fenster schließt sich, die Antwort kommt womöglich nicht mehr an
+        }
+    } catch (e) {
+        meldung.textContent = meldungZu(e, 'Die Verbindung konnte nicht getrennt werden.');
+    }
+    knopf.disabled = false;
+}
+window.lokalArbeiten = lokalArbeiten;
 
 async function serverVerbinden(knopf) {
     const meldung = document.getElementById('server-meldung');

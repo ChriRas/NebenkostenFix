@@ -506,6 +506,29 @@ a:hover {
     color: var(--warning-strong);
 }
 
+/* #45: ruhig bei https, Warnton nur ohne Verschlüsselung. */
+.chip-server {
+    gap: var(--space-1);
+    max-width: 260px;
+    background: var(--primary-tint);
+    color: var(--primary-text);
+}
+.chip-server span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.chip-server:hover {
+    color: var(--primary-hover);
+}
+.chip-server.unverschluesselt {
+    background: var(--warning-bg);
+    color: var(--warning-text);
+}
+.chip-server.unverschluesselt:hover {
+    color: var(--warning-strong);
+}
+
 /* Tasten: Mono, unten doppelt gerandet wie eine Taste. */
 kbd {
     display: inline-grid;

@@ -180,3 +180,130 @@ def test_leerzustand_zweite_aktion():
     assert 'class="btn-secondary" onclick="b()"' in doppelt
     assert doppelt.index('Eins') < doppelt.index('Zwei')
     assert "aktion2: huelle.kann('server_verbinden')" in APP_JS
+
+
+# --- #45: Servermodus sichtbar, Rückweg aus den Einstellungen ---------------
+
+# Kleiner DOM-Ersatz für die Node-Proben. innerHTML wirft: die Anzeige im
+# Servermodus schreibt nur textContent.
+_DOM = '''
+    const elemente = {};
+    const fokus = [];
+    function element(id) {
+        if (elemente[id]) return elemente[id];
+        const klassen = new Set();
+        return elemente[id] = {
+            id, hidden: true, style: {display: 'none'}, textContent: '', disabled: false,
+            dataset: {},
+            classList: {
+                toggle: (k, an) => { if (an) klassen.add(k); else klassen.delete(k); },
+                add: k => klassen.add(k), remove: k => klassen.delete(k),
+                contains: k => klassen.has(k),
+            },
+            get klassen() { return [...klassen]; },
+            set innerHTML(_) { throw new Error('innerHTML im Servermodus'); },
+            focus() { fokus.push(id); },
+            scrollIntoView() {},
+        };
+    }
+    const document = {getElementById: element};
+    const location = {protocol: 'http:', host: 'nas.example:8080', origin: 'http://nas.example:8080'};
+    const window = {};
+    const showError = m => { throw new Error(m); };
+    const meldungZu = (e, ersatz) => ersatz;
+'''
+
+_LOKALE_API = '{speichern() {}, oeffnen() {}, extern_oeffnen() {}, server_verbinden() {}}'
+_SERVER_API = '{speichern() {}, oeffnen() {}, extern_oeffnen() {}, lokal_arbeiten() {}}'
+
+
+def test_lokal_arbeiten_braucht_kann():
+    probe = _DOM + _huelle_block() + '''
+        (async () => {
+            const aufrufe = [];
+            const ohne = await huelle.lokalArbeiten();
+            window.pywebview = {api: {speichern() {}, server_verbinden() { aufrufe.push('v'); }}};
+            const lokal = await huelle.lokalArbeiten();
+            window.pywebview.api = {lokal_arbeiten: async () => { aufrufe.push('l'); return true; }};
+            const server = await huelle.lokalArbeiten();
+            console.log(JSON.stringify([ohne, lokal, server, aufrufe]));
+        })();
+    '''
+    assert _node(probe) == [False, False, True, ['l']]
+
+
+def test_server_anzeige_nur_mit_lokal_arbeiten():
+    probe = _DOM + _huelle_block() + _funktion('serverAnzeige') + f'''
+        const stand = () => {{
+            const chip = element('kopf-server'), karte = element('server-verbunden-karte');
+            return {{chip: !chip.hidden, karte: karte.style.display !== 'none',
+                     text: element('kopf-server-text').textContent, klassen: chip.klassen,
+                     adresse: element('server-verbunden-adresse').textContent,
+                     warnung: !element('server-verbunden-unverschluesselt').hidden}};
+        }};
+        const ergebnis = [];
+        serverAnzeige(); ergebnis.push(stand());
+        window.pywebview = {{api: {_LOKALE_API}}};
+        serverAnzeige(); ergebnis.push(stand());
+        window.pywebview = {{api: {_SERVER_API}}};
+        serverAnzeige(); ergebnis.push(stand());
+        Object.assign(location, {{protocol: 'https:', host: 'nas.example', origin: 'https://nas.example'}});
+        serverAnzeige(); ergebnis.push(stand());
+        console.log(JSON.stringify(ergebnis));
+    '''
+    browser, lokal, http, https = _node(probe)
+    for aus in (browser, lokal):
+        assert not aus['chip'] and not aus['karte']
+    assert http['chip'] and http['karte']
+    assert http['text'] == 'Verbunden mit nas.example:8080 (unverschlüsselt)'
+    assert http['klassen'] == ['unverschluesselt'] and http['warnung']
+    assert http['adresse'] == 'http://nas.example:8080'
+    assert https['chip'] and https['karte']
+    assert https['text'] == 'Verbunden mit nas.example'
+    assert https['klassen'] == [] and not https['warnung']
+    assert https['adresse'] == 'https://nas.example'
+
+
+def test_zeige_server_karte_waehlt_die_sichtbare_karte():
+    probe = _DOM + _huelle_block() + _funktion('zeigeServerKarte') + f'''
+        const tabs = [];
+        const wechsleZuTab = t => tabs.push(t);
+        const zeigeEinstellungsgruppe = g => tabs.push(g);
+        window.pywebview = {{api: {_SERVER_API}}};
+        zeigeServerKarte();
+        const server = [fokus.splice(0), elemente['server-karte'] ? 'angefasst' : 'unberührt'];
+        window.pywebview = {{api: {_LOKALE_API}}};
+        zeigeServerKarte();
+        console.log(JSON.stringify([server, fokus, tabs,
+            element('server-karte').style.display]));
+    '''
+    server, lokal, tabs, anzeige = _node(probe)
+    assert server == [['btn-lokal-arbeiten'], 'unberührt']
+    assert lokal == ['server-adresse'] and anzeige == ''
+    assert tabs == ['settings', 'sicherung'] * 2
+
+
+def test_bruecke_kommt_spaet():
+    """pywebview meldet die Brücke womöglich erst nach initApp (#45)."""
+    treffer = re.search(r"window\.addEventListener\('pywebviewready', \(\) => \{(.*?)\}\);", APP_JS)
+    assert treffer and 'serverAnzeige()' in treffer.group(1)
+    start = _funktion('initApp')
+    assert 'serverAnzeige();' in start
+
+
+def _kopf(id_):
+    stelle = INDEX.index(f'id="{id_}"')
+    return INDEX[INDEX.rindex('<', 0, stelle):INDEX.index('>', stelle)]
+
+
+def test_servermodus_anzeige_im_html():
+    assert INDEX.index('id="server-verbunden-karte"') < INDEX.index('id="server-karte"')
+    karte = _kopf('server-verbunden-karte')
+    assert 'data-gruppe="sicherung"' in karte and 'style="display: none;"' in karte
+    chip = _kopf('kopf-server')
+    assert chip.startswith('<a ') and ' hidden' in chip
+    knopf = INDEX[INDEX.index('id="btn-lokal-arbeiten"'):]
+    assert knopf[:knopf.index('</button>')].rstrip().endswith('Zurück zu den Daten auf diesem Rechner')
+    # Die einzige Bestätigung kommt von Windows; die Seite fragt nicht selbst.
+    rueckweg = _funktion('lokalArbeiten')
+    assert 'frage(' not in rueckweg and 'confirm(' not in rueckweg

@@ -66,6 +66,11 @@
                 </label>
                 <a class="chip-anmeldung" id="kopf-anmeldung-aus" href="/einrichtung" hidden
                     title="Die Anmeldung ist ausgeschaltet. Jeder in Ihrem Netz kann alle Daten sehen.">Anmeldung aus</a>
+                <!-- #45: nur im Servermodus der Windows-App (huelle.kann('lokal_arbeiten')). -->
+                <a class="chip-anmeldung chip-server" id="kopf-server" href="#" hidden
+                    onclick="zeigeServerKarte(); return false;"
+                    title="Diese App zeigt die Daten eines Servers. Klicken Sie für Verbindung und Rückweg."><i
+                    class="ph ph-plugs-connected" aria-hidden="true"></i> <span id="kopf-server-text"></span></a>
                 <div class="kopf-aktionen">
                     <!-- Angemeldeter Benutzer und Abmelden (NK-021). Der Name
                          wird von zeigeAngemeldetenBenutzer() aus /api/auth/me
@@ -766,6 +771,27 @@
                         </div>
                     </div>
 
+                    <!-- #45: nur im Servermodus der Windows-App (huelle.kann('lokal_arbeiten')).
+                         Der Rückweg fragt in einem Dialog von Windows, nie in der Seite. -->
+                    <div data-gruppe="sicherung" class="dashboard-card glass-panel" id="server-verbunden-karte" style="display: none;">
+                        <div class="karten-kopf">
+                            <h3>Mit einem Server verbunden</h3>
+                        </div>
+                        <p class="karten-text">
+                            Diese App zeigt die Daten von <strong id="server-verbunden-adresse"></strong>. Was Sie hier
+                            ändern, speichert der Server. Ihre Daten auf diesem Rechner bleiben unverändert und sind
+                            wieder da, sobald Sie zurückwechseln.
+                        </p>
+                        <p class="karten-text" id="server-verbunden-unverschluesselt" hidden>
+                            Die Verbindung ist nicht verschlüsselt. Nutzen Sie sie nur im eigenen Heimnetz.
+                        </p>
+                        <p id="server-verbunden-meldung" class="karten-text" role="status" aria-live="polite"></p>
+                        <div class="knopf-zeile">
+                            <button class="btn-secondary" type="button" id="btn-lokal-arbeiten" onclick="lokalArbeiten(this)">
+                                <i class="ph ph-house-line" aria-hidden="true"></i> Zurück zu den Daten auf diesem Rechner
+                            </button>
+                        </div>
+                    </div>
                     <!-- #45: nur in der Windows-App mit lokalen Daten sichtbar (huelle.kann
                          ('server_verbinden')). Die Daten auf diesem Rechner bleiben, wie sie sind. -->
                     <div data-gruppe="sicherung" class="dashboard-card glass-panel" id="server-karte" style="display: none;">
