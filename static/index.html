@@ -766,6 +766,43 @@
                         </div>
                     </div>
 
+                    <!-- #45: nur in der Windows-App mit lokalen Daten sichtbar (huelle.kann
+                         ('server_verbinden')). Die Daten auf diesem Rechner bleiben, wie sie sind. -->
+                    <div data-gruppe="sicherung" class="dashboard-card glass-panel" id="server-karte" style="display: none;">
+                        <div class="karten-kopf">
+                            <h3>Mit einem Server verbinden</h3>
+                        </div>
+                        <p class="karten-text">
+                            Statt der Daten auf diesem Rechner können Sie eine NebenkostenFix-Installation auf
+                            einem Server öffnen, zum Beispiel im Heimnetz.
+                        </p>
+                        <div class="form-group">
+                            <label for="server-adresse">Adresse des Servers</label>
+                            <input class="feld-breit" type="text" inputmode="url" id="server-adresse"
+                                autocomplete="url" spellcheck="false" placeholder="https://nebenkosten.example.de">
+                        </div>
+                        <div class="karten-abschnitt karten-abschnitt-getrennt" role="note">
+                            <p class="karten-text">
+                                Ihre Daten auf diesem Rechner bleiben unverändert. Sie sehen sie erst wieder, wenn
+                                Sie zurückschalten. Wenn Sie Ihre Daten auf den Server bringen möchten, nutzen Sie
+                                den Umzug. <strong>Achtung: Die Übernahme ersetzt alles, was schon auf dem Server
+                                ist.</strong>
+                            </p>
+                        </div>
+                        <label class="haken-zeile">
+                            <input type="checkbox" id="server-verstanden"
+                                onchange="document.getElementById('btn-server-verbinden').disabled = !this.checked">
+                            Ich habe verstanden, dass ich danach mit den Daten auf dem Server arbeite.
+                        </label>
+                        <p id="server-meldung" class="karten-text" role="status" aria-live="polite"></p>
+                        <div class="knopf-zeile">
+                            <button class="btn-primary" type="button" id="btn-server-verbinden" disabled
+                                onclick="serverVerbinden(this)">
+                                <i class="ph ph-plugs-connected" aria-hidden="true"></i> Verbindung prüfen
+                            </button>
+                        </div>
+                    </div>
+
                     <!-- NK-164 (E-13 → D-96): Umzugspaket. Dasselbe .nkfix wie eine
                          Sicherung, hier als Weg auf einen anderen Rechner: Docker ↔
                          Windows-App in beide Richtungen. Hochladen in Stücken
@@ -3034,7 +3071,7 @@
     </div>
     <script src="/static/formular.js?v=2"></script>
     <script src="/static/umzug.js?v=1"></script>
-    <script src="/static/app.js?v=47"></script>
+    <script src="/static/app.js?v=48"></script>
 </body>
 
 </html>

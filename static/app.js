@@ -398,6 +398,12 @@ const huelle = {
         return !!(window.pywebview && window.pywebview.api);
     },
 
+    // Nicht jede Brücke kann alles (#45): im Servermodus fehlen Ordnerwahl,
+    // Umzug und Umschalten, ältere Apps kennen neuere Methoden nicht.
+    kann(name) {
+        return this.aktiv() && typeof window.pywebview.api[name] === 'function';
+    },
+
     async _base64(blob) {
         return await new Promise((fertig, fehler) => {
             const leser = new FileReader();
@@ -489,8 +495,14 @@ const huelle = {
 
     // Ordnerwahl fuer Sicherungen (nur in der App, F-76 unter Windows).
     async ordnerWaehlen() {
-        if (!this.aktiv()) return null;
+        if (!this.kann('ordner_waehlen')) return null;
         return await window.pywebview.api.ordner_waehlen();
+    },
+
+    // #45: prüfen, eintragen, neu starten -- alles in der App, nichts im Browser.
+    async serverVerbinden(adresse) {
+        if (!this.kann('server_verbinden')) return null;
+        return await window.pywebview.api.server_verbinden(adresse);
     },
 };
 window.huelle = huelle;
@@ -1943,15 +1955,20 @@ async function deleteProperty(id) {
 // K4 (NK-102): der einzige Erzeuger des Leerzustands. Alle Bereiche
 // hängen hier ab — acht handgeschriebene Kopien sind verschwunden (B4),
 // der Knopf heißt stets „nächster sinnvoller Schritt“ und ist primär.
-function leerzustand({ icon, titel, text, aktion = null }) {
+function leerzustand({ icon, titel, text, aktion = null, aktion2 = null }) {
     // Knopftexte stehen in ${}-Ausdrücken, damit der Beschriftungs-Prüfer
     // den Knopf als dynamischen Text erkennt (Glossar Par. 6).
-    const iconImKnopf = aktion && aktion.icon
-        ? `<i class="ph ${aktion.icon}" aria-hidden="true"></i> `
-        : '';
-    const knopf = aktion
-        ? `<button type="button" class="btn-primary" onclick="${aktion.fn}">${iconImKnopf}${aktion.label}</button>`
-        : '';
+    const knopfHtml = (aktion, klasse) => {
+        if (!aktion) return '';
+        const iconImKnopf = aktion.icon
+            ? `<i class="ph ${aktion.icon}" aria-hidden="true"></i> `
+            : '';
+        return `<button type="button" class="${klasse}" onclick="${aktion.fn}">${iconImKnopf}${aktion.label}</button>`;
+    };
+    // Die zweite Aktion (#45) ist ein Nebenweg und bleibt sekundär.
+    const knopf = aktion2
+        ? `<div class="knopf-zeile">${knopfHtml(aktion, 'btn-primary')}${knopfHtml(aktion2, 'btn-secondary')}</div>`
+        : knopfHtml(aktion, 'btn-primary');
     return `<div class="empty-state glass-panel">` +
         `<div class="empty-state-inhalt">` +
         `<i class="ph ${icon} leer-icon" aria-hidden="true"></i>` +
@@ -2014,6 +2031,9 @@ function updateDashboard() {
             titel: 'Noch keine Immobilie angelegt',
             text: 'Legen Sie das Haus an, dessen Kosten Sie umlegen wollen — zum Beispiel Ihr Mehrfamilienhaus.',
             aktion: { label: 'Immobilie anlegen', fn: 'openAddPropertyModal()', icon: 'ph-plus' },
+            aktion2: huelle.kann('server_verbinden')
+                ? { label: 'Mit einem Server verbinden', fn: 'zeigeServerKarte()', icon: 'ph-plugs-connected' }
+                : null,
         });
         return;
     }
@@ -6493,7 +6513,10 @@ async function ladeSicherungsStatus() {
             : '';
         // NK-152: in der App gibt es den Ordner-Dialog.
         const ordnerKnopf = document.getElementById('btn-sicherung-ordner');
-        if (ordnerKnopf) ordnerKnopf.style.display = huelle.aktiv() ? '' : 'none';
+        if (ordnerKnopf) ordnerKnopf.style.display = huelle.kann('ordner_waehlen') ? '' : 'none';
+        // #45: die Verbindungskarte nur in der App mit lokalen Daten.
+        const serverKarte = document.getElementById('server-karte');
+        if (serverKarte) serverKarte.style.display = huelle.kann('server_verbinden') ? '' : 'none';
         // NK-130: Hinweis zur Festplattenverschluesselung, mit Pruefergebnis.
         const platte = document.getElementById('sicherung-festplatte');
         if (platte && status.festplatte) {
@@ -6639,6 +6662,41 @@ function umzugHinweis(text) {
     fehler.vomServer = true;  // eigener Satz, für Menschen gemacht
     return fehler;
 }
+
+// #45: aus dem Leerzustand zur Verbindungskarte.
+function zeigeServerKarte() {
+    wechsleZuTab('settings');
+    zeigeEinstellungsgruppe('sicherung');
+    const karte = document.getElementById('server-karte');
+    if (!karte) return;
+    karte.style.display = '';
+    karte.scrollIntoView({ block: 'start' });
+    document.getElementById('server-adresse').focus();
+}
+window.zeigeServerKarte = zeigeServerKarte;
+
+async function serverVerbinden(knopf) {
+    const meldung = document.getElementById('server-meldung');
+    const adresse = document.getElementById('server-adresse').value.trim();
+    meldung.textContent = '';
+    if (!document.getElementById('server-verstanden').checked) return;
+    if (/^http:\/\//i.test(adresse) && !await frage(
+        'Diese Verbindung ist nicht verschlüsselt. Nutzen Sie sie nur im eigenen Heimnetz. Trotzdem verbinden?',
+        'Weiter')) return;
+    knopf.disabled = true;
+    try {
+        const ergebnis = await huelle.serverVerbinden(adresse);
+        if (ergebnis && ergebnis.ok) {
+            meldung.textContent = 'Verbindung klappt. NebenkostenFix startet jetzt neu.';
+            return;  // der Knopf bleibt aus, die App startet neu
+        }
+        meldung.textContent = (ergebnis && ergebnis.meldung) || 'Die Verbindung konnte nicht geprüft werden.';
+    } catch (e) {
+        meldung.textContent = meldungZu(e, 'Die Verbindung konnte nicht geprüft werden.');
+    }
+    knopf.disabled = false;
+}
+window.serverVerbinden = serverVerbinden;
 
 async function ladeUmzug() {
     const desktop = window.umzugPaket && window.umzugPaket.desktop();
