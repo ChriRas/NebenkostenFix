@@ -109,6 +109,9 @@ ENGLISCHE_RESTE: list[str] = [
     "Dashboard", "Settings", "Danger Zone", "YTD", "Loading", "Delete",
     "Save", "Cancel", "Error", "Warning", "Invoice", "Tenant",
     "Property", "Meter", "Reading", "Payment",
+    # Formulare im Hausstil: was Browser und Vorlagen einschleppen.
+    "Choose File", "No file chosen", "Browse", "Submit", "Select", "Search",
+    "Clear", "Today", "Password", "Username", "mm/dd/yyyy",
 ]
 # Verworfene Synonyme (Par. 1 und 2):
 VERWORFENE_SYNONYME: list[str] = [
@@ -514,6 +517,107 @@ def pruefe_backend_meldungen(basis: Path | None = None) -> list[str]:
     return verstoesse
 
 
+# --- Formulare im Hausstil: rohe Steuerelemente --------------------------
+#
+# Den Text „Choose File“ erzeugt erst der Browser; keine Quelltextpruefung
+# findet ihn. Gefasst wird deshalb die Ursache: ein sichtbares natives
+# Dateifeld, ein Kaestchen mit eigener Groesse, eine fehlende Hausregel.
+STYLE = STATIC / "style.css"
+AUTH = BASIS / "nebenkostenfix" / "auth.py"
+# Ausnahmen (Feld-id -> Begruendung), wie QM_IN_APP. Zum Start leer.
+STEUERELEMENT_AUSNAHMEN: dict[str, str] = {}
+
+_INPUT_TAG = re.compile(r"<input\b[^>]*>")
+
+
+def _zeile(quelle: str, stelle: int) -> int:
+    return quelle.count("\n", 0, stelle) + 1
+
+
+def _attr(tag: str, name: str) -> str | None:
+    m = re.search(rf'\s{name}\s*=\s*"([^"]*)"', tag)
+    return m.group(1) if m else None
+
+
+def _css_ohne_block(css: str, kopf: str) -> str:
+    """Entfernt jeden Block, der mit ``kopf`` beginnt (Klammern gezaehlt)."""
+    while (start := css.find(kopf)) >= 0:
+        tiefe, i = 0, css.index("{", start)
+        while True:
+            tiefe += {"{": 1, "}": -1}.get(css[i], 0)
+            if tiefe == 0:
+                break
+            i += 1
+        css = css[:start] + css[i + 1:]
+    return css
+
+
+def _css_regeln(css: str) -> list[tuple[str, str]]:
+    css = re.sub(r"/\*[\s\S]*?\*/", " ", css)
+    return [(" ".join(s.split()), k)
+            for s, k in re.findall(r"([^{}]+)\{([^{}]*)\}", css)]
+
+
+def pruefe_steuerelemente(quellen: dict[str, str] | None = None,
+                          css: str | None = None) -> list[str]:
+    """Dateifelder, Kaestchen und Feldregel im Hausstil.
+
+    ``quellen`` bildet Dateinamen auf Quelltext ab (Standard: index.html,
+    app.js, auth.py); ``css`` ist style.css. Beides laesst sich fuer die
+    Gegenproben austauschen.
+    """
+    if quellen is None:
+        quellen = {"index.html": _lies(INDEX), "app.js": _lies(APP),
+                   "auth.py": _lies(AUTH)}
+    if css is None:
+        css = _lies(STYLE)
+    verstoesse: list[str] = []
+    for datei, quelle in quellen.items():
+        for m in _INPUT_TAG.finditer(quelle):
+            tag = m.group(0)
+            typ = (_attr(tag, "type") or "").lower()
+            stelle = f"{datei}:{_zeile(quelle, m.start())}"
+            kennung = _attr(tag, "id") or ""
+            name = kennung or _attr(tag, "class") or "?"
+            if kennung in STEUERELEMENT_AUSNAHMEN:
+                continue
+            if typ == "file":
+                if re.search(r"\shidden(?=[\s>/=])", tag):
+                    continue                    # Muster B: ein Knopf ruft .click()
+                im_rahmen = re.search(
+                    r'<div class="file-upload-wrapper"[^>]*>\s*$', quelle[:m.start()])
+                beschriftet = kennung and re.search(
+                    rf'<label for="{re.escape(kennung)}" class="file-upload-label"',
+                    quelle)
+                if not (im_rahmen and beschriftet):
+                    verstoesse.append(
+                        f"{stelle}: Dateifeld #{name} sichtbar im Systemstil "
+                        "(hidden + Knopf oder .file-upload-wrapper mit "
+                        "label.file-upload-label)")
+            elif typ in ("checkbox", "radio"):
+                stil = _attr(tag, "style") or ""
+                if re.search(r"\b(width|height|appearance|accent-color)\s*:", stil):
+                    verstoesse.append(
+                        f"{stelle}: {typ} #{name} mit eigener Größe oder "
+                        f"Optik im style ({stil.strip()!r}); es gilt die Hausregel "
+                        "in style.css")
+    regeln = _css_regeln(_css_ohne_block(css, "@media (forced-colors: active)"))
+    if not any(s == 'input[type="checkbox"], input[type="radio"]'
+               and re.search(r"(?<!-)appearance:\s*none", k) for s, k in regeln):
+        verstoesse.append(
+            "style.css: globale Regel für Kästchen und Optionsfelder "
+            "(input[type=\"checkbox\"], input[type=\"radio\"] { appearance: none }) fehlt")
+    for s, k in regeln:
+        if re.search(r"checkbox|radio", s) and re.search(r"appearance:\s*auto", k):
+            verstoesse.append(
+                f"style.css: {s!r} setzt appearance: auto außerhalb von forced-colors")
+    if not any(s.startswith(":where(input:is(") and "select" in s and "textarea" in s
+               and "var(--field-border)" in k for s, k in regeln):
+        verstoesse.append(
+            "style.css: globale Feldregel :where(input:is(…), select, textarea) fehlt")
+    return verstoesse
+
+
 def alle_verstoesse() -> list[str]:
     """Fuehrt alle Pruefungen aus; liefert die Verstoesse als Texte."""
     index = _lies(INDEX)
@@ -527,6 +631,7 @@ def alle_verstoesse() -> list[str]:
     verstoesse += pruefe_umlagearten(app)
     verstoesse += pruefe_backend_meldungen()
     verstoesse += pruefe_umschrift()
+    verstoesse += pruefe_steuerelemente()
     return verstoesse
 
 
