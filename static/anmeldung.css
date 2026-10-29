@@ -205,7 +205,6 @@ body.anmeldung {
     color: var(--primary-text);
 }
 .umzug-karte[open] summary { margin-bottom: var(--space-4); }
-.umzug-karte input[type=file] { padding: 9px var(--space-3); }
 .umzug-karte .zweitknopf {
     background: var(--surface);
     color: var(--text-main);

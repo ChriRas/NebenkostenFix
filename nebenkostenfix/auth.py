@@ -388,9 +388,9 @@ UMZUG_KARTE = """<details class="anmelde-karte umzug-karte">
  wählen Sie die <code>.nkfix</code>-Datei hier aus. Danach melden Sie sich mit Ihrem
  bisherigen Konto an.</p>
  <label for="umzug-datei">Umzugspaket (.nkfix)</label>
- <input id="umzug-datei" type="file" accept=".nkfix,.nkbak,.gz">
- <button type="button" id="umzug-auswahl-knopf" class="zweitknopf" hidden>Paket auswählen</button>
- <p class="hilfe" id="umzug-auswahl-name"></p>
+ <input id="umzug-datei" type="file" accept=".nkfix,.nkbak,.gz" hidden>
+ <button type="button" id="umzug-auswahl-knopf" class="zweitknopf">Paket auswählen</button>
+ <p class="hilfe" id="umzug-auswahl-name">Keine Datei ausgewählt</p>
  <label for="umzug-passphrase">Passphrase (nur bei verschlüsselten Paketen)</label>
  <input id="umzug-passphrase" type="password" autocomplete="off">
  __UMZUGCODE__
