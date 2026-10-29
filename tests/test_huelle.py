@@ -239,6 +239,7 @@ def test_server_anzeige_nur_mit_lokal_arbeiten():
             const chip = element('kopf-server'), karte = element('server-verbunden-karte');
             return {{chip: !chip.hidden, karte: karte.style.display !== 'none',
                      text: element('kopf-server-text').textContent, klassen: chip.klassen,
+                     titel: chip.title,
                      adresse: element('server-verbunden-adresse').textContent,
                      warnung: !element('server-verbunden-unverschluesselt').hidden}};
         }};
@@ -259,6 +260,9 @@ def test_server_anzeige_nur_mit_lokal_arbeiten():
     assert http['text'] == 'Verbunden mit nas.example:8080 (unverschlüsselt)'
     assert http['klassen'] == ['unverschluesselt'] and http['warnung']
     assert http['adresse'] == 'http://nas.example:8080'
+    # Der Chip kürzt ab; der Tooltip trägt den vollen Text samt Warnzusatz.
+    assert http['titel'].startswith('Verbunden mit nas.example:8080 (unverschlüsselt). ')
+    assert https['titel'].startswith('Verbunden mit nas.example. ')
     assert https['chip'] and https['karte']
     assert https['text'] == 'Verbunden mit nas.example'
     assert https['klassen'] == [] and not https['warnung']

@@ -6705,8 +6705,10 @@ function serverAnzeige() {
     if (!verbunden) return;
     const offen = location.protocol === 'http:';
     chip.classList.toggle('unverschluesselt', offen);
-    document.getElementById('kopf-server-text').textContent =
-        `Verbunden mit ${location.host}` + (offen ? ' (unverschlüsselt)' : '');
+    const text = `Verbunden mit ${location.host}` + (offen ? ' (unverschlüsselt)' : '');
+    document.getElementById('kopf-server-text').textContent = text;
+    // Der Chip kürzt lange Adressen ab; der Tooltip zeigt den Warnzusatz trotzdem.
+    chip.title = `${text}. Klicken Sie für Verbindung und Rückweg.`;
     document.getElementById('server-verbunden-adresse').textContent = location.origin;
     document.getElementById('server-verbunden-unverschluesselt').hidden = !offen;
 }
