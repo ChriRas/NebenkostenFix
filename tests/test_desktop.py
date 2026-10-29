@@ -756,12 +756,12 @@ def test_server_pruefen_uebernimmt_nur_http_nach_https(monkeypatch):
         assert not ok and meldung.startswith('Der Server leitet'), anders
 
 
-def test_server_bruecke_hat_nur_drei_methoden():
+def test_server_bruecke_hat_genau_vier_methoden():
     """Die Server-Seite bekommt weder Ordnerwahl noch Umzug noch Umschalten."""
     import inspect
     bruecke = desktop.ServerBruecke('https://nk.example')
     oeffentlich = {name for name in dir(bruecke) if not name.startswith('_')}
-    assert oeffentlich == {'speichern', 'oeffnen', 'extern_oeffnen'}
+    assert oeffentlich == {'speichern', 'oeffnen', 'extern_oeffnen', 'lokal_arbeiten'}
     assert all(inspect.ismethod(getattr(bruecke, name)) for name in oeffentlich)
     assert not isinstance(bruecke, desktop.Bruecke)
 
@@ -802,6 +802,33 @@ def test_server_bruecke_verweigert_fremden_ursprung(oeffnen_umgebung, monkeypatc
     assert Path(bruecke.oeffnen('a.pdf', inhalt)).name == 'a.pdf'
     assert bruecke.extern_oeffnen(marke.REPO_URL) is True
     assert len(gestartet) == 1 and extern == [marke.REPO_URL]
+
+
+def test_lokale_bruecke_ohne_lokal_arbeiten():
+    """Der Rückweg gibt es nur im Servermodus, das Umschalten nur lokal (#45)."""
+    assert not hasattr(desktop.Bruecke(), 'lokal_arbeiten')
+    assert not hasattr(desktop.ServerBruecke('https://nk.example'), 'server_verbinden')
+
+
+def test_lokal_arbeiten_verweigert_fremden_ursprung(tmp_path):
+    """Eine fremde Seite im Fenster öffnet nicht einmal die Rückfrage."""
+    aufrufe = []
+    bruecke = desktop.ServerBruecke('https://nk.example')
+    bruecke._zurueck = lambda: aufrufe.append(True) or True
+    for fremd in ('https://boese.example/', 'http://nk.example/', 'https://nk.example:444/',
+                  'https://nk.example.boese.example/', None, RuntimeError('zu')):
+        bruecke._fenster = _UrlFenster(tmp_path / 'x', fremd)
+        assert bruecke.lokal_arbeiten() is False, fremd
+    assert aufrufe == []
+    bruecke._fenster = _UrlFenster(tmp_path / 'x', 'HTTPS://NK.example:443/#/x')
+    assert bruecke.lokal_arbeiten() is True
+    assert aufrufe == [True]
+
+
+def test_lokal_arbeiten_vor_dem_verdrahten(tmp_path):
+    bruecke = desktop.ServerBruecke('https://nk.example')
+    bruecke._fenster = _UrlFenster(tmp_path / 'x', 'https://nk.example/')
+    assert bruecke.lokal_arbeiten() is False
 
 
 class _Ereignis:
@@ -1160,6 +1187,98 @@ def test_zurueck_entfernt_nur_adresse(servermodus, testserver, lokal, monkeypatc
         assert geschlossen == [True] and len(neu) == 1
     else:
         assert nachher == vorher and geschlossen == [] and neu == []
+
+
+def _rueckweg_umgebung(servermodus, testserver, monkeypatch, antwort, nach_dem_start):
+    """Servermodus mit Ersatz für Rückfrage, Schließen und Neustart; nach dem
+    Laden ruft ``nach_dem_start(bruecke, gestartet)`` den Rückweg auf."""
+    import subprocess
+    fenster, gestartet = servermodus
+    basis, antworten = testserver
+    antworten['/api/health'] = GESUND
+    protokoll = {'fragen': [], 'geschlossen': [], 'neu': []}
+    monkeypatch.setattr(subprocess, 'Popen', lambda befehl, **k: protokoll['neu'].append(befehl))
+    monkeypatch.setattr(_ServerFenster, 'create_confirmation_dialog',
+                        lambda self, titel, text: protokoll['fragen'].append(text) or antwort(),
+                        raising=False)
+    monkeypatch.setattr(_ServerFenster, 'destroy',
+                        lambda self: protokoll['geschlossen'].append(True))
+    original_start = sys.modules['webview'].start
+
+    def start(funktion, **einstellungen):
+        original_start(funktion, **einstellungen)
+        protokoll['ergebnis'] = nach_dem_start(fenster[-1].einstellungen['js_api'], gestartet)
+
+    monkeypatch.setattr(sys.modules['webview'], 'start', start)
+    return basis, protokoll
+
+
+@pytest.mark.parametrize('bestaetigt', [True, False])
+def test_lokal_arbeiten_entfernt_nur_adresse(servermodus, testserver, lokal, monkeypatch,
+                                             bestaetigt):
+    """Der Knopf in den Einstellungen geht denselben Weg wie das Menü (#45)."""
+    import os as _os
+    basis, protokoll = _rueckweg_umgebung(servermodus, testserver, monkeypatch,
+                                          lambda: bestaetigt,
+                                          lambda bruecke, _: bruecke.lokal_arbeiten())
+    daten = lokal / 'daten'
+    daten.mkdir()
+    (daten / 'nebenkosten.db').write_bytes(b'SQLite format 3\x00' + b'\x00' * 100)
+    alt = 1_600_000_000_000_000_000
+    for pfad in [daten, *daten.rglob('*')]:
+        _os.utime(pfad, ns=(alt, alt))
+    windows_ordner.einstellungen_schreiben(datenordner=daten, onedrive_bestaetigt=True,
+                                           server=basis)
+    datei = windows_ordner.einstellungen_datei()
+    vorher = _abschnitte(datei)
+    daten_vorher = _schnappschuss(daten)
+    assert desktop.main([]) == 0
+    assert protokoll['ergebnis'] is bestaetigt
+    assert protokoll['fragen'] == [desktop.ZURUECK_FRAGE]
+    nachher = _abschnitte(datei)
+    if bestaetigt:
+        assert nachher == {k: v for k, v in vorher.items() if k != 'Server'}
+        assert nachher['Daten']['onedrivebestaetigt'] == '1'
+        assert protokoll['geschlossen'] == [True] and len(protokoll['neu']) == 1
+    else:
+        assert nachher == vorher
+        assert protokoll['geschlossen'] == [] and protokoll['neu'] == []
+    assert _schnappschuss(daten) == daten_vorher
+
+
+def test_lokal_arbeiten_nur_eine_rueckfrage(servermodus, testserver, lokal, monkeypatch):
+    """Solange die Rückfrage offen ist, öffnen weder Seite noch Menü eine zweite."""
+    innen = {}
+
+    def antwort():
+        if 'bruecke' not in innen:
+            innen['bruecke'] = innen['seite'].lokal_arbeiten()
+            innen['menue'] = _menuepunkt(innen['gestartet'], 'Auf diesem Rechner arbeiten …')()
+        return False
+
+    def nach_dem_start(bruecke, gestartet):
+        innen['seite'], innen['gestartet'] = bruecke, gestartet
+        return [bruecke.lokal_arbeiten(), bruecke.lokal_arbeiten()]
+
+    basis, protokoll = _rueckweg_umgebung(servermodus, testserver, monkeypatch, antwort,
+                                          nach_dem_start)
+    windows_ordner.einstellungen_schreiben(server=basis)
+    assert desktop.main([]) == 0
+    assert innen['bruecke'] is False and innen['menue'] is False
+    # Nach der Ablehnung ist die Sperre wieder frei: der zweite Klick fragt erneut.
+    assert protokoll['ergebnis'] == [False, False]
+    assert protokoll['fragen'] == [desktop.ZURUECK_FRAGE] * 2
+    assert windows_ordner.einstellungen_lesen()['server'] == basis
+
+
+def test_menue_und_bruecke_teilen_den_rueckweg(servermodus, testserver, monkeypatch):
+    basis, protokoll = _rueckweg_umgebung(
+        servermodus, testserver, monkeypatch, lambda: False,
+        lambda bruecke, gestartet: _menuepunkt(gestartet, 'Auf diesem Rechner arbeiten …')
+        is bruecke._zurueck)
+    windows_ordner.einstellungen_schreiben(server=basis)
+    assert desktop.main([]) == 0
+    assert protokoll['ergebnis'] is True
 
 
 # --- #45: App-Update im Servermodus ---------------------------------------

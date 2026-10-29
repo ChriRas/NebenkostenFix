@@ -478,16 +478,18 @@ def server_pruefen(adresse, zeit: float = 5, _weiter: bool = True):
 
 
 class ServerBruecke:
-    """Die Brücke im Servermodus: nur Speichern, Öffnen und die Projektseite.
+    """Die Brücke im Servermodus: Speichern, Öffnen, die Projektseite und der Rückweg.
 
     Mit Absicht keine Unterklasse von ``Bruecke`` -- pywebview gäbe sonst
     Ordnerwahl, Umzug und Umschalten an eine Seite, die vom Server kommt.
-    Jede Methode prüft zuerst, ob das Fenster noch dort ist.
+    Jede Methode prüft zuerst, ob das Fenster noch dort ist. ``lokal_arbeiten``
+    öffnet nur die Rückfrage von Windows, wie Datei → Auf diesem Rechner arbeiten.
     """
 
     def __init__(self, basis: str):
         self._fenster = None
         self._basis = basis
+        self._zurueck = None  # setzt server_fenster_starten: der Rückweg des Menüs
 
     def _innen(self) -> Bruecke | None:
         if not _fenster_bei(self._fenster, self._basis):
@@ -507,6 +509,13 @@ class ServerBruecke:
     def extern_oeffnen(self, adresse: str):
         innen = self._innen()
         return innen.extern_oeffnen(adresse) if innen else False
+
+    def lokal_arbeiten(self) -> bool:
+        """#45: Rückweg aus den Einstellungen. Ohne Parameter; ob es geschieht,
+        entscheidet der Nutzer im Dialog von Windows."""
+        if self._zurueck is None or not _fenster_bei(self._fenster, self._basis):
+            return False
+        return self._zurueck()
 
 
 # --- Server -------------------------------------------------------------------
@@ -863,12 +872,24 @@ def server_fenster_starten(adresse: str) -> int:
 
     fenster.events.loaded += beim_laden
 
-    def zurueck():
-        # Python-Rückruf aus dem Menü: die Server-Seite erreicht ihn nicht.
-        if fenster.create_confirmation_dialog(TITEL, ZURUECK_FRAGE):
+    frage_offen = threading.Lock()
+
+    def zurueck() -> bool:
+        # Python-Rückruf aus Menü und Brücke; die Seite sieht nur das Ergebnis.
+        # Nie zwei Rückfragen zugleich, auch wenn die Seite in einer Schleife ruft.
+        if not frage_offen.acquire(blocking=False):
+            return False
+        try:
+            if not fenster.create_confirmation_dialog(TITEL, ZURUECK_FRAGE):
+                return False
             windows_ordner.einstellungen_schreiben(server=None)
             zustand['neustart'] = True
             fenster.destroy()
+            return True
+        finally:
+            frage_offen.release()
+
+    bruecke._zurueck = zurueck
 
     def ueber():
         _meldung(f'{TITEL} {SOFTWARE_VERSION}. Verbunden mit {zustand["basis"] or adresse}.',
