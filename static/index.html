@@ -873,11 +873,12 @@
                             </p>
                             <div class="form-group">
                                 <label for="umzug-datei-einstellungen">Paket</label>
-                                <input type="file" id="umzug-datei-einstellungen" accept=".nkfix,.nkbak,.gz">
+                                <input type="file" id="umzug-datei-einstellungen" accept=".nkfix,.nkbak,.gz" hidden
+                                    onchange="umzugDateiGewaehlt(this)">
                                 <div class="knopf-zeile">
-                                    <button class="btn-secondary" type="button" id="btn-umzug-auswahl" hidden
+                                    <button class="btn-secondary" type="button" id="btn-umzug-auswahl"
                                         onclick="umzugPaketWaehlen()">Paket auswählen</button>
-                                    <span class="text-muted" id="umzug-auswahl-einstellungen"></span>
+                                    <span class="text-muted" id="umzug-auswahl-einstellungen">Keine Datei ausgewählt</span>
                                 </div>
                             </div>
                             <div class="form-group" id="umzug-importordner-gruppe" hidden>
@@ -1694,7 +1695,13 @@
                     </div>
                     <div class="form-group abstand-oben">
                         <label for="import-datei">Ihre Tabelle (.xlsx oder .csv)</label>
-                        <input type="file" id="import-datei" accept=".xlsx,.csv">
+                        <div class="file-upload-wrapper">
+                            <input type="file" id="import-datei" accept=".xlsx,.csv"
+                                onchange="document.getElementById('import-datei-name').textContent = this.files[0] ? this.files[0].name : 'Tabelle auswählen …'">
+                            <label for="import-datei" class="file-upload-label">
+                                <i class="ph ph-file-xls" aria-hidden="true"></i><span id="import-datei-name">Tabelle auswählen …</span>
+                            </label>
+                        </div>
                     </div>
                 </div>
                 <div id="import-schritt-zuordnung" hidden>
@@ -1895,13 +1902,13 @@
                     <input type="date" id="tenant-last-billed">
                 </div>
                 <div class="form-group abstand-oben">
-                    <label>Mietvertrag hochladen (PDF/DOCX, Optional)</label>
+                    <label>Mietvertrag (PDF oder Foto, optional)</label>
                     <div class="file-upload-wrapper">
                         <input type="file" id="tenant-contract-file" accept=".pdf,.jpg,.jpeg,.png,.webp,.heic,.heif,application/pdf,image/jpeg,image/png,image/webp,image/heic"
-                            onchange="document.getElementById('tenant-contract-name').textContent = this.files[0] ? this.files[0].name : 'Datei auswählen...'">
+                            onchange="document.getElementById('tenant-contract-name').textContent = this.files[0] ? this.files[0].name : 'Datei auswählen …'">
                         <label for="tenant-contract-file" class="file-upload-label">
                             <i class="ph ph-file-pdf"></i>
-                            <span id="tenant-contract-name">Datei auswählen...</span>
+                            <span id="tenant-contract-name">Datei auswählen …</span>
                         </label>
                     </div>
                     <div id="tenant-contract-info" style="font-size: 13px; color: var(--text-muted); margin-top: 4px; display: none;"></div>
@@ -2425,10 +2432,10 @@
                         <label>Beweisfoto (Optional)</label>
                         <div class="file-upload-wrapper">
                             <input type="file" id="reading-file" accept=".jpg,.jpeg,.png,.webp,.heic,.heif,.pdf,image/jpeg,image/png,image/webp,image/heic,application/pdf"
-                                onchange="document.getElementById('reading-file-name').textContent = this.files[0] ? this.files[0].name : 'Datei auswählen...'">
+                                onchange="document.getElementById('reading-file-name').textContent = this.files[0] ? this.files[0].name : 'Datei auswählen …'">
                             <label for="reading-file" class="file-upload-label">
                                 <i class="ph ph-upload-simple"></i>
-                                <span id="reading-file-name">Datei auswählen...</span>
+                                <span id="reading-file-name">Datei auswählen …</span>
                             </label>
                         </div>
                     </div>
@@ -2511,10 +2518,10 @@
                         <label>Beleg (PDF oder Foto)</label>
                         <div class="file-upload-wrapper">
                             <input type="file" id="doc-file" accept=".pdf,.jpg,.jpeg,.png,.webp,.heic,.heif,application/pdf,image/jpeg,image/png,image/webp,image/heic" required
-                                onchange="document.getElementById('doc-file-name').textContent = this.files[0] ? this.files[0].name : 'Datei auswählen...'">
+                                onchange="document.getElementById('doc-file-name').textContent = this.files[0] ? this.files[0].name : 'Datei auswählen …'">
                             <label for="doc-file" class="file-upload-label">
                                 <i class="ph ph-file-pdf"></i>
-                                <span id="doc-file-name">PDF auswählen...</span>
+                                <span id="doc-file-name">Datei auswählen …</span>
                             </label>
                         </div>
                     </div>
@@ -2698,10 +2705,10 @@
                     <div class="form-group" id="group-invoice-file">
                         <div class="file-upload-wrapper">
                             <input type="file" id="invoice-file" accept=".pdf,.jpg,.jpeg,.png,.webp,.heic,.heif,application/pdf,image/jpeg,image/png,image/webp,image/heic"
-                                onchange="document.getElementById('invoice-file-name').textContent = this.files[0] ? this.files[0].name : 'Datei auswählen...'">
+                                onchange="document.getElementById('invoice-file-name').textContent = this.files[0] ? this.files[0].name : 'Datei auswählen …'">
                             <label for="invoice-file" class="file-upload-label">
                                 <i class="ph ph-upload-simple"></i>
-                                <span id="invoice-file-name">Datei auswählen...</span>
+                                <span id="invoice-file-name">Datei auswählen …</span>
                             </label>
                         </div>
                     </div>

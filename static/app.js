@@ -3051,7 +3051,7 @@ function openAddTenantModal(tenant = null) {
         }
         
         document.getElementById('tenant-contract-file').value = '';
-        document.getElementById('tenant-contract-name').textContent = 'Datei auswählen...';
+        document.getElementById('tenant-contract-name').textContent = 'Datei auswählen …';
         const info = document.getElementById('tenant-contract-info');
         if (tenant.contract_path) {
             info.textContent = 'Es ist bereits ein Mietvertrag hinterlegt. Ein neuer Upload überschreibt diesen.';
@@ -3072,7 +3072,7 @@ function openAddTenantModal(tenant = null) {
         document.getElementById('tenant-last-billed').value = '';
         document.getElementById('tenant-apartment').value = '';
         document.getElementById('tenant-contract-file').value = '';
-        document.getElementById('tenant-contract-name').textContent = 'Datei auswählen...';
+        document.getElementById('tenant-contract-name').textContent = 'Datei auswählen …';
         document.getElementById('tenant-contract-info').style.display = 'none';
         
         tenantModal.querySelector('h2').textContent = 'Neuer Mieter';
@@ -5101,7 +5101,7 @@ function openAddReadingModal(meterId = null, editReadingId = null) {
             if (r.provider_id) document.getElementById('reading-provider').value = r.provider_id;
             document.getElementById('plausibility-alert').style.display = 'none';
             document.getElementById('reading-file').value = '';
-            document.getElementById('reading-file-name').textContent = r.document_path ? 'Neues Bild hochladen (überschreibt altes)' : 'Datei auswählen...';
+            document.getElementById('reading-file-name').textContent = r.document_path ? 'Neues Bild hochladen (überschreibt altes)' : 'Datei auswählen …';
             document.querySelector('#reading-modal .modal-header h2').textContent = 'Zählerstand bearbeiten';
         }
     } else {
@@ -5116,7 +5116,7 @@ function openAddReadingModal(meterId = null, editReadingId = null) {
         document.getElementById('reading-provider').value = '';
         document.getElementById('plausibility-alert').style.display = 'none';
         document.getElementById('reading-file').value = '';
-        document.getElementById('reading-file-name').textContent = 'Datei auswählen...';
+        document.getElementById('reading-file-name').textContent = 'Datei auswählen …';
         document.querySelector('#reading-modal .modal-header h2').textContent = 'Zählerstand erfassen';
     }
     
@@ -5227,9 +5227,9 @@ function ablesenZeilen(propertyId) {
             <div class="form-group"><label>Foto (optional)</label>
                 <div class="file-upload-wrapper">
                     <input type="file" id="ablesen-foto-${m.id}" accept="image/*" capture="environment"
-                        onchange="this.nextElementSibling.lastElementChild.textContent = this.files[0] ? this.files[0].name : 'Foto auswählen...'">
+                        onchange="this.nextElementSibling.lastElementChild.textContent = this.files[0] ? this.files[0].name : 'Foto auswählen …'">
                     <label for="ablesen-foto-${m.id}" class="file-upload-label">
-                        <i class="ph ph-camera" aria-hidden="true"></i><span>Foto auswählen...</span></label>
+                        <i class="ph ph-camera" aria-hidden="true"></i><span>Foto auswählen …</span></label>
                 </div></div>
             <small class="ablesen-meldung" id="ablesen-meldung-${m.id}" role="status"></small>
         </div>`;
@@ -5505,7 +5505,7 @@ async function openAddInvoiceModal(editInvoiceId = null, spalte = null) {
         document.getElementById('invoice-apartment').value = '';
         document.querySelector('#invoice-modal h2').textContent = 'Rechnung erfassen';
         fileInput.required = false;
-        fileNameSpan.textContent = 'Datei auswählen...';
+        fileNameSpan.textContent = 'Datei auswählen …';
     }
     
     toggleInvoiceDescription();
@@ -6024,13 +6024,13 @@ function openAddDocumentModal(editDocId = null) {
             propSelect.value = d.property_id;
             document.getElementById('doc-description').value = d.description || '';
             document.querySelector('#document-modal h2').textContent = 'Sammelrechnung bearbeiten';
-            fileNameSpan.textContent = 'Neues PDF auswählen (optional)';
+            fileNameSpan.textContent = 'Neue Datei auswählen (optional)';
             fileInput.required = false;
         }
     } else {
         document.getElementById('doc-description').value = '';
         fileInput.value = '';
-        fileNameSpan.textContent = 'PDF auswählen...';
+        fileNameSpan.textContent = 'Datei auswählen …';
         document.querySelector('#document-modal h2').textContent = 'Beleg hochladen (Sammelrechnung)';
         fileInput.required = true;
     }
@@ -6789,8 +6789,6 @@ window.serverVerbinden = serverVerbinden;
 
 async function ladeUmzug() {
     const desktop = window.umzugPaket && window.umzugPaket.desktop();
-    document.getElementById('umzug-datei-einstellungen').hidden = !!desktop;
-    document.getElementById('btn-umzug-auswahl').hidden = !desktop;
     const gruppe = document.getElementById('umzug-importordner-gruppe');
     if (desktop) {
         gruppe.hidden = true;
@@ -6861,15 +6859,31 @@ async function umzugExportieren() {
 }
 window.umzugExportieren = umzugExportieren;
 
+// Der Knopf entscheidet beim Klick: ohne Brücke (Browser, Server) das
+// versteckte Dateifeld, in der Desktop-App den Dialog der Hülle. Es gilt
+// immer genau eine Quelle.
 async function umzugPaketWaehlen() {
+    const datei = document.getElementById('umzug-datei-einstellungen');
+    if (!window.umzugPaket.desktop()) {
+        datei.click();
+        return;
+    }
     try {
         umzugPfad = await window.umzugPaket.desktopWaehlen();
-        document.getElementById('umzug-auswahl-einstellungen').textContent = umzugPfad || '';
+        datei.value = '';
+        document.getElementById('umzug-auswahl-einstellungen').textContent = umzugPfad || 'Keine Datei ausgewählt';
     } catch (e) {
         showError('Der Datei-Dialog ließ sich nicht öffnen.');
     }
 }
 window.umzugPaketWaehlen = umzugPaketWaehlen;
+
+function umzugDateiGewaehlt(feld) {
+    umzugPfad = null;
+    document.getElementById('umzug-auswahl-einstellungen').textContent =
+        feld.files[0] ? feld.files[0].name : 'Keine Datei ausgewählt';
+}
+window.umzugDateiGewaehlt = umzugDateiGewaehlt;
 
 async function umzugUebernehmen() {
     const meldung = document.getElementById('umzug-meldung');
@@ -6885,8 +6899,7 @@ async function umzugUebernehmen() {
         let quelle;
         const datei = document.getElementById('umzug-datei-einstellungen').files[0];
         const ausOrdner = document.getElementById('umzug-importordner').value;
-        if (window.umzugPaket.desktop()) {
-            if (!umzugPfad) throw umzugHinweis('Bitte wählen Sie zuerst das Paket aus.');
+        if (umzugPfad) {
             quelle = { pfad: umzugPfad };
         } else if (datei) {
             balken.hidden = false;
@@ -6968,6 +6981,7 @@ async function oeffneImport(art) {
     }
     document.getElementById('import-art').value = art || 'rechnungen';
     document.getElementById('import-datei').value = '';
+    document.getElementById('import-datei-name').textContent = 'Tabelle auswählen …';
     importSchritt('datei');
     importArtGewaehlt();
     document.getElementById('import-modal').classList.add('active');

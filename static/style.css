@@ -1096,8 +1096,12 @@ kbd {
 }
 .file-upload-wrapper input[type="file"] {
     position: absolute;
-    left: -9999px;
+    left: 0;
+    bottom: 0;
+    width: 1px;
+    height: 1px;
     opacity: 0;
+    pointer-events: none;   /* kein Tooltip „No file chosen“, der Klick geht ans Label */
 }
 .file-upload-label {
     display: flex;
@@ -1117,6 +1121,11 @@ kbd {
 .file-upload-label:hover {
     background: var(--primary-tint);
     border-color: var(--primary);
+}
+/* Tastaturfokus liegt auf dem unsichtbaren Input, gezeigt wird er am Label. */
+.file-upload-wrapper:has(input:focus-visible) .file-upload-label {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
 }
 
 /* Hide spin buttons */
