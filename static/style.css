@@ -1140,11 +1140,70 @@ input[type="number"] {
     appearance: textfield;
 }
 
-input[type="checkbox"],
-input[type="radio"],
 input[type="range"],
 progress {
     accent-color: var(--primary);
+}
+
+/* Kästchen und Optionsfeld im Hausstil statt des 13-px-Systemkästchens.
+   Ohne neues Markup; der globale :focus-visible-Ring greift weiter. */
+input[type="checkbox"], input[type="radio"] {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 20px;
+    height: 20px;
+    margin: 0;
+    flex-shrink: 0;
+    display: inline-grid;
+    place-content: center;
+    vertical-align: middle;
+    border: 1.5px solid var(--field-border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    cursor: pointer;
+    transition: var(--transition);
+    print-color-adjust: exact;   /* gedruckt bleibt der Haken sichtbar */
+}
+input[type="radio"] { border-radius: 50%; }
+
+input[type="checkbox"]::before,
+input[type="radio"]::before {
+    content: "";
+    background: var(--on-primary);
+    transform: scale(0);
+    transition: transform 120ms ease-out;
+}
+input[type="checkbox"]::before {
+    width: 12px;
+    height: 12px;
+    clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
+}
+input[type="radio"]::before {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+
+input:is([type="checkbox"], [type="radio"]):checked,
+input[type="checkbox"]:indeterminate {
+    background: var(--primary);
+    border-color: var(--primary);
+}
+input:is([type="checkbox"], [type="radio"]):checked::before { transform: scale(1); }
+input[type="checkbox"]:indeterminate::before {
+    clip-path: none;
+    width: 10px;
+    height: 2px;
+    transform: scale(1);
+}
+
+input:is([type="checkbox"], [type="radio"]):hover:not(:disabled) { border-color: var(--primary); }
+input:is([type="checkbox"], [type="radio"]):disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Hochkontrast: das System malt Kästchen und Haken selbst. */
+@media (forced-colors: active) {
+    input[type="checkbox"],
+    input[type="radio"] { appearance: auto; }
 }
 
 .checkbox-group {

@@ -8783,7 +8783,7 @@ function openBillingSelectionModal(suggestion) {
         html += `
             <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px; border: 1px solid var(--border-color); border-radius: 8px; margin-bottom: 8px; background: var(--bg-hover);">
                 <label style="display: flex; align-items: center; gap: 12px; cursor: pointer; flex: 1;">
-                    <input type="checkbox" class="category-select-cb" value="${cat.category_id}" checked style="width: 18px; height: 18px;">
+                    <input type="checkbox" class="category-select-cb" value="${cat.category_id}" checked>
                     <div>
                         <div style="font-weight: 600;">${escapeHtml(cat.category_name)}</div>
                         <div style="font-size: 13px; color: var(--text-muted);">${startFmt} - ${endFmt} (${cat.invoice_count} ${cat.invoice_count === 1 ? 'Rechnung' : 'Rechnungen'})</div>

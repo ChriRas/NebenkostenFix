@@ -715,7 +715,7 @@
                         <!-- NK-130 (D-86): Sicherungen, die den Rechner verlassen,
                              mit Passphrase verschluesseln (AES-256-GCM). -->
                         <div class="form-group abstand-unten-klein">
-                            <label style="display: flex; gap: 8px; align-items: center; font-weight: normal;">
+                            <label class="haken-zeile">
                                 <input type="checkbox" id="sicherung-verschluesseln"
                                     onchange="document.getElementById('sicherung-passphrase-felder').style.display = this.checked ? '' : 'none'">
                                 Sicherung mit Passphrase verschlüsseln (empfohlen für USB-Laufwerk und Cloud)
@@ -2442,7 +2442,7 @@
                     <div class="form-group abstand-oben">
                         <label
                             style="display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none;">
-                            <input type="checkbox" id="reading-is-official" style="width: 16px; height: 16px;"
+                            <input type="checkbox" id="reading-is-official"
                                 onchange="document.getElementById('group-reading-provider').style.display = this.checked ? 'block' : 'none';">
                             <span style="font-size: 15px; font-weight: 500; color: var(--text-color);">Ablesung stammt aus
                                 offizieller Rechnung</span>
@@ -2941,7 +2941,7 @@
                         </select>
                     </div>
                 </div>
-                <div class="form-group" style="display: flex; align-items: center; gap: 8px;">
+                <div class="form-group checkbox-group">
                     <input type="checkbox" id="heizung-sonderfall" onchange="toggleSonderfall()">
                     <label for="heizung-sonderfall" style="margin: 0;">Sonderfall § 7 Abs. 1 Satz 2 (Öl- oder Gasheizung, ungefördertes Gebäude, gedaemmte Leitungen — dann sind 70 vom Hundert vorgeschrieben)</label>
                 </div>
