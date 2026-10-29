@@ -275,9 +275,10 @@ begin
   if not LiegtUnter(Daten, Lokal + '\WebView2') then
     DelTree(Lokal + '\WebView2', True, True, True);
   DeleteFile(Lokal + '\konsole.log');
-  // Merker der Update-Suche im Servermodus; ist der lokale Ordner zugleich
-  // der Datenordner, gehört die Datei zu den Daten (Haftungshinweis, Anmeldung).
-  if CompareText(RemoveBackslashUnlessRoot(Daten), Lokal) <> 0 then
+  // Merker der Update-Suche im Servermodus. Liegt daneben eine Datenbank, ist
+  // der Ordner ein Datenordner (auch per --datenordner, Junction, Kurzname),
+  // und die Datei gehört zu den Daten (Haftungshinweis, Anmeldung).
+  if not FileExists(Lokal + '\nebenkosten.db') then
     DeleteFile(Lokal + '\app-einstellungen.json');
 end;
 

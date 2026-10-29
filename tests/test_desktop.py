@@ -394,7 +394,9 @@ def test_deinstallation_entfernt_einstellungen_nur_auf_wunsch_und_nie_daten():
     assert re.findall(r'DeleteFile\(([^)]*)\)', entfernen) == [
         "Lokal + '\\konsole.log'", "Lokal + '\\app-einstellungen.json'"]
     # app-einstellungen.json gehört dem Datenordner, wenn er der lokale Ordner ist.
-    assert ("if CompareText(RemoveBackslashUnlessRoot(Daten), Lokal) <> 0 then\n"
+    # Erkannt an der Datenbank daneben, nicht am Pfad: --datenordner, DATA_DIR,
+    # Junction oder Kurzname stehen nicht in der INI.
+    assert ("if not FileExists(Lokal + '\\nebenkosten.db') then\n"
             "    DeleteFile(Lokal + '\\app-einstellungen.json');") in entfernen
     # Die Schlussmeldung, wo die Daten liegen, bleibt.
     assert 'bleiben erhalten in:' in schritt

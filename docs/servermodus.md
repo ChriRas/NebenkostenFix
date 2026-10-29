@@ -130,8 +130,8 @@ Daraus folgt:
 - Das Deinstallieren (setup.exe) fragt, ob auch die Einstellungen dieses Rechners weg
   sollen (Vorgabe Nein, still nur mit `/EINSTELLUNGEN=1`). Bei Ja entfernt es den
   Abschnitt `[Server]` der INI, den Ordner `WebView2`, `konsole.log` und
-  `app-einstellungen.json` (Merker der Update-Suche; nicht, wenn der lokale Ordner zugleich
-  der Datenordner ist). `[Daten]`, den Datenordner und den Ausweich `Daten` lässt es immer
+  `app-einstellungen.json` (Merker der Update-Suche; nicht, wenn daneben eine
+  `nebenkosten.db` liegt, der lokale Ordner also zugleich der Datenordner ist). `[Daten]`, den Datenordner und den Ausweich `Daten` lässt es immer
   stehen. Bei Nein startet eine Neuinstallation wieder verbunden.
 - Store-Paket (MSIX): Windows lenkt Schreibzugriffe nach `%LOCALAPPDATA%` vermutlich in den
   Paketordner um und entfernt ihn beim Deinstallieren; eine Rückfrage gibt es dort nicht.
