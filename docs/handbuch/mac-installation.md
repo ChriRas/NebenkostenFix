@@ -21,9 +21,11 @@ Versionsnummer. Sie landet im Ordner „Downloads“.
 
 1. Öffnen Sie die heruntergeladene Datei mit einem Doppelklick. Es öffnet sich ein Fenster
    mit NebenkostenFix und dem Ordner „Programme“.
-2. Ziehen Sie **NebenkostenFix** auf **Programme**.
+2. Ziehen Sie **NebenkostenFix** (auf dem Bild rot mit 1 markiert) auf **Programme** (2).
 3. Schließen Sie das Fenster. Klicken Sie im Finder in der Seitenleiste neben „NebenkostenFix“
    auf das Auswerfen-Symbol.
+
+![Fenster der heruntergeladenen Datei: links NebenkostenFix, rechts der Ordner „Programme“, darunter die Installationsanleitung](../bilder/mac-dmg-fenster.png)
 
 Starten Sie die App immer aus „Programme“, nicht aus dem Fenster der heruntergeladenen Datei.
 
@@ -60,10 +62,13 @@ Danach startet NebenkostenFix. Ab jetzt öffnet sich die App ohne Rückfrage, wi
 
 ## 5. Eine neue Version installieren
 
-Laden Sie die neue Datei herunter und installieren Sie sie wie in Abschnitt 3. Wenn der Finder
-fragt, ob er die vorhandene App ersetzen soll, bestätigen Sie das. Weil jede Version
-eine neue, ungeprüfte Datei ist, fragt macOS beim nächsten Start meist wieder nach. Gehen Sie
-dann wie in Abschnitt 4 vor. Ihre Daten bleiben dabei erhalten.
+Laden Sie die neue Datei herunter und installieren Sie sie wie in Abschnitt 3. Der Finder
+fragt, ob er die vorhandene App ersetzen soll. Klicken Sie auf **Ersetzen**.
+
+![Frage des Finders: Soll das vorhandene „NebenkostenFix“ ersetzt werden?, mit den Knöpfen „Beide behalten“, „Stoppen“ und „Ersetzen“](../bilder/mac-ersetzen.png)
+
+Weil jede Version eine neue, ungeprüfte Datei ist, fragt macOS beim nächsten Start wieder nach.
+Gehen Sie dann wie in Abschnitt 4 vor. Ihre Daten bleiben dabei erhalten.
 
 ## 6. Wo Ihre Daten liegen
 

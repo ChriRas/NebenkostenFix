@@ -21,7 +21,9 @@ from tests.test_macos_paket import _info_plist
 WURZEL = Path(__file__).resolve().parents[1]
 ANLEITUNG = WURZEL / 'docs' / 'handbuch' / 'mac-installation.md'
 FAQ = WURZEL / 'docs' / 'handbuch' / 'faq.md'
-DIALOGE = ('mac-nicht-geoeffnet', 'mac-dennoch-oeffnen', 'mac-administrator')
+DIALOGE = ('mac-nicht-geoeffnet', 'mac-dennoch-oeffnen', 'mac-administrator', 'mac-ersetzen')
+# Ausgeschnittene Fenster: Dialoge von macOS und das Fenster des DMG
+FENSTER = (*DIALOGE, 'mac-dmg-fenster')
 
 
 def _text() -> str:
@@ -35,14 +37,14 @@ def _bilder() -> list[Path]:
 
 def test_jedes_bild_gibt_es_und_alle_haben_einen_alternativtext():
     bilder = _bilder()
-    assert {b.stem for b in bilder} >= {*DIALOGE, 'mac-datenschutz'}
+    assert {b.stem for b in bilder} >= {*FENSTER, 'mac-datenschutz'}
     for bild in bilder:
         assert bild.is_file(), bild
         assert bild.parent == WURZEL / 'docs' / 'bilder'
     assert not re.search(r'!\[\]\(', _text())
 
 
-@pytest.mark.parametrize('name', DIALOGE)
+@pytest.mark.parametrize('name', FENSTER)
 def test_dialogbilder_mit_transparenten_ecken(name):
     """Ausgeschnitten auf den Rahmen: In den Ecken stand vorher ein Stück
     Finder-Liste."""
@@ -54,7 +56,7 @@ def test_dialogbilder_mit_transparenten_ecken(name):
         assert bild.getpixel((breite // 2, hoehe // 2))[3] == 255
 
 
-@pytest.mark.parametrize('name', [*DIALOGE, 'mac-datenschutz'])
+@pytest.mark.parametrize('name', [*FENSTER, 'mac-datenschutz'])
 def test_jedes_bild_zeigt_rot_wo_man_klickt(name):
     """Wer den Text überliest, sieht am Bild, welchen Knopf er drückt."""
     with Image.open(WURZEL / 'docs' / 'bilder' / f'{name}.png') as bild:
@@ -128,3 +130,15 @@ def test_servermodus_mit_den_texten_der_oberflaeche():
     assert "MenuAction('Auf diesem Rechner arbeiten …'" in quelle
     assert '„Ablage“ → „Auf diesem Rechner arbeiten …“' in abschnitt
     assert 'http://' in abschnitt    # ohne Schema nimmt die App https an
+
+
+def test_installieren_und_ersetzen_mit_bild():
+    """Abschnitt 3 zeigt das Fenster des DMG, Abschnitt 5 den Knopf, mit dem
+    Finder die alte Version ersetzt. Nach dem Ersetzen fragt macOS wieder
+    nach (DMG-Test 0.17.1 → 0.18.0 des Nutzers, 30.10.2026)."""
+    installieren = _abschnitt('## 3. Installieren')
+    neue_version = ' '.join(_abschnitt('## 5. Eine neue Version installieren').split())
+    assert '../bilder/mac-dmg-fenster.png' in installieren
+    assert '../bilder/mac-ersetzen.png' in neue_version
+    assert '**Ersetzen**' in neue_version
+    assert 'fragt macOS beim nächsten Start wieder nach' in neue_version
