@@ -15,6 +15,7 @@ from PIL import Image
 
 import desktop
 from nebenkostenfix import aktualisierung
+from nebenkostenfix import haftung
 from nebenkostenfix import windows_ordner
 from tests.test_macos_paket import _info_plist
 
@@ -122,7 +123,7 @@ def test_servermodus_mit_den_texten_der_oberflaeche():
     abschnitt = ' '.join(_abschnitt('## 9. Mit einem Server verbinden').split())
     seite = (WURZEL / 'static' / 'index.html').read_text(encoding='utf-8')
     quelle = Path(desktop.__file__).read_text(encoding='utf-8')
-    assert 'Einstellungen → Sicherung' in abschnitt
+    assert 'Einstellungen → Datensicherung' in abschnitt
     for text in ('Mit einem Server verbinden', 'Adresse des Servers',
                  'Ich habe verstanden, dass ich danach mit den Daten auf dem Server arbeite.'):
         assert text in abschnitt and text in ' '.join(seite.split()), text
@@ -130,15 +131,41 @@ def test_servermodus_mit_den_texten_der_oberflaeche():
     assert "MenuAction('Auf diesem Rechner arbeiten …'" in quelle
     assert '„Ablage“ → „Auf diesem Rechner arbeiten …“' in abschnitt
     assert 'http://' in abschnitt    # ohne Schema nimmt die App https an
+    # Hinweg: beim ersten Start die Startwahl, später das Menü
+    assert '**Mit einem NebenkostenFix-Server verbinden**' in abschnitt
+    assert 'Mit einem NebenkostenFix-Server verbinden' in ' '.join(seite.split())
+    assert "MenuAction('Mit einem Server verbinden …'" in quelle
+    assert '„Ablage“ → „Mit einem Server verbinden …“' in abschnitt
+    assert 'Bevor es losgeht' not in abschnitt   # dort gibt es keinen Server-Knopf mehr
 
 
-def test_installieren_und_ersetzen_mit_bild():
-    """Abschnitt 3 zeigt das Fenster des DMG, Abschnitt 5 den Knopf, mit dem
-    Finder die alte Version ersetzt. Nach dem Ersetzen fragt macOS wieder
-    nach (DMG-Test 0.17.1 → 0.18.0 des Nutzers, 30.10.2026)."""
-    installieren = _abschnitt('## 3. Installieren')
-    neue_version = ' '.join(_abschnitt('## 5. Eine neue Version installieren').split())
-    assert '../bilder/mac-dmg-fenster.png' in installieren
-    assert '../bilder/mac-ersetzen.png' in neue_version
-    assert '**Ersetzen**' in neue_version
-    assert 'fragt macOS beim nächsten Start wieder nach' in neue_version
+def test_erster_start_endet_bei_der_startwahl():
+    """#45: Ohne Objekte fragt die App zuerst, wo die Daten liegen sollen.
+    Wer keinen Server hat, soll nicht raten müssen."""
+    abschnitt = ' '.join(_abschnitt('## 4. Der erste Start').split())
+    seite = ' '.join((WURZEL / 'static' / 'index.html').read_text(encoding='utf-8').split())
+    for text in ('Wo sollen Ihre Daten liegen?', 'Auf diesem Rechner arbeiten'):
+        assert text in abschnitt and text in seite, text
+    assert '**Auf diesem Rechner arbeiten**' in abschnitt
+    # Danach kommt noch der Hinweis vor dem ersten Arbeiten.
+    assert f'„{haftung.TITEL}“' in abschnitt
+    assert '**Verstanden**' in abschnitt and '>Verstanden</button>' in seite
+
+
+def test_reiter_der_einstellungen_wie_in_der_app():
+    """Der Reiter heißt „Datensicherung“, nicht „Sicherung“."""
+    seite = (WURZEL / 'static' / 'index.html').read_text(encoding='utf-8')
+    assert re.search(r'</i> Datensicherung</button>', seite)
+    assert 'Einstellungen → Sicherung' not in _text()
+    assert _text().count('Einstellungen → Datensicherung') >= 2
+
+
+def test_neu_anfangen_ohne_die_laufende_app():
+    """Die App ist schon beendet, also führt nur der Finder zum Ordner. Leer
+    sind danach die Daten; die Verbindung zu einem Server bleibt gemerkt."""
+    abschnitt = ' '.join(_abschnitt('## 7. Neu anfangen').split())
+    assert 'Gehe zu Ordner' in abschnitt
+    assert '`~/Library/Application Support/NebenkostenFix`' in abschnitt
+    assert 'Hilfe' not in abschnitt
+    assert 'wie am ersten Tag' not in abschnitt
+    assert 'Einstellungen → Datensicherung' in abschnitt

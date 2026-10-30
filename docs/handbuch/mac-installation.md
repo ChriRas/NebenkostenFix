@@ -58,7 +58,13 @@ einmal wie in Schritt 1.
 
 ![Rückfrage von Datenschutz & Sicherheit: Touch ID oder Passwort eines Administrators verwenden](../bilder/mac-administrator.png)
 
-Danach startet NebenkostenFix. Ab jetzt öffnet sich die App ohne Rückfrage, wie jede andere.
+Danach startet NebenkostenFix. Ab jetzt öffnet macOS die App ohne Rückfrage, wie jede andere.
+
+Die App selbst fragt zuerst: „Wo sollen Ihre Daten liegen?“ Klicken Sie auf **Auf diesem
+Rechner arbeiten**. Dann bleiben Ihre Daten auf Ihrem Mac. Den anderen Weg, einen eigenen
+Server, brauchen nur wenige (siehe Abschnitt 9). Danach zeigt die App den Hinweis „Bevor es
+losgeht“. Lesen Sie ihn und klicken Sie auf **Verstanden**. Die Frage nach dem Ort Ihrer Daten
+kommt bei jedem Start wieder, bis Sie Ihre erste Immobilie angelegt haben.
 
 ## 5. Eine neue Version installieren
 
@@ -87,13 +93,14 @@ Datenbank kann dabei Schaden nehmen.
 
 Wenn Sie mit leeren Daten neu beginnen möchten:
 
-1. Legen Sie vorher eine Sicherung an (in der App unter Einstellungen → Sicherung).
+1. Legen Sie vorher eine Sicherung an (in der App unter Einstellungen → Datensicherung).
 2. Beenden Sie NebenkostenFix mit dem Menü „NebenkostenFix“ → „NebenkostenFix beenden“ oder
    mit Cmd-Q.
-3. Öffnen Sie den Datenordner wie in Abschnitt 6 und legen Sie den Ordner `Daten` in den
+3. Öffnen Sie im Finder über „Gehe zu“ → „Gehe zu Ordner …“ den Ordner
+   `~/Library/Application Support/NebenkostenFix`. Legen Sie darin den Ordner `Daten` in den
    Papierkorb.
 
-Beim nächsten Start beginnt NebenkostenFix wie am ersten Tag.
+Beim nächsten Start beginnt NebenkostenFix mit leeren Daten.
 
 ## 8. NebenkostenFix entfernen
 
@@ -116,8 +123,9 @@ Es muss Ihr eigener Server sein, fremde Server gehen nicht.
 
 Wenn Ihr Server läuft:
 
-1. Öffnen Sie in der App **Einstellungen → Sicherung**. Beim allerersten Start geht es auch
-   über den Knopf im Hinweis „Bevor es losgeht“.
+1. Beim ersten Start klicken Sie auf **Mit einem NebenkostenFix-Server verbinden**. Später
+   geht es über das Menü „Ablage“ → „Mit einem Server verbinden …“ oder in der App über
+   **Einstellungen → Datensicherung**.
 2. Tragen Sie in der Karte **Mit einem Server verbinden** die **Adresse des Servers** ein. Die
    Adresse bekommen Sie von dem, der den Server eingerichtet hat, zum Beispiel
    `http://diskstation:6060`. Schreiben Sie sie genau so ab, auch mit `http://` am Anfang.
