@@ -35,6 +35,13 @@ Server im eigenen Fenster, wie ein Browser, nur ohne Adressleiste.
   beendet wird mit Cmd-Q im App-Menü. Der rote Knopf versteckt das Fenster nur, wie im
   lokalen Modus. Die INI liegt in `~/Library/Application Support/NebenkostenFix/`. Ein
   Update installiert die Mac-App nicht selbst, sie bietet deshalb auch keins an.
+- **Grenze unter macOS:** Der Server schickt `auth.CSP` ohne `'unsafe-eval'`. WKWebView
+  wendet die CSP auch auf eingespeistes Skript an, anders als WebView2. pywebview baut die
+  Methoden der Brücke in `api.js` mit `new Function`, `evaluate_js` scheitert an `eval`.
+  `window.pywebview.api` bleibt deshalb leer: Speichern, Öffnen, externe Links und die
+  Karte „Mit einem Server verbunden“ fehlen. Drucken geht: Das Menü ruft die Seite mit
+  `run_js`, das ohne `eval` auskommt, und pywebview ersetzt `window.print` über einen
+  Message-Handler. Lokal ergänzt `HuellenSchutz` `'unsafe-eval'` nur für das Fenster der App.
 - **Updates:** Auch im Servermodus sucht die App beim Start nach einer neuen Version (von
   der Projektseite, nicht vom Server). Sie fragt vor der Installation und startet danach
   wieder im Servermodus. Gemerkt wird der Zeitpunkt der Suche im lokalen App-Ordner, nicht

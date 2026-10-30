@@ -15,6 +15,7 @@ from PIL import Image
 
 import desktop
 from nebenkostenfix import aktualisierung
+from nebenkostenfix import auth
 from nebenkostenfix import haftung
 from nebenkostenfix import windows_ordner
 from tests.test_macos_paket import _info_plist
@@ -169,3 +170,28 @@ def test_neu_anfangen_ohne_die_laufende_app():
     assert 'Hilfe' not in abschnitt
     assert 'wie am ersten Tag' not in abschnitt
     assert 'Einstellungen → Datensicherung' in abschnitt
+
+
+def test_servermodus_nennt_die_grenzen_unter_macos():
+    """#45: Der Server erlaubt kein 'unsafe-eval'. WKWebView baut dann die
+    Brücke von pywebview nicht, Speichern und Öffnen gehen nicht. Drucken
+    geht (Probe gegen den Server, 30.10.2026). Erlaubt der Server es
+    eines Tages, fällt dieser Test auf und die Grenze aus der Anleitung."""
+    assert "'unsafe-eval'" not in auth.CSP
+    abschnitt = ' '.join(_abschnitt('## 9. Mit einem Server verbinden').split())
+    for text in ('keine Dateien speichern', 'keine Belege öffnen', 'Drucken geht', 'Safari'):
+        assert text in abschnitt, text
+    servermodus = ' '.join((WURZEL / 'docs' / 'servermodus.md').read_text(encoding='utf-8').split())
+    assert "'unsafe-eval'" in servermodus and 'api.js' in servermodus
+
+
+def test_installieren_und_ersetzen_mit_bild():
+    """Abschnitt 3 zeigt das Fenster des DMG, Abschnitt 5 den Knopf, mit dem
+    Finder die alte Version ersetzt. Nach dem Ersetzen fragt macOS wieder
+    nach (DMG-Test 0.17.1 → 0.18.0 des Nutzers, 30.10.2026)."""
+    installieren = _abschnitt('## 3. Installieren')
+    neue_version = ' '.join(_abschnitt('## 5. Eine neue Version installieren').split())
+    assert '../bilder/mac-dmg-fenster.png' in installieren
+    assert '../bilder/mac-ersetzen.png' in neue_version
+    assert '**Ersetzen**' in neue_version
+    assert 'fragt macOS beim nächsten Start wieder nach' in neue_version
