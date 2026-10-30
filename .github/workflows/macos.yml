@@ -122,36 +122,49 @@ jobs:
       - name: Fensterprobe (Start wie aus dem Finder, Update-Suche, Cmd-Q)
         timeout-minutes: 10
         run: python packaging/macos/fensterprobe.py dist/NebenkostenFix.app "$RUNNER_TEMP/bericht-fenster.json"
+      - name: Anleitung als PDF
+        run: python packaging/macos/anleitung_pdf.py docs/handbuch/mac-installation.md "$RUNNER_TEMP/Installationsanleitung.pdf"
       - name: DMG
-        # hdiutil meldet auf den Runnern gelegentlich „Resource busy“
-        # (runner-images#7522): mehrmals versuchen; im if bricht set -e nicht
-        # ab, und eine halbe Datei vom Fehlversuch zaehlt nicht.
+        id: dmg
+        # dmgbuild schreibt die Fensteransicht selbst, ohne Finder; erst ab
+        # 1.6.7 zeigt Finder unter macOS 26.2 den Hintergrund. Nur fuer den
+        # Bau, nicht in der App. dmg.py versucht es bei „Resource busy“
+        # (runner-images#7522) mehrmals.
         run: |
-          inhalt="$RUNNER_TEMP/dmg"
-          mkdir -p "$inhalt"
-          ditto dist/NebenkostenFix.app "$inhalt/NebenkostenFix.app"
           # Die Proben haben das Bundle gestartet: noch unversehrt signiert?
-          codesign --verify --deep --strict "$inhalt/NebenkostenFix.app"
-          ln -s /Applications "$inhalt/Programme"
+          codesign --verify --deep --strict dist/NebenkostenFix.app
+          python -m pip install dmgbuild==1.6.7
           dmg="dist/NebenkostenFix-${{ steps.version.outputs.wert }}-macOS-arm64.dmg"
-          for versuch in 1 2 3 4 5; do
-            sync
-            if hdiutil create -volname NebenkostenFix -srcfolder "$inhalt" -ov -format UDZO "$dmg"; then
-              break
-            fi
-            rm -f "$dmg"
-            if [ "$versuch" = 5 ]; then echo "hdiutil scheiterte fuenfmal"; exit 1; fi
-            sleep $((versuch * 10))
-          done
+          python packaging/macos/dmg.py --app dist/NebenkostenFix.app --anleitung "$RUNNER_TEMP/Installationsanleitung.pdf" --ziel "$dmg"
+          echo "pfad=$dmg" >> "$GITHUB_OUTPUT"
+      - name: DMG pruefen (schreibgeschuetzt eingehaengt)
+        run: |
+          dmg="${{ steps.dmg.outputs.pfad }}"
           hdiutil verify "$dmg"
+          volume="$RUNNER_TEMP/dmg-volume"
+          mkdir -p "$volume"
+          hdiutil attach "$dmg" -readonly -nobrowse -noautoopen -mountpoint "$volume"
+          codesign --verify --deep --strict "$volume/NebenkostenFix.app"
+          for datei in "$volume/.DS_Store" "$volume/.background.tiff" "$volume/Installationsanleitung.pdf"; do
+            test -s "$datei" || { echo "Im DMG fehlt $datei"; hdiutil detach "$volume" -force; exit 1; }
+          done
+          test "$(readlink "$volume/Programme")" = /Applications || { echo "Programme zeigt nicht auf /Applications"; hdiutil detach "$volume" -force; exit 1; }
+          hdiutil detach "$volume"
           echo "- DMG: $(basename "$dmg"), $(du -m "$dmg" | cut -f1) MB, ad hoc signiert, nicht notarisiert" >> "$GITHUB_STEP_SUMMARY"
+      # Ohne ZIP: Der Name des Artefakts ist der Dateiname, ein Klick laedt
+      # direkt das DMG (archive: false, nur eine Datei je Upload).
+      - uses: actions/upload-artifact@v7
+        with:
+          path: dist/NebenkostenFix-${{ steps.version.outputs.wert }}-macOS-arm64.dmg
+          archive: false
+          retention-days: 14
       - uses: actions/upload-artifact@v7
         if: always()
         with:
-          name: nebenkostenfix-macos
+          name: nebenkostenfix-macos-berichte
           path: |
-            dist/NebenkostenFix-*-macOS-arm64.dmg
             THIRD_PARTY_LICENSES.txt
             ${{ runner.temp }}/bericht-*.json
+            ${{ runner.temp }}/Installationsanleitung.pdf
           retention-days: 14
           if-no-files-found: warn
