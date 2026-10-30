@@ -303,7 +303,7 @@ def test_server_verbinden_zeigt_fehler_und_bietet_http_an():
                 element('server-adresse').value = adresse;
                 await serverVerbinden(knopf);
                 return [meldung.textContent, meldung.klassen, element('server-adresse').value,
-                        aufrufe.splice(0), knopf.disabled];
+                        aufrufe.splice(0), knopf.disabled, element('server-meldung-symbol').hidden];
             };
             antworten = {'nas:6062': {ok: false, meldung: 'verschlüsselt geht nicht', http_anbieten: true},
                          'http://nas:6062': {ok: true}, 'nas:1': {ok: false, meldung: 'weg'}};
@@ -316,11 +316,13 @@ def test_server_verbinden_zeigt_fehler_und_bietet_http_an():
     '''
     ja, nein, fehler, fragen = _node(probe)
     assert ja == ['Verbindung klappt. NebenkostenFix startet jetzt neu.', [], 'http://nas:6062',
-                  ['nas:6062', 'http://nas:6062'], True]
-    assert nein == ['verschlüsselt geht nicht', ['fehler'], 'nas:6062', ['nas:6062'], False]
-    assert fehler == ['weg', ['fehler'], 'nas:1', ['nas:1'], False]
+                  ['nas:6062', 'http://nas:6062'], True, True]
+    assert nein == ['verschlüsselt geht nicht', ['fehler'], 'nas:6062', ['nas:6062'], False, False]
+    assert fehler == ['weg', ['fehler'], 'nas:1', ['nas:1'], False, False]
     assert fragen == ['Mit http:// verbinden'] * 2
     assert '#server-meldung.fehler' in (WURZEL / 'static' / 'style.css').read_text(encoding='utf-8')
+    assert 'id="server-meldung-symbol" class="ph ph-warning-circle" aria-hidden="true" hidden' in \
+        (WURZEL / 'static' / 'index.html').read_text(encoding='utf-8')
 
 
 def test_bruecke_kommt_spaet():

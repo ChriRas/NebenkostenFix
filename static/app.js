@@ -6781,10 +6781,11 @@ async function serverVerbinden(knopf) {
     const meldung = document.getElementById('server-meldung');
     const feld = document.getElementById('server-adresse');
     let adresse = feld.value.trim();
-    // #45: Fehler rot mit Symbol (style.css), sonst übersieht man die Zeile.
+    // #45: Fehler rot mit Symbol, sonst übersieht man die Zeile.
     const zeige = (text, fehler) => {
         meldung.textContent = text;
         meldung.classList.toggle('fehler', fehler);
+        document.getElementById('server-meldung-symbol').hidden = !fehler;
     };
     zeige('', false);
     if (!document.getElementById('server-verstanden').checked) return;
@@ -6794,10 +6795,11 @@ async function serverVerbinden(knopf) {
     knopf.disabled = true;
     try {
         let ergebnis = await huelle.serverVerbinden(adresse);
+        const mitHttp = 'http://' + adresse;
         if (ergebnis && ergebnis.http_anbieten && await frage(
-            `Eine verschlüsselte Verbindung ist nicht möglich. Mit http://${adresse} unverschlüsselt ` +
+            `Eine verschlüsselte Verbindung ist nicht möglich. Mit ${mitHttp} unverschlüsselt ` +
             'verbinden? Nutzen Sie das nur im eigenen Heimnetz.', 'Mit http:// verbinden')) {
-            adresse = feld.value = `http://${adresse}`;
+            adresse = feld.value = mitHttp;
             ergebnis = await huelle.serverVerbinden(adresse);
         }
         if (ergebnis && ergebnis.ok) {

@@ -820,7 +820,7 @@
                                 onchange="document.getElementById('btn-server-verbinden').disabled = !this.checked">
                             Ich habe verstanden, dass ich danach mit den Daten auf dem Server arbeite.
                         </label>
-                        <p id="server-meldung" class="karten-text" role="status" aria-live="polite"></p>
+                        <p class="karten-text" role="status" aria-live="polite"><i id="server-meldung-symbol" class="ph ph-warning-circle" aria-hidden="true" hidden></i><span id="server-meldung"></span></p>
                         <div class="knopf-zeile">
                             <button class="btn-primary" type="button" id="btn-server-verbinden" disabled
                                 onclick="serverVerbinden(this)">

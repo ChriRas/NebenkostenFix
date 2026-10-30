@@ -2614,10 +2614,8 @@ i.feld-hilfe:hover {
 
 /* #45: Eine gescheiterte Prüfung beim Verbinden fällt auf, rot mit Warnsymbol. */
 #server-meldung.fehler { color: var(--danger-color); font-weight: 600; }
-#server-meldung.fehler::before {
-    content: "\e4e2";  /* ph-warning-circle */
-    font-family: "Phosphor";
-    font-weight: normal;
+#server-meldung-symbol {
+    color: var(--danger-color);
     margin-right: var(--space-1);
     vertical-align: -2px;
 }
