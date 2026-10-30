@@ -236,8 +236,8 @@ def _koepfe(anwendung):
 def test_csp_unter_macos_erlaubt_die_bruecke(system):
     """pywebview baut ``window.pywebview.api`` mit ``new Function`` und
     ``evaluate_js`` mit ``eval``; WKWebView sperrt beides ohne
-    ``'unsafe-eval'``. Ohne Brücke scheitern Export, Ordnerwahl, Umzug,
-    Drucken und „Über“."""
+    ``'unsafe-eval'``. Ohne Brücke scheitern Export, Öffnen, Ordnerwahl
+    und Umzug."""
     system('darwin')
     csp = _koepfe(_antwort([('Content-Security-Policy', auth.CSP)]))['Content-Security-Policy']
     assert "script-src 'self' 'unsafe-inline' 'unsafe-eval';" in csp
@@ -324,6 +324,11 @@ class _Fenster:
         return False
 
     def evaluate_js(self, skript):
+        # Wie WKWebView unter der CSP eines Servers: evaluate_js wickelt das
+        # Skript in eval (Probe gegen einen Server, 30.10.2026).
+        raise AssertionError(f'evaluate_js braucht eval: {skript}')
+
+    def run_js(self, skript):
         self.skripte.append(skript)
 
     def destroy(self):
@@ -604,6 +609,22 @@ def test_server_menue_holt_das_versteckte_fenster_zurueck(system, monkeypatch, t
     ablauf = _server_fenster_starten(monkeypatch, tmp_path, 'zu')
     _aktion(ablauf, 'Ablage', titel)()
     assert ablauf['fenster'].sichtbar is True
+
+
+@pytest.mark.parametrize('modus, menue, titel, skript', [
+    ('lokal', 'Ablage', 'Drucken', 'window.print()'),
+    ('lokal', 'Ablage', 'Mit einem Server verbinden …', 'zeigeServerKarte()'),
+    ('lokal', 'Hilfe', f'Über {desktop.TITEL}', "zeigeHilfe('hilfe-ueber')"),
+    ('server', 'Ablage', 'Drucken', 'window.print()'),
+])
+def test_menue_ruft_die_seite_ohne_eval(system, monkeypatch, tmp_path, modus, menue, titel, skript):
+    """Der Server schickt seine CSP ohne 'unsafe-eval'. Dann verweigert
+    WKWebView evaluate_js, run_js läuft. Das Menü braucht keinen Rückgabewert."""
+    system('darwin')
+    starten = _fenster_starten if modus == 'lokal' else _server_fenster_starten
+    ablauf = starten(monkeypatch, tmp_path)
+    _aktion(ablauf, menue, titel)()
+    assert ablauf['fenster'].skripte == [skript]
 
 
 def test_servermodus_unter_macos_mit_deutschen_standardmenues(system, monkeypatch, tmp_path):
