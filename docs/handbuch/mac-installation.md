@@ -105,8 +105,9 @@ verlässt Ihren Mac, solange Sie sich nicht selbst mit einem Server verbinden.
 Einen Server brauchen Sie nur in einem Fall: Sie möchten von mehreren Computern aus mit
 denselben Daten arbeiten. Dafür läuft NebenkostenFix bei Ihnen zu Hause auf einem eigenen
 Gerät, zum Beispiel auf einer Synology. Das richten Sie selbst ein oder jemand, der sich damit
-auskennt. Wie das geht, steht in der README unter „Synology“. Es muss Ihr eigener Server sein,
-fremde Server gehen nicht.
+auskennt. Wie das geht, steht auf der
+[Projektseite unter „Synology“](https://github.com/Nerbry72/NebenkostenFix#synology-ohne-kommandozeile).
+Es muss Ihr eigener Server sein, fremde Server gehen nicht.
 
 Wenn Ihr Server läuft:
 

@@ -190,25 +190,19 @@ def test_workflow_prueft_das_gebaute_paket():
     # Popen einen relativen Pfad erst danach auf (erster CI-Lauf: FileNotFoundError).
     assert f'paketprobe.py selbsttest "$GITHUB_WORKSPACE/{programm}"' in schritte
     assert 'packaging/macos/fensterprobe.py' in schritte
-    assert 'hdiutil create' in schritte
-
-
-def test_workflow_versucht_hdiutil_mehrmals():
-    """hdiutil meldet auf den Runnern gelegentlich „Resource busy“
-    (runner-images#7522); die Schleife darf nicht am ersten Fehlschlag enden,
-    und eine halbe Datei gilt nicht als Erfolg."""
-    schritt = next(s['run'] for s in _workflow()['jobs']['paket']['steps']
-                   if 'hdiutil create' in s.get('run', ''))
-    assert 'for versuch in' in schritt and 'if hdiutil create' in schritt
-    assert 'rm -f "$dmg"' in schritt and 'hdiutil verify' in schritt
+    assert 'packaging/macos/dmg.py' in schritte
 
 
 def test_workflow_prueft_die_signatur_auch_im_dmg():
     """Selbsttest, Umzug und Fensterprobe starten das Bundle vor dem DMG;
-    schriebe ein Lauf hinein, hieße die App auf dem Mac „beschädigt“."""
-    schritt = next(s['run'] for s in _workflow()['jobs']['paket']['steps']
-                   if 'hdiutil create' in s.get('run', ''))
-    assert 'codesign --verify --deep --strict "$inhalt/NebenkostenFix.app"' in schritt
+    schriebe ein Lauf hinein, hieße die App auf dem Mac „beschädigt“. Geprüft
+    wird vor dem Bau und noch einmal im eingehängten DMG. Das Wiederholen bei
+    „Resource busy“ prüft tests/test_macos_dmg.py."""
+    schritte = [s.get('run', '') for s in _workflow()['jobs']['paket']['steps']]
+    bau = next(s for s in schritte if 'packaging/macos/dmg.py --app' in s)
+    assert bau.index('codesign --verify --deep --strict dist/NebenkostenFix.app') \
+        < bau.index('packaging/macos/dmg.py --app')
+    assert 'codesign --verify --deep --strict "$volume/NebenkostenFix.app"' in '\n'.join(schritte)
 
 
 # --- Fensterprobe -------------------------------------------------------------
