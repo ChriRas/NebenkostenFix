@@ -54,6 +54,17 @@ def test_dialogbilder_mit_transparenten_ecken(name):
         assert bild.getpixel((breite // 2, hoehe // 2))[3] == 255
 
 
+@pytest.mark.parametrize('name', [*DIALOGE, 'mac-datenschutz'])
+def test_jedes_bild_zeigt_rot_wo_man_klickt(name):
+    """Wer den Text überliest, sieht am Bild, welchen Knopf er drückt."""
+    with Image.open(WURZEL / 'docs' / 'bilder' / f'{name}.png') as bild:
+        roh = bild.convert('RGBA').tobytes()
+    rot = sum(1 for i in range(0, len(roh), 4)
+              if roh[i + 3] > 200 and roh[i] > 200 and roh[i + 1] < 70 and roh[i + 2] < 70)
+    assert rot > 1000, rot
+    assert 'rot markiert' in _text()
+
+
 def test_mindestversion_wie_im_paket():
     version = _info_plist()['LSMinimumSystemVersion']
     hauptversion = version.split('.')[0]
