@@ -1379,7 +1379,7 @@ def test_lokales_menue_fuehrt_zum_server():
     die leere Übersicht mit ihrem Knopf schon weg ist."""
     quelle = inspect.getsource(desktop.fenster_starten)
     assert "MenuAction('Mit einem Server verbinden …'" in quelle
-    assert "fenster.evaluate_js('zeigeServerKarte()')" in quelle
+    assert "fenster.run_js('zeigeServerKarte()')" in quelle
 
 
 def test_server_verbinden_nur_aus_der_eigenen_oberflaeche(lokal, zeitgeber, monkeypatch):

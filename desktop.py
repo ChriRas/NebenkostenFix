@@ -70,8 +70,10 @@ OEFFNEN_ERLAUBT = {'.pdf', '.jpg', '.jpeg', '.png', '.webp', '.heic'}
 
 # pywebview baut window.pywebview.api mit new Function und evaluate_js mit
 # eval. WKWebView (macOS) sperrt beides ohne 'unsafe-eval'; ohne Brücke
-# scheitern Speichern, Ordnerwahl, Umzug, Drucken und „Über“ (#44).
+# scheitern Speichern, Öffnen, Ordnerwahl und Umzug (#44).
 # 'unsafe-inline' ist ohnehin erlaubt, und das Fenster lädt nur 127.0.0.1.
+# Ein Server erlaubt kein 'unsafe-eval': Das Menü ruft die Seite deshalb mit
+# run_js, das ohne eval auskommt (#45).
 SKRIPT_REGEL = "script-src 'self' 'unsafe-inline';"
 SKRIPT_REGEL_WEBKIT = "script-src 'self' 'unsafe-inline' 'unsafe-eval';"
 
@@ -1018,11 +1020,11 @@ def fenster_starten(datenordner: Path) -> int:  # pragma: no cover - braucht GUI
     im_fenster, erstes_menue, optionen = _nach_systemart(fenster, nach_vorne, beim_beenden)
     menue = [
         erstes_menue([
-            MenuAction('Drucken', im_fenster(lambda: fenster.evaluate_js('window.print()'))),
+            MenuAction('Drucken', im_fenster(lambda: fenster.run_js('window.print()'))),
             MenuSeparator(),
             # #45: der Weg zum Server, auch wenn die Übersicht schon Objekte zeigt.
             MenuAction('Mit einem Server verbinden …',
-                       im_fenster(lambda: fenster.evaluate_js('zeigeServerKarte()'))),
+                       im_fenster(lambda: fenster.run_js('zeigeServerKarte()'))),
         ]),
         Menu('Hilfe', [
             MenuAction('Passwort vergessen …', im_fenster(passwort_seite)),
@@ -1031,7 +1033,7 @@ def fenster_starten(datenordner: Path) -> int:  # pragma: no cover - braucht GUI
             MenuSeparator(),
             # NK-179: springt in der Oberfläche zu „Über NebenkostenFix“.
             MenuAction(f'Über {marke.PRODUKT}',
-                       im_fenster(lambda: fenster.evaluate_js("zeigeHilfe('hilfe-ueber')"))),
+                       im_fenster(lambda: fenster.run_js("zeigeHilfe('hilfe-ueber')"))),
         ]),
     ]
     try:
@@ -1172,11 +1174,11 @@ def server_fenster_starten(adresse: str) -> int:
 
     # Kein lokaler Server: Beim Beenden ist nur die Sperre freizugeben.
     im_fenster, erstes_menue, optionen = _nach_systemart(fenster, nach_vorne, instanz.freigeben)
-    # Kein evaluate_js in die Seite (fremder Code, womöglich andere Version),
+    # Keine Funktionen der Seite aufrufen (fremder Code, womöglich andere Version),
     # kein „Passwort vergessen“ (lokale Route).
     menue = [
         erstes_menue([
-            MenuAction('Drucken', im_fenster(lambda: fenster.evaluate_js('window.print()'))),
+            MenuAction('Drucken', im_fenster(lambda: fenster.run_js('window.print()'))),
             MenuAction('Neu laden', im_fenster(
                 lambda: threading.Thread(target=laden, daemon=True).start())),
             MenuSeparator(),
