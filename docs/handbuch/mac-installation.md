@@ -30,7 +30,8 @@ Starten Sie die App immer aus „Programme“, nicht aus dem Fenster der herunte
 ## 4. Der erste Start
 
 NebenkostenFix ist kostenlos und deshalb nicht bei Apple registriert. macOS kann die App daher
-nicht selbst prüfen und fragt beim ersten Start nach. Das geht in vier Schritten.
+nicht selbst prüfen und fragt beim ersten Start nach. Das geht in vier Schritten. Auf den
+Bildern ist rot markiert, wo Sie klicken.
 
 **Schritt 1:** Öffnen Sie „Programme“ und starten Sie NebenkostenFix mit einem Doppelklick.
 macOS meldet, dass die App nicht geöffnet wurde. Klicken Sie auf **Fertig**, nicht auf „In den
