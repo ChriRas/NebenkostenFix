@@ -311,6 +311,9 @@ class Bruecke:
             return {'ok': False, 'meldung': FREMDE_SEITE}
         ok, meldung, endadresse = server_pruefen(adresse)
         if not ok:
+            if meldung == VERSCHLUESSELUNG and '://' not in str(adresse or ''):
+                # Ohne Schema galt https; die Oberfläche bietet http:// mit Rückfrage an.
+                return {'ok': False, 'meldung': meldung, 'http_anbieten': True}
             return {'ok': False, 'meldung': meldung}
         windows_ordner.einstellungen_schreiben(server=endadresse)
         if self._neustart:
@@ -757,6 +760,10 @@ def fenster_starten(datenordner: Path) -> int:  # pragma: no cover - braucht GUI
     menue = [
         Menu('Datei', [
             MenuAction('Drucken', lambda: fenster.evaluate_js('window.print()')),
+            MenuSeparator(),
+            # #45: der Weg zum Server, auch wenn die Übersicht schon Objekte zeigt.
+            MenuAction('Mit einem Server verbinden …',
+                       lambda: fenster.evaluate_js('zeigeServerKarte()')),
             MenuSeparator(),
             MenuAction('Beenden', fenster.destroy),
         ]),

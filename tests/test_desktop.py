@@ -9,6 +9,7 @@ und zusätzlich das gebaute Paket.
 
 from __future__ import annotations
 
+import inspect
 import json
 import os
 import subprocess
@@ -1210,6 +1211,32 @@ def test_server_verbinden_fehler_schreibt_nichts(lokal, testserver, zeitgeber):
         assert bruecke.server_verbinden(adresse) == {'ok': False, 'meldung': meldung}
     assert datei.read_bytes() == vorher
     assert zeitgeber == []
+
+
+def test_server_verbinden_bietet_http_nur_ohne_schema_an(lokal, zeitgeber, monkeypatch):
+    """#45: Ohne Schema galt https. Scheitert nur die Verschlüsselung, bietet die
+    Oberfläche http:// an; wer https:// selbst eintrug, bekommt nur die Meldung."""
+    windows_ordner.einstellungen_schreiben(datenordner=lokal / 'daten')
+    datei = windows_ordner.einstellungen_datei()
+    vorher = datei.read_bytes()
+    monkeypatch.setattr(desktop, 'server_pruefen', lambda _: (False, desktop.VERSCHLUESSELUNG, None))
+    bruecke = _lokale_bruecke(lokal)
+    bruecke._neustart = lambda: pytest.fail('Neustart trotz Fehler')
+    assert bruecke.server_verbinden('127.0.0.1:6062') == {
+        'ok': False, 'meldung': desktop.VERSCHLUESSELUNG, 'http_anbieten': True}
+    assert bruecke.server_verbinden('https://127.0.0.1:6062') == {
+        'ok': False, 'meldung': desktop.VERSCHLUESSELUNG}
+    monkeypatch.setattr(desktop, 'server_pruefen', lambda _: (False, desktop.NICHT_ERREICHBAR, None))
+    assert 'http_anbieten' not in bruecke.server_verbinden('127.0.0.1:6062')
+    assert datei.read_bytes() == vorher and zeitgeber == []
+
+
+def test_lokales_menue_fuehrt_zum_server():
+    """#45: Datei → Mit einem Server verbinden … öffnet dieselbe Karte, auch wenn
+    die leere Übersicht mit ihrem Knopf schon weg ist."""
+    quelle = inspect.getsource(desktop.fenster_starten)
+    assert "MenuAction('Mit einem Server verbinden …'" in quelle
+    assert "fenster.evaluate_js('zeigeServerKarte()')" in quelle
 
 
 def test_server_verbinden_nur_aus_der_eigenen_oberflaeche(lokal, zeitgeber, monkeypatch):

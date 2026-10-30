@@ -48,15 +48,18 @@ Server im eigenen Fenster, wie ein Browser, nur ohne Adressleiste.
    zur Startwahl** zurück). Eine alte Bestätigung des Hinweises im Datenordner spielt dafür
    keine Rolle. Die Wahl kommt bei jedem Start wieder, bis ein Objekt da ist; im Browser und
    auf dem Server nie. Später: Einstellungen → Sicherung → Karte **Mit einem Server
-   verbinden**, oder die zweite Aktion im leeren Reiter **Immobilien**.
+   verbinden**, die zweite Aktion im leeren Reiter **Immobilien** oder im Menü
+   **Datei → Mit einem Server verbinden …** (auch wenn schon Objekte da sind).
 2. Adresse eintragen, zum Beispiel `https://nebenkosten.example.de` oder
    `http://192.168.1.10:8080`. Ohne `http://` oder `https://` nimmt die App `https://`.
+   Scheitert das, weil der Server nur unverschlüsselt läuft, bietet sie `http://` mit
+   Rückfrage an.
    Ein Pfad (`/nk`), Benutzername oder Passwort in der Adresse werden abgelehnt.
 3. Den Haken setzen und **Verbinden** wählen. Bei `http://` fragt die App noch
    einmal nach.
 4. Die App fragt `/api/health` ab. Antwortet dort ein NebenkostenFix, trägt sie die
-   Adresse ein und startet neu. Sonst bleibt alles, wie es war, und die Karte nennt den
-   Grund (nicht erreichbar, kein NebenkostenFix, Zertifikat, Weiterleitung, Pfad).
+   Adresse ein und startet neu. Sonst bleibt alles, wie es war, und die Karte nennt rot
+   mit Warnsymbol den Grund (nicht erreichbar, kein NebenkostenFix, Zertifikat, Weiterleitung, Pfad).
 
 Weiterleitungen folgt die Prüfung nicht, mit einer Ausnahme: `http://host` → `https://host`
 auf demselben Host (Standardports) übernimmt sie selbst.
@@ -228,6 +231,10 @@ Ein Rechner mit Windows 10 oder 11 reicht, dazu ein NebenkostenFix-Server im Net
    8. Neue App gegen einen 0.18.0-Server: kein Hinweis in der Kopfzeile, der Menüweg geht.
    9. Datenordner bei bestehender Verbindung löschen: Die App bleibt verbunden (gewollt,
       siehe „Wo die App die Verbindung speichert“).
+   10. Lokal mit Objekten: **Datei → Mit einem Server verbinden …** führt zur Karte, Fokus
+      im Adressfeld. Eine Adresse ohne Schema zu einem Server ohne https (etwa
+      `192.168.1.10:8080`): Die Meldung steht rot mit Warnsymbol, die App fragt „Mit
+      http://… unverschlüsselt verbinden?“. Ja verbindet, Nein lässt alles, wie es war.
 8. **Deinstallation:** Bei bestehender Verbindung deinstallieren, die Frage nach den
    Einstellungen mit Nein beantworten: INI mit `[Server]`, `WebView2` und `konsole.log`
    bleiben. Neu installieren, verbinden, wieder deinstallieren, diesmal mit Ja: `[Server]`,

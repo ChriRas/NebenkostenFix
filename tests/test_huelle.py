@@ -288,6 +288,41 @@ def test_zeige_server_karte_waehlt_die_sichtbare_karte():
     assert tabs == ['settings', 'sicherung'] * 2
 
 
+def test_server_verbinden_zeigt_fehler_und_bietet_http_an():
+    """#45 (Rückmeldung ChriRas): Ohne http:// scheiterte https still, die graue
+    Zeile ging unter. Jetzt rot, und die App fragt nach http://."""
+    probe = _DOM + _huelle_block() + 'async ' + _funktion('serverVerbinden') + '''
+        const aufrufe = [], fragen = [];
+        let antworten = {};
+        const frage = async (text, ja) => { fragen.push(ja); return fragen.length === 1; };
+        (async () => {
+            window.pywebview = {api: {server_verbinden: async a => { aufrufe.push(a); return antworten[a]; }}};
+            element('server-verstanden').checked = true;
+            const knopf = element('btn-server-verbinden'), meldung = element('server-meldung');
+            const lauf = async (adresse) => {
+                element('server-adresse').value = adresse;
+                await serverVerbinden(knopf);
+                return [meldung.textContent, meldung.klassen, element('server-adresse').value,
+                        aufrufe.splice(0), knopf.disabled];
+            };
+            antworten = {'nas:6062': {ok: false, meldung: 'verschlüsselt geht nicht', http_anbieten: true},
+                         'http://nas:6062': {ok: true}, 'nas:1': {ok: false, meldung: 'weg'}};
+            const ja = await lauf('nas:6062');          // erste Frage: ja
+            antworten['http://nas:6062'] = {ok: false, meldung: 'auch http nicht'};
+            const nein = await lauf('nas:6062');        // zweite Frage: nein
+            const fehler = await lauf('nas:1');
+            console.log(JSON.stringify([ja, nein, fehler, fragen]));
+        })();
+    '''
+    ja, nein, fehler, fragen = _node(probe)
+    assert ja == ['Verbindung klappt. NebenkostenFix startet jetzt neu.', [], 'http://nas:6062',
+                  ['nas:6062', 'http://nas:6062'], True]
+    assert nein == ['verschlüsselt geht nicht', ['fehler'], 'nas:6062', ['nas:6062'], False]
+    assert fehler == ['weg', ['fehler'], 'nas:1', ['nas:1'], False]
+    assert fragen == ['Mit http:// verbinden'] * 2
+    assert '#server-meldung.fehler' in (WURZEL / 'static' / 'style.css').read_text(encoding='utf-8')
+
+
 def test_bruecke_kommt_spaet():
     """pywebview meldet die Brücke womöglich erst nach initApp (#45)."""
     assert "window.addEventListener('pywebviewready', serverAnzeige);" in APP_JS

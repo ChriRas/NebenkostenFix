@@ -2612,6 +2612,16 @@ i.feld-hilfe:hover {
     line-height: 1.5;
 }
 
+/* #45: Eine gescheiterte Prüfung beim Verbinden fällt auf, rot mit Warnsymbol. */
+#server-meldung.fehler { color: var(--danger-color); font-weight: 600; }
+#server-meldung.fehler::before {
+    content: "\e4e2";  /* ph-warning-circle */
+    font-family: "Phosphor";
+    font-weight: normal;
+    margin-right: var(--space-1);
+    vertical-align: -2px;
+}
+
 /* NK-179: Über NebenkostenFix im Hilfe-Tab. */
 .ueber-zeichen { vertical-align: -5px; margin-right: var(--space-1); }
 .ueber-links li { margin-bottom: var(--space-2); }

@@ -6779,22 +6779,34 @@ window.lokalArbeiten = lokalArbeiten;
 
 async function serverVerbinden(knopf) {
     const meldung = document.getElementById('server-meldung');
-    const adresse = document.getElementById('server-adresse').value.trim();
-    meldung.textContent = '';
+    const feld = document.getElementById('server-adresse');
+    let adresse = feld.value.trim();
+    // #45: Fehler rot mit Symbol (style.css), sonst übersieht man die Zeile.
+    const zeige = (text, fehler) => {
+        meldung.textContent = text;
+        meldung.classList.toggle('fehler', fehler);
+    };
+    zeige('', false);
     if (!document.getElementById('server-verstanden').checked) return;
     if (/^http:\/\//i.test(adresse) && !await frage(
         'Diese Verbindung ist nicht verschlüsselt. Nutzen Sie sie nur im eigenen Heimnetz. Trotzdem verbinden?',
         'Weiter')) return;
     knopf.disabled = true;
     try {
-        const ergebnis = await huelle.serverVerbinden(adresse);
+        let ergebnis = await huelle.serverVerbinden(adresse);
+        if (ergebnis && ergebnis.http_anbieten && await frage(
+            `Eine verschlüsselte Verbindung ist nicht möglich. Mit http://${adresse} unverschlüsselt ` +
+            'verbinden? Nutzen Sie das nur im eigenen Heimnetz.', 'Mit http:// verbinden')) {
+            adresse = feld.value = `http://${adresse}`;
+            ergebnis = await huelle.serverVerbinden(adresse);
+        }
         if (ergebnis && ergebnis.ok) {
-            meldung.textContent = 'Verbindung klappt. NebenkostenFix startet jetzt neu.';
+            zeige('Verbindung klappt. NebenkostenFix startet jetzt neu.', false);
             return;  // der Knopf bleibt aus, die App startet neu
         }
-        meldung.textContent = (ergebnis && ergebnis.meldung) || 'Die Verbindung konnte nicht geprüft werden.';
+        zeige((ergebnis && ergebnis.meldung) || 'Die Verbindung konnte nicht geprüft werden.', true);
     } catch (e) {
-        meldung.textContent = meldungZu(e, 'Die Verbindung konnte nicht geprüft werden.');
+        zeige(meldungZu(e, 'Die Verbindung konnte nicht geprüft werden.'), true);
     }
     knopf.disabled = false;
 }
