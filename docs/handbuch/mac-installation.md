@@ -137,5 +137,10 @@ Wenn Ihr Server läuft:
 Oben im Fenster steht jetzt „verbunden mit …“. So sehen Sie immer, dass Sie mit den Daten auf
 dem Server arbeiten. Ihre Daten vom Mac kommen dabei nicht auf den Server.
 
+**Was mit einem Server auf dem Mac noch nicht geht:** Die App kann dann keine Dateien speichern
+und keine Belege öffnen. Das betrifft zum Beispiel Exporte und PDF-Dateien. Drucken geht.
+Brauchen Sie eine Datei, öffnen Sie die Adresse des Servers in Safari, melden Sie sich dort an
+und laden Sie die Datei dort herunter.
+
 Zurück zu Ihren Daten auf dem Mac geht es über das Menü „Ablage“ → „Auf diesem Rechner
 arbeiten …“. Dann ist alles wieder so, wie Sie es auf dem Mac verlassen haben.
