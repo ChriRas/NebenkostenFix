@@ -6513,9 +6513,15 @@ async function zugriffsschluesselAnlegen() {
         });
         if (!res.ok) throw await serverFehler(res);
         const neu = await res.json();
-        document.getElementById('zugriffsschluessel-wert').value = neu.schluessel;
+        const wert = document.getElementById('zugriffsschluessel-wert');
+        wert.value = neu.schluessel;
         document.getElementById('zugriffsschluessel-neu').hidden = false;
         feld.value = '';
+        // Ansage und Fokus: Ein Screenreader liest den Schlüssel vor, und
+        // Strg+C bzw. Cmd+C kopiert ihn sofort.
+        showSuccess('Zugriffsschlüssel angelegt. Er wird nur dieses eine Mal angezeigt.');
+        wert.focus();
+        wert.select();
         ladeZugriffsschluessel();
     } catch (e) {
         showError(meldungZu(e, 'Der Zugriffsschlüssel konnte nicht angelegt werden.'));

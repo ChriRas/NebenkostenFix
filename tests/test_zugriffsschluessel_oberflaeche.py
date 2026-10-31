@@ -50,7 +50,7 @@ DOM = '''
 const elemente = {};
 const document = { getElementById: (k) => (elemente[k] = elemente[k] || {
     id: k, value: '', innerHTML: '', hidden: false, textContent: '',
-    style: {}, select() { this.markiert = true; }, focus() {} }) };
+    style: {}, select() { this.markiert = true; }, focus() { document.aktiv = k; } }) };
 const escapeHtml = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
     .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const serverFehler = async (r) => new Error(r.fehler || 'fehler');
@@ -120,6 +120,24 @@ zugriffsschluesselAnlegen().then(() => console.log(JSON.stringify({
     assert erg['offen'] is True
     assert erg['name'] == ''
     assert erg['geladen'] == 1
+
+
+@braucht_node
+def test_nach_dem_anlegen_steht_der_fokus_auf_dem_schluessel():
+    """Review zu #48: Ohne Ansage und mit dem Fokus auf dem Knopf merkte ein
+    Screenreader nicht, dass der nur einmal gezeigte Schlüssel dasteht."""
+    code = DOM + _funktionsrumpf('zugriffsschluesselAnlegen') + '''
+const ladeZugriffsschluessel = () => {};
+const fetch = async () => ({ ok: true, json: async () => ({ schluessel: 'nkf_AbCdEfGh-geheim' }) });
+document.getElementById('zugriffsschluessel-name').value = 'MCP';
+zugriffsschluesselAnlegen().then(() => console.log(JSON.stringify({
+    meldungen, aktiv: document.aktiv,
+    markiert: !!elemente['zugriffsschluessel-wert'].markiert })));
+'''
+    erg = _node(code)
+    assert erg['meldungen'] == [['ok', 'Zugriffsschlüssel angelegt. Er wird nur dieses eine Mal angezeigt.']]
+    assert erg['aktiv'] == 'zugriffsschluessel-wert'
+    assert erg['markiert'] is True
 
 
 @braucht_node
