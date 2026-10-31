@@ -46,7 +46,8 @@ BEREICHE = ['dashboard', 'properties', 'tenants', 'meters', 'invoices',
             'billing', 'payments', 'reports', 'settings']
 BREITEN = [(1440, 900), (768, 1024), (390, 844)]
 EINSTELLUNGS_GRUPPEN = ['vermieter', 'kostenarten', 'sicherung', 'konto', 'updates', 'datenschutz']
-# Dialoge, die ohne Auswahl aufgehen (Ausdruck in app.js).
+# Jeder Dialog einmal (Ausdruck in app.js). ``__rg`` legt AUSWAHL_JS mit
+# Haus, Mieter, Zähler und Anlage der Beispielimmobilie an.
 DIALOGE = {
     'immobilie': 'openAddPropertyModal()',
     'wohnung': 'openAddApartmentModal()',
@@ -60,7 +61,41 @@ DIALOGE = {
     'import': "oeffneImport('rechnungen')",  # NK-161
     'rechnungstabelle': 'oeffneRechnungstabelle()',  # NK-161
     'jahresassistent': 'oeffneJahrAssistent()',  # NK-160
+    'anschreiben': 'openAnschreibenModal(__rg.haus.id)',  # #41
+    'kostenprofil': 'openCostProfileModal(__rg.mieter.id, __rg.mieter.name)',
+    'zaehler-bearbeiten': 'openEditMeterModal(__rg.zaehler.id)',
+    'zaehler-verlauf': 'openHistoryModal(__rg.zaehler.id)',
+    'zaehlerwechsel': 'openWechselModal(__rg.zaehler.id)',
+    'hausgeld': 'openHausgeldModal()',
+    'heizungsanlage': 'openHeizungsanlageModal(__rg.anlage)',
+    'haushalt': 'openHouseholdModal(__rg.mieter)',
+    'kaltmiete': 'openKaltmieteModal(__rg.mieter)',
+    'vorauszahlung': 'openVorauszahlungModal(__rg.mieter)',
+    'zahlung-details': 'openPaymentDetailsModal(__rg.mieter.id)',
+    # letzteKategorien hat die Einstellungsgruppe „kostenarten“ geladen.
+    'kostenart': 'openKategorieModal(letzteKategorien[0].id)',
 }
+AUSWAHL_JS = """async () => {
+  const lade = async pfad => (await fetch(pfad)).json();
+  const haus = (await lade('/api/properties'))[0];
+  window.__rg = { haus, mieter: (await lade('/api/tenants'))[0],
+                  zaehler: (await lade('/api/meters'))[0],
+                  anlage: (await fetchHeizungsanlagen(haus.id))[0] };
+}"""
+# #41 warf keinen JS-Fehler: der Fehler landete im catch als rote Meldung,
+# der Dialog blieb zu. Alte Meldungen markiert DIALOG_VORHER_JS.
+DIALOG_VORHER_JS = """() => {
+  document.querySelectorAll('.toast').forEach(t => { t.dataset.rundgangAlt = '1'; });
+  return [...document.querySelectorAll('.modal-overlay.active')].map(m => m.id);
+}"""
+DIALOG_NACHHER_JS = """(vorher) => {
+  const befunde = [];
+  const offen = [...document.querySelectorAll('.modal-overlay.active')].map(m => m.id);
+  if (!offen.some(id => !vorher.includes(id))) befunde.push('Dialog geht nicht auf');
+  for (const t of document.querySelectorAll('.toast-fehler:not([data-rundgang-alt])'))
+    befunde.push(`rote Meldung „${t.innerText.trim().slice(0, 120)}“`);
+  return befunde;
+}"""
 
 # --readme: Bilder für README (1440×900) und Microsoft Store (1920×1080) aus
 # der Beispielimmobilie. Name → Bereich, None ist die Hilfe.
@@ -102,6 +137,20 @@ PRUEFUNG_JS = """
   const sichtbar = document.body.innerText;
   for (const muster of ['Invalid Date', 'NaN', 'undefined', '[object Object]']) {
     if (sichtbar.includes(muster)) befunde.push(`sichtbarer Text enthält „${muster}“`);
+  }
+  // Formulare im Hausstil: gerechnete Stile, fängt auch Felder aus app.js
+  // und Regeln, die die Hausregel später aushebeln.
+  for (const el of document.querySelectorAll('input, select, textarea')) {
+    if (!el.offsetParent || el.type === 'hidden') continue;
+    const r = el.getBoundingClientRect(), s = getComputedStyle(el);
+    const name = el.id || el.name || el.className;
+    if (el.type === 'file' && r.width > 1) befunde.push(`sichtbarer nativer Dateiwähler #${name}`);
+    else if ((el.type === 'checkbox' || el.type === 'radio') && s.appearance !== 'none')
+      befunde.push(`Kästchen im Systemstil #${name}`);
+    else if (!['file', 'checkbox', 'radio', 'range'].includes(el.type)
+             && !el.closest('.befehl-eingabe')
+             && (parseFloat(s.borderTopLeftRadius) === 0 || r.height < 40))
+      befunde.push(`Feld ohne Hausstil #${name}`);
   }
   if (bereich) {
     const sektion = document.getElementById('tab-' + bereich);
@@ -245,6 +294,41 @@ class Rundgang:
         for befund in self.seite.evaluate(PRUEFUNG_JS, bereich):
             self.befunde.append(f'{self.breite}px {wo}: {befund}')
 
+    def dialog(self, name: str, aufruf: str):
+        vorher = self.seite.evaluate(DIALOG_VORHER_JS)
+        self.seite.evaluate(f"async () => {{ await {aufruf}; }}")
+        self.seite.wait_for_timeout(500)
+        self.aufnahme(f'dialog-{name}')
+        self.pruefen(f'dialog/{name}')
+        for befund in self.seite.evaluate(DIALOG_NACHHER_JS, vorher):
+            self.befunde.append(f'{self.breite}px dialog/{name}: {befund}')
+
+    def formulare(self):
+        """Formulare im Hausstil, hell und dunkel: Verschlüsselung per Klick an
+        (Passphrase sichtbar), Kästchenliste der Hilfe, Dateiwähler im Dialog."""
+        for thema in ('light', 'dark'):
+            self.seite.evaluate("(t) => themaAnzeigen(t)", thema)
+            self.seite.evaluate("() => wechsleZuTab('settings')")
+            self.seite.evaluate("(g) => zeigeEinstellungsgruppe(g)", 'sicherung')
+            self.seite.wait_for_timeout(300)
+            for haken in ('#sicherung-verschluesseln', '#umzug-verschluesseln'):
+                self.seite.check(haken)
+            self.aufnahme(f'formulare-sicherung-{thema}')
+            self.pruefen(f'formulare/sicherung-{thema}')
+            for haken in ('#sicherung-verschluesseln', '#umzug-verschluesseln'):
+                self.seite.uncheck(haken)
+            self.seite.evaluate("() => zeigeHilfe()")
+            self.seite.wait_for_timeout(300)
+            self.aufnahme(f'formulare-hilfe-{thema}')
+            self.pruefen(f'formulare/hilfe-{thema}')
+            for name in ('beleg', 'rechnung'):
+                self.dialog(f'{name}-{thema}', DIALOGE[name])
+                self.seite.keyboard.press('Escape')
+                self.seite.wait_for_timeout(200)
+                self.seite.evaluate(RUECKFRAGE_BEJAHEN)
+                self.seite.wait_for_timeout(200)
+        self.seite.evaluate("() => themaAnzeigen('light')")
+
     def handy(self):
         """Funde der Bestandsaufnahme 0.13.0 am Handy (NK-252 ff.), mit Beispielhaus."""
         self.schritt = 'handy-zaehler'
@@ -341,7 +425,7 @@ def rundgang(chromium: str | None, ausgabe: Path, readme: Path | None = None) ->
                     if seite.is_visible('#haftung-modal'):
                         gang.aufnahme('haftung')
                         gang.pruefen('haftung')
-                        seite.click('#haftung-modal button')
+                        seite.click('#haftung-modal [data-autofokus]')
                         seite.wait_for_timeout(500)
                     else:
                         befunde.append('haftung: der Hinweis erscheint nach der Einrichtung nicht')
@@ -377,17 +461,16 @@ def rundgang(chromium: str | None, ausgabe: Path, readme: Path | None = None) ->
                     seite.wait_for_timeout(300)
                     gang.aufnahme(f'einstellungen-{gruppe}')
                     gang.pruefen(f'einstellungen/{gruppe}')
+                seite.evaluate(AUSWAHL_JS)
                 for name, aufruf in DIALOGE.items():
-                    seite.evaluate(f"async () => {{ await {aufruf}; }}")
-                    seite.wait_for_timeout(500)
-                    gang.aufnahme(f'dialog-{name}')
-                    gang.pruefen(f'dialog/{name}')
+                    gang.dialog(name, aufruf)
                     seite.keyboard.press('Escape')
                     seite.wait_for_timeout(200)
                     # Fragt die App „Eingaben verwerfen?“, bejahen -- wie
                     # früher der Browserdialog über seite.on('dialog').
                     seite.evaluate(RUECKFRAGE_BEJAHEN)
                     seite.wait_for_timeout(200)
+                gang.formulare()
                 # Die Rückfrage selbst (frage-modal statt confirm()).
                 gang.schritt = 'rueckfrage'
                 seite.evaluate("() => { frageLoeschen('Möchten Sie diese Rechnung wirklich löschen?'); }")

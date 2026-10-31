@@ -25,16 +25,12 @@ Die Nebenkostenabrechnung für private Vermieter. Kostenlos, und Ihre Daten blei
 
 ## Neuerungen in dieser Version
 
-Version 0.17.0: Anschriften im Brief, ein neu aufgebautes PDF und Rechnungen nach Jahr. Die Rechenregeln sind unverändert.
+Version 0.18.0: Die App verbindet sich auf Wunsch mit einem NebenkostenFix-Server, und der Prüfstand nennt die Schätzquote. Die Rechenregeln sind unverändert.
 
-- Mieter haben eine Wohnungsanschrift und eine Zustellanschrift für die Zeit nach dem Auszug, der Vermieter eine Anschrift für den Briefkopf. Welche gilt, entscheidet die App nach dem Auszugsdatum.
-- Die Abrechnung beginnt mit dem Brief, danach folgt ein Übersichtsblatt mit allen Kostenpositionen und den Summen bis zum Ergebnis. Erst dahinter stehen die einzelnen Berechnungen.
-- Das ganze PDF hat ein Erscheinungsbild. Der Rechenweg steht als Tabelle, Beträge überall mit Tausenderpunkt.
-- Unter Kosten wählen Sie ein Jahr und sehen die Summe der Auswahl. Die Zeitleiste folgt dem Filter und zeigt die Summe je Jahr.
-- Bei Sammelbelegen übernehmen Sie das Rechnungsdatum auf Wunsch für alle Rechnungen des Belegs.
-- Behoben: Die Statistik nannte jede Heizung „Gas“, auch eine Wärmepumpe. Der Bereich heißt jetzt „Wärme“.
-- Behoben: Die IBAN brach im Zahlungshinweis mitten durch, und der Brief nannte das Ergebnis zweimal.
-- Behoben: In schmalen Fenstern liefen Texte über ihren Rand.
+- Neu: Beim ersten Start wählen Sie, ob Sie auf diesem Rechner arbeiten oder sich mit einem NebenkostenFix-Server verbinden. Später geht das über das Menü Datei oder Einstellungen → Sicherung. Die lokalen Daten bleiben unberührt.
+- Neu: Dateiwähler, Kästchen und Eingabefelder sehen überall gleich aus und sprechen Deutsch.
+- Neu: Der Prüfstand zeigt je Heizungsanlage, welcher Anteil geschätzt ist, und warnt ab mehr als 25 % (§ 9a HeizkostenV).
+- Behoben: Aus der App öffnen sich nur noch PDF und Bilder direkt, alle anderen Dateien bietet sie zum Speichern an.
 
 ## Produktmerkmale
 

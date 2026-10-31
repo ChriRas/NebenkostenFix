@@ -841,8 +841,11 @@ def get_properties():
 def create_property():
     from nebenkostenfix.zeitraumvorschlag import jahresbeginn_aus_text
     eingabe = Eingabe.aus_request()
+    name = eingabe.text('name', pflicht=True, maxlaenge=200)
+    if name == beispielimmobilie.NAME:
+        return jsonify({'error': beispielimmobilie.NAME_VERGEBEN}), 400
     new_prop = Property(
-        name=eingabe.text('name', pflicht=True, maxlaenge=200),
+        name=name,
         is_standalone=eingabe.wahrheit('is_standalone'),
         abrechnungsjahr_beginn=jahresbeginn_aus_text(eingabe.text('abrechnungsjahr_beginn', maxlaenge=10)),
     )
@@ -850,18 +853,71 @@ def create_property():
     db.session.commit()
     return jsonify({'message': 'Property created successfully', 'id': new_prop.id}), 201
 
+# Was ohne Kaskade an Immobilie bzw. Wohnung haengt: Rechnungen und Belege
+# sind Buchungsbelege, Zaehler samt Lesungen Messhistorie (D-82). Beides
+# loescht man bewusst, nicht nebenbei mit dem Haus oder der Wohnung.
+_AM_HAUS = ((CostInvoice, 'Rechnung', 'Rechnungen'),
+            (InvoiceDocument, 'Beleg', 'Belege'),
+            (Meter, 'Zähler', 'Zähler'),
+            (Heizungsanlage, 'Heizungsanlage', 'Heizungsanlagen'))
+_AN_DER_WOHNUNG = ((CostInvoice, 'Rechnung', 'Rechnungen'),
+                   (Meter, 'Zähler', 'Zähler'))
+
+
+def _loeschhindernis(einheit: str, arten, **bezug) -> str | None:
+    """Der Satz, wenn noch etwas ohne Kaskade dazugehoert, sonst None.
+
+    Zaehlt je Art, was ``bezug`` (``property_id=`` oder ``apartment_id=``)
+    traegt: „… solange noch Folgendes zu ihr gehört: 2 Rechnungen und 1 Zähler.“
+    """
+    teile, belege = [], False
+    for modell, eins, viele in arten:
+        anzahl = modell.query.filter_by(**bezug).count()
+        if anzahl:
+            teile.append(f'{anzahl} {eins if anzahl == 1 else viele}')
+            belege = belege or modell in (CostInvoice, InvoiceDocument)
+    if not teile:
+        return None
+    was = teile[0] if len(teile) == 1 else ', '.join(teile[:-1]) + ' und ' + teile[-1]
+    satz = f'{einheit} kann nicht gelöscht werden, solange noch Folgendes zu ihr gehört: {was}.'
+    if belege:
+        # Sonst loescht man Buchungsbelege, nur um das Haus loszuwerden.
+        satz += (' Rechnungen und Belege unterliegen selbst der Aufbewahrungspflicht '
+                 '(§ 147 AO, § 257 HGB). Löschen Sie sie erst, wenn deren Frist abgelaufen ist.')
+    return satz
+
+
 @app.route('/api/properties/<int:id>', methods=['PUT', 'DELETE'])
 def update_delete_property(id):
     from nebenkostenfix.zeitraumvorschlag import jahresbeginn_aus_text
     prop = Property.query.get_or_404(id)
     if request.method == 'DELETE':
+        # Dieselbe Frist wie beim Loeschen eines Mieters (NK-153). Sie zuerst:
+        # sonst loescht der Vermieter eine Rechnung und scheitert danach doch.
+        mieter = [t for wohnung in prop.apartments for t in wohnung.tenants]
+        sperre = mieter_daten.sperrmeldung(f'Die Immobilie „{prop.name}“', mieter)
+        if sperre:
+            return jsonify({'error': sperre}), 409
+        # Ohne diese Pruefung endete das in einem IntegrityError (500) oder
+        # in verwaisten Zeilen, die eine neue Immobilie ueber die ID erbte.
+        hindernis = _loeschhindernis(f'Die Immobilie „{prop.name}“', _AM_HAUS,
+                                     property_id=prop.id)
+        if hindernis:
+            return jsonify({'error': hindernis}), 409
+        mieter_daten.alle_endgueltig_loeschen(mieter)
+        # Die Vorlage ist Text, kein Beleg: sie geht mit, statt liegen zu
+        # bleiben und der naechsten Immobilie mit derselben ID zu gehoeren.
+        AnschreibenVorlage.query.filter_by(property_id=prop.id).delete()
         db.session.delete(prop)
         db.session.commit()
         return jsonify({'message': 'Property deleted'}), 200
     
     eingabe = Eingabe.aus_request()
     if eingabe.vorhanden('name'):
-        prop.name = eingabe.text('name', pflicht=True, maxlaenge=200)
+        name = eingabe.text('name', pflicht=True, maxlaenge=200)
+        if name == beispielimmobilie.NAME and not beispielimmobilie.ist_beispiel(prop):
+            return jsonify({'error': beispielimmobilie.NAME_VERGEBEN}), 400
+        prop.name = name
     if eingabe.vorhanden('is_standalone'):
         prop.is_standalone = eingabe.wahrheit('is_standalone')
     if eingabe.vorhanden('abrechnungsjahr_beginn'):
@@ -1087,6 +1143,20 @@ def create_apartment():
 def update_delete_apartment(id):
     apt = Apartment.query.get_or_404(id)
     if request.method == 'DELETE':
+        # Dieselbe Frist wie beim Loeschen eines Mieters (NK-153); das
+        # Beispielhaus hat erfundene Mieter und keine Sperre (NK-159). Die
+        # Frist zuerst, wie bei der Immobilie.
+        if not beispielimmobilie.ist_beispiel(apt.property):
+            sperre = mieter_daten.sperrmeldung(f'Die Wohnung „{apt.name}“', apt.tenants)
+            if sperre:
+                return jsonify({'error': sperre}), 409
+        # Sonst wurde der Zaehler still zum Unterzaehler ohne Wohnung, und die
+        # Rechnung erbte die naechste neue Wohnung ueber die ID.
+        hindernis = _loeschhindernis(f'Die Wohnung „{apt.name}“', _AN_DER_WOHNUNG,
+                                     apartment_id=apt.id)
+        if hindernis:
+            return jsonify({'error': hindernis}), 409
+        mieter_daten.alle_endgueltig_loeschen(apt.tenants)
         db.session.delete(apt)
         db.session.commit()
         return jsonify({'message': 'Apartment deleted'}), 200
@@ -1799,6 +1869,11 @@ def delete_category(id):
         return _kostenart_ablehnen(
             'An dieser Kostenart hängt ein Zähler. Zähler gehören zu einer '
             'Kostenart und können nicht mitgelöscht werden.')
+    # Sonst erbte die naechste neue Kostenart die ID samt alter Abrechnung.
+    if BillingReportCategory.query.filter_by(category_id=kat.id).first():
+        return _kostenart_ablehnen(
+            'Diese Kostenart steht in einer festgesetzten Abrechnung und bleibt '
+            'deshalb erhalten. Sie können den Namen ändern.')
     if any(e['name'] == kat.name for e in betrkv.KATALOG):
         return _kostenart_ablehnen(
             '„%s“ gehört zum Katalog aus § 2 BetrKV und bleibt erhalten. '
@@ -3383,7 +3458,13 @@ def _vermieter_stand():
 @app.route('/api/haftung', methods=['GET'])
 def haftung_anzeigen():
     """Der Haftungshinweis und ob diese Fassung bestaetigt ist (NK-174)."""
-    return jsonify(haftung.stand())
+    stand = haftung.stand()
+    # #45: Startwahl „lokal oder Server“ nur in der lokalen Windows-App
+    # (NK_DESKTOP, also ohne Warten auf die Brücke) und nur ohne Objekte.
+    # Eine alte Bestätigung zählt nicht: Sie liegt im Datenordner, den die
+    # Deinstallation stehen lässt.
+    stand['startwahl'] = bool(app.config.get('DESKTOP')) and Property.query.first() is None
+    return jsonify(stand)
 
 
 @app.route('/api/haftung', methods=['POST'])
@@ -3464,12 +3545,7 @@ def hausgeld_pruefen():
 def ueber_anzeigen():
     """„Über NebenkostenFix“ im Hilfe-Tab (NK-179): Stand, feste Adressen,
     Haftungshinweis. Nichts aus der Datenbank."""
-    if aktualisierung.paketmodus():
-        weg = 'Microsoft Store'
-    elif app.config.get('DESKTOP'):
-        weg = 'Windows-App'
-    else:
-        weg = 'Docker'
+    weg = aktualisierung.weg(bool(app.config.get('DESKTOP')))
     system = f'{platform.system()} {platform.release()}'
     return jsonify({
         'version': SOFTWARE_VERSION, 'weg': weg,
@@ -3960,7 +4036,8 @@ def get_anschreiben_vorlage(property_id):
     Ohne eigenen Eintrag antwortet die Route mit dem Vorgabetext aus
     ``anschreiben.py`` und der Marke ``ist_vorgabe`` -- der Vermieter
     sieht, dass er noch nichts Eigenes hinterlegt hat, und bekommt mit
-    ``platzhalter`` dieselbe Liste, die die Renderfunktion füllt.
+    ``platzhalter`` die Marken, die die Renderfunktion füllt -- als
+    {Name: Erklärung}, keine Liste.
     """
     objekt = db.session.get(Property, property_id)
     if objekt is None:
