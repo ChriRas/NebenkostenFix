@@ -70,6 +70,15 @@ def test_info_plist():
         assert 'NebenkostenFix' in text and 'Sie' in text
 
 
+def test_info_plist_erklaert_den_zugriff_aufs_lokale_netz():
+    """Der Server steht oft im Heimnetz, etwa auf einem NAS. Apple empfiehlt
+    den Text für jede App, die ins lokale Netz geht (TN3179). Unter macOS 26.5
+    kam keine Rückfrage (Test mit dem Router, 31.10.2026); fragt ein späteres
+    macOS doch, liest der Nutzer, wozu."""
+    text = _info_plist()['NSLocalNetworkUsageDescription']
+    assert 'NebenkostenFix-Server' in text and 'Ihre Daten bleiben' in text
+
+
 def test_nur_apple_silicon_und_ohne_konsole():
     spec = _text(SPEC_MAC)
     assert "target_arch='arm64'" in spec

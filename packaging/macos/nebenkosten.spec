@@ -110,5 +110,10 @@ app = BUNDLE(
             'NebenkostenFix legt Sicherungen auf dem Datenträger ab, den Sie festlegen.',
         'NSNetworkVolumesUsageDescription':
             'NebenkostenFix legt Sicherungen auf dem Netzlaufwerk ab, das Sie festlegen.',
+        # Servermodus (#45): Der Server steht oft im Heimnetz. Apple empfiehlt
+        # den Text (TN3179); macOS 26.5 fragte im Test nicht nach.
+        'NSLocalNetworkUsageDescription':
+            'NebenkostenFix verbindet sich mit Ihrem eigenen NebenkostenFix-Server im '
+            'Heimnetz, zum Beispiel auf einem NAS. Ihre Daten bleiben dabei in Ihrem Netz.',
     },
 )
