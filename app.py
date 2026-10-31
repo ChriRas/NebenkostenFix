@@ -1448,14 +1448,12 @@ def delete_haushaltsgroesse(id):
 # Eine Serienbuchung legt die Zahlungen im Voraus an und zaehlt sie damit
 # sofort als Ist. Der vereinbarte Betrag steht deshalb in einer eigenen
 # Tabelle: nur gegen ihn laesst sich sagen, ob ein Monat offen ist.
-def _soll_setzen(tenant, gueltig_ab, betrag, berichtigen=True):
-    """Legt einen Stichtag an oder berichtigt ihn; True, wenn er neu ist.
-    Ohne ``berichtigen`` bleibt ein vorhandener Stichtag, wie er ist."""
+def _soll_setzen(tenant, gueltig_ab, betrag):
+    """Legt einen Stichtag an oder berichtigt ihn; True, wenn er neu ist."""
     vorhanden = next(
         (s for s in tenant.vorauszahlung_soll if s.gueltig_ab == gueltig_ab), None)
     if vorhanden:
-        if berichtigen:
-            vorhanden.betrag = betrag
+        vorhanden.betrag = betrag
         return vorhanden, False
     eintrag = VorauszahlungSoll(tenant_id=tenant.id, gueltig_ab=gueltig_ab, betrag=betrag)
     db.session.add(eintrag)
@@ -4571,14 +4569,19 @@ def add_payment():
                 break
         # NK-261: die Serie ist der vereinbarte Betrag; er bleibt als Soll
         # stehen. Vor dem Einzug gibt es kein Soll (wie in der Route dazu).
-        # Ein Zugriffsschluessel erfasst nur: ein vorhandenes Soll berichtigt
-        # der Mensch in der Oberflaeche (Review zu #48).
+        # Ein Zugriffsschluessel erfasst nur: Gibt es schon ein Soll, legt er
+        # weder einen Stichtag an noch berichtigt er einen. Auch ein neuer
+        # Stichtag aenderte die Vereinbarung ab seinem Tag (Review zu #48).
         tenant = db.session.get(Tenant, tenant_id)
         antwort = {'message': f'{created_count} Zahlungen erfolgreich erfasst'}
         if (type_ == 'Nebenkostenvorauszahlung' and tenant is not None
                 and start_date >= tenant.move_in_date):
-            soll, _ = _soll_setzen(tenant, start_date, amount,
-                                   berichtigen=zugriffsschluessel.aktueller() is None)
+            if zugriffsschluessel.aktueller() is None or not tenant.vorauszahlung_soll:
+                soll, _ = _soll_setzen(tenant, start_date, amount)
+            else:
+                # Verglichen wird mit dem Soll am Startdatum, davor mit dem ersten.
+                soll = next((s for s in reversed(tenant.vorauszahlung_soll)
+                             if s.gueltig_ab <= start_date), tenant.vorauszahlung_soll[0])
             if soll.betrag != amount:
                 from nebenkostenfix.rechenkern import euro_text
                 antwort['soll_unveraendert'] = True

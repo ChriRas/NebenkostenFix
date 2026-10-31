@@ -397,13 +397,15 @@ def test_erfassen_schluessel_aendert_keine_bestehenden_rechnungen(auth_client, a
 
 # --- Vorauszahlungen: eine Serie setzt das Soll, ein Schlüssel überschreibt keins ---
 
-def _mieter_mit_soll(auth_client):
+def _mieter_mit_soll(auth_client, *stichtage):
+    """Einzug 01.01.2024; ohne Angabe ein Soll von 100 € ab dem Einzug."""
     from datetime import date
     from tests import billing_factories as f
     mieter = f.tenant(f.apt(f.house(), 'EG', 50), 'Mieter A', date(2024, 1, 1), None)
-    antwort = auth_client.post(f'/api/tenants/{mieter.id}/vorauszahlung_soll',
-                               data={'gueltig_ab': '2024-01-01', 'betrag': '100'})
-    assert antwort.status_code == 201, antwort.get_data(as_text=True)
+    for ab, betrag in stichtage or (('2024-01-01', '100'),):
+        antwort = auth_client.post(f'/api/tenants/{mieter.id}/vorauszahlung_soll',
+                                   data={'gueltig_ab': ab, 'betrag': betrag})
+        assert antwort.status_code == 201, antwort.get_data(as_text=True)
     return mieter
 
 
@@ -442,14 +444,62 @@ def test_mit_sitzung_berichtigt_die_serie_das_soll_wie_bisher(auth_client):
     assert 'soll_unveraendert' not in antwort.get_json()
 
 
-def test_erfassen_schluessel_legt_ein_neues_soll_an(auth_client, anon_client):
-    """Ein neuer Stichtag ist Anlegen: das alte Soll bleibt daneben stehen."""
+def test_erfassen_schluessel_legt_kein_zweites_soll_an(auth_client, anon_client):
+    """Zweites Review zu #48: Eine Serie einen Tag nach dem Stichtag legte
+    einen neuen an, ab dem nur noch 1,00 € galt. Mit Schlüssel bleibt das
+    Soll, wie es ist, sobald es eins gibt."""
+    from nebenkostenfix.models import Payment
     neu = _anlegen(auth_client, umfang='erfassen')
     mieter = _mieter_mit_soll(auth_client)
-    antwort = anon_client.post('/api/payments', json=_serie(mieter.id, '120.00', ab='2024-02-01'),
+    antwort = anon_client.post('/api/payments', json=_serie(mieter.id, '1.00', ab='2024-01-02'),
                                headers=_kopf(neu['schluessel']))
     assert antwort.status_code == 201, antwort.get_data(as_text=True)
+    assert _soll(mieter) == [('2024-01-01', '100.00')]
+    assert Payment.query.filter_by(tenant_id=mieter.id).count() == 3
+    daten = antwort.get_json()
+    assert daten['soll_unveraendert'] is True
+    assert '100,00 €' in daten['message']
+
+
+def test_erfassen_schluessel_legt_das_erste_soll_an(auth_client, anon_client):
+    """Ohne Soll ist die Serie die erste Vereinbarung: das ist Anlegen."""
+    from datetime import date
+    from tests import billing_factories as f
+    neu = _anlegen(auth_client, umfang='erfassen')
+    mieter = f.tenant(f.apt(f.house(), 'EG', 50), 'Mieter A', date(2024, 1, 1), None)
+    antwort = anon_client.post('/api/payments', json=_serie(mieter.id, '80.00', ab='2024-01-02'),
+                               headers=_kopf(neu['schluessel']))
+    assert antwort.status_code == 201, antwort.get_data(as_text=True)
+    assert _soll(mieter) == [('2024-01-02', '80.00')]
+    assert 'soll_unveraendert' not in antwort.get_json()
+
+
+def test_mit_sitzung_legt_die_serie_einen_neuen_stichtag_an(auth_client):
+    mieter = _mieter_mit_soll(auth_client)
+    antwort = auth_client.post('/api/payments', json=_serie(mieter.id, '120.00', ab='2024-02-01'))
+    assert antwort.status_code == 201, antwort.get_data(as_text=True)
     assert _soll(mieter) == [('2024-01-01', '100.00'), ('2024-02-01', '120.00')]
+
+
+def test_serie_vor_dem_ersten_soll_vergleicht_mit_dem_ersten(auth_client, anon_client):
+    neu = _anlegen(auth_client, umfang='erfassen')
+    mieter = _mieter_mit_soll(auth_client, ('2024-03-01', '100'))
+    antwort = anon_client.post('/api/payments', json=_serie(mieter.id, '1.00'),
+                               headers=_kopf(neu['schluessel']))
+    assert antwort.status_code == 201, antwort.get_data(as_text=True)
+    assert _soll(mieter) == [('2024-03-01', '100.00')]
+    assert antwort.get_json()['soll_unveraendert'] is True
+
+
+def test_hinweis_nur_gegen_das_soll_am_startdatum(auth_client, anon_client):
+    """Die Serie passt zur Vereinbarung an ihrem Startdatum; dass später
+    ein anderer Betrag gilt, ist kein Widerspruch."""
+    neu = _anlegen(auth_client, umfang='erfassen')
+    mieter = _mieter_mit_soll(auth_client, ('2024-01-01', '100'), ('2024-03-01', '120'))
+    antwort = anon_client.post('/api/payments', json=_serie(mieter.id, '100.00', ab='2024-01-02'),
+                               headers=_kopf(neu['schluessel']))
+    assert antwort.status_code == 201, antwort.get_data(as_text=True)
+    assert _soll(mieter) == [('2024-01-01', '100.00'), ('2024-03-01', '120.00')]
     assert 'soll_unveraendert' not in antwort.get_json()
 
 

@@ -473,13 +473,13 @@ class Lauf:
             'tenant_id': mieter, 'amount': '80.00', 'type': 'Nebenkostenvorauszahlung',
             'payment_date': '2026-01-03'}, schluessel=erfassen)
 
-        # Eine Serie ab einem vorhandenen Soll laesst es stehen: berichtigen
-        # darf nur der Mensch (Review zu #48).
+        # Eine Serie einen Tag nach dem Stichtag laesst das Soll stehen: die
+        # Vereinbarung aendert nur der Mensch (Review zu #48).
         self._ruf('POST', f'/api/tenants/{mieter}/vorauszahlung_soll',
                   {'gueltig_ab': '2026-01-01', 'betrag': '80.00'})
         serie = self._ruf('POST', '/api/payments', {
             'tenant_id': mieter, 'amount': '1.00', 'type': 'Nebenkostenvorauszahlung',
-            'payment_date': '2026-01-01', 'end_date': '2026-02-28', 'is_recurring': True},
+            'payment_date': '2026-01-02', 'end_date': '2026-02-28', 'is_recurring': True},
             schluessel=erfassen)
         soll = self._ruf('GET', f'/api/tenants/{mieter}/vorauszahlungen',
                          schluessel=lesen)['soll']
