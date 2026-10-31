@@ -216,7 +216,9 @@ Die **Einstellungen** sind in Gruppen geteilt:
   nur an, wenn für den Mieter noch keins vereinbart ist. Der Schlüssel wird nur einmal angezeigt.
   Ein Programm mit Schlüssel sieht alle Daten; bei einem KI-Assistenten gehen sie an dessen Anbieter. Jedes Konto sieht alle Schlüssel und kann jeden widerrufen. Ein neues
   Passwort lässt die Schlüssel bestehen: Wechseln Sie das Passwort wegen eines Verdachts, sehen
-  Sie auch die Liste durch und löschen Sie Schlüssel, die Sie nicht kennen.
+  Sie auch die Liste durch und löschen Sie Schlüssel, die Sie nicht kennen. Spielen Sie eine
+  ältere Sicherung ein, kommen auch Schlüssel zurück, die Sie danach gelöscht haben: Sehen Sie
+  die Liste danach ebenfalls durch.
 - **Updates**: **Automatisch nach Updates suchen**, siehe
   [Updates](../../README.md#updates).
 - **Datenschutz**: **Gesperrte Mietverhältnisse** sind gelöschte Mieter, deren

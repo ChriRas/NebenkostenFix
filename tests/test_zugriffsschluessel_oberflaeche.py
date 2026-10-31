@@ -85,6 +85,16 @@ def test_die_seite_hat_die_karte():
     assert 'hidden' in box
 
 
+def test_handbuch_warnt_vor_alten_sicherungen():
+    """Review zu #48: Die Schlüssel stehen in der Datenbank. Eine ältere
+    Sicherung bringt also auch Schlüssel zurück, die danach gelöscht wurden."""
+    handbuch = ' '.join((WURZEL / 'docs' / 'handbuch' / 'handbuch.md')
+                        .read_text(encoding='utf-8').split())
+    absatz = handbuch[handbuch.index('**Zugriffsschlüssel** (englisch API-Key)'):]
+    absatz = absatz[:absatz.index('- **Updates**')]
+    assert 'ältere Sicherung' in absatz and 'danach gelöscht' in absatz
+
+
 def test_der_offene_modus_blendet_die_karte_aus():
     rumpf = _funktionsrumpf('zeigeAngemeldetenBenutzer')
     liste = rumpf[rumpf.index("['angemeldeterBenutzer'"):]
