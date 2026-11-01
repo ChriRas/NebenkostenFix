@@ -785,3 +785,44 @@ class ApiSchluessel(db.Model):
     zuletzt_benutzt_am = db.Column(db.DateTime, nullable=True)
 
     user = db.relationship('User')
+
+
+class Geraet(db.Model):
+    """Ein Rechner, auf dem die Desktop-App angemeldet bleibt (#52, siehe
+    ``nebenkostenfix/geraete.py``).
+
+    Wie beim Zugriffsschluessel nur der SHA-256 des aktuellen Tokens. Jede
+    Erneuerung ersetzt ihn; der alte wandert nach ``geraete_ersetzt``.
+    """
+    __tablename__ = 'geraete'
+    # Nummern nie wiederverwenden: die Sitzung merkt sich die Nummer, und ein
+    # neues Geraet darf keine abgemeldete Sitzung wiederbeleben.
+    __table_args__ = {'sqlite_autoincrement': True}
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
+    name = db.Column(db.String(60), nullable=False)
+    hash = db.Column(db.String(64), unique=True, nullable=False)
+    angelegt_am = db.Column(db.DateTime, nullable=False, default=zeit.jetzt_utc)
+    zuletzt_benutzt_am = db.Column(db.DateTime, nullable=False, default=zeit.jetzt_utc)
+
+    user = db.relationship('User')
+
+
+class GeraetErsetzt(db.Model):
+    """Ersetzte Tokens eines Geraets, nur fuer die Erkennung von Kopien:
+    taucht eines wieder auf, ist das Geraet abgemeldet (RFC 9700, 4.14.2)."""
+    __tablename__ = 'geraete_ersetzt'
+    hash = db.Column(db.String(64), primary_key=True)
+    geraet_id = db.Column(db.Integer, db.ForeignKey('geraete.id'), nullable=False, index=True)
+    ersetzt_am = db.Column(db.DateTime, nullable=False, default=zeit.jetzt_utc)
+
+
+class GeraetCode(db.Model):
+    """Kurzlebige Codes eines Geraets, ebenfalls nur als Hash. ``abholen``:
+    nach der Anmeldung mit Haekchen, die App tauscht ihn gegen das Token.
+    ``anmelden``: nach einer Erneuerung, die App laedt damit die Sitzung."""
+    __tablename__ = 'geraete_codes'
+    hash = db.Column(db.String(64), primary_key=True)
+    zweck = db.Column(db.String(10), nullable=False)
+    geraet_id = db.Column(db.Integer, db.ForeignKey('geraete.id'), nullable=False, index=True)
+    gueltig_bis = db.Column(db.DateTime, nullable=False)
