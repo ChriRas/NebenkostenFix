@@ -200,7 +200,8 @@ async function abmelden() {
         // Netz weg. Die Sitzung liegt beim Server, also trotzdem hingehen:
         // dort faellt der naechste Aufruf sowieso in die Sperre.
     }
-    window.location.assign('/login');
+    // #52: daran erkennt die Desktop-App das Abmelden und loescht ihr Token.
+    window.location.assign('/login?abgemeldet=1');
 }
 window.abmelden = abmelden;
 
