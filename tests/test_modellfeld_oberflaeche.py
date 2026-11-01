@@ -37,6 +37,10 @@ APP_JS = (WURZEL / 'static' / 'app.js').read_text(encoding='utf-8')
 SYSTEMMODELLE = {
     'BillingReportCategory': 'Kopplung Abrechnung/Kostenart: setzt die Anwendung mit der Festsetzung.',
     'BillingReportVersion': 'Schnappschüsse: schreibt nur die Anwendung (R-DOC-02).',
+    # #52: angemeldete Geräte der Desktop-App.
+    'Geraet': 'Legt die Desktop-App bei der Anmeldung an; die Liste in den Einstellungen folgt mit der Oberfläche.',
+    'GeraetErsetzt': 'Ersetzte Tokens für die Erkennung von Kopien: schreibt nur die Anwendung.',
+    'GeraetCode': 'Codes zum Abholen und Anmelden, eine Minute gültig: schreibt nur die Anwendung.',
 }
 
 # Spalte → Belagstelle. Der Belag ist eine Nadel, die im HTML oder im

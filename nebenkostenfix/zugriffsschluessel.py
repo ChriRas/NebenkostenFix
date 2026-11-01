@@ -102,6 +102,8 @@ NIE_PER_SCHLUESSEL = frozenset({
     'anmeldung_ausschalten', 'logout', 'huelle_passwort',
     'zugriffsschluessel_auflisten', 'zugriffsschluessel_anlegen',
     'zugriffsschluessel_widerrufen',
+    'geraete_auflisten', 'geraet_abmelden', 'geraet_abholen', 'geraet_erneuern',
+    'geraet_widerrufen', 'geraet_anmelden',
     # Der ganze Bestand auf einmal
     'export_data', 'belege_exportieren', 'umzug_export', 'umzug_pruefen',
     'umzug_uebernehmen', 'umzug_hochladen_beginnen', 'umzug_hochladen_stueck',
