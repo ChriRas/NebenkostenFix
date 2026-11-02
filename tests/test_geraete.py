@@ -299,6 +299,19 @@ def test_nach_30_tagen_ohne_nutzung_ist_das_geraet_abgemeldet(auth_client, app_c
     assert (Geraet.query.count() == 1) is gilt
 
 
+@pytest.mark.parametrize('ziel, erwartet', [
+    ('/', '/?geraet=neu'),
+    ('/?tab=1', '/?tab=1&geraet=neu'),
+    # Die Oberfläche ändert die Adresse nie: nach einem 401 kommt der alte,
+    # schon verbrauchte Abholcode mit dem Ziel zurück (Review zu Commit 3).
+    ('/?geraet=alt', '/?geraet=neu'),
+    ('/?tab=1&geraet=alt#rechnungen', '/?tab=1&geraet=neu#rechnungen'),
+])
+def test_das_ziel_traegt_nur_den_neuen_abholcode(ziel, erwartet):
+    from nebenkostenfix import geraete
+    assert geraete.ziel_mit_abholcode(ziel, 'neu') == erwartet
+
+
 @pytest.mark.parametrize('tage, bleibt', [(29, True), (31, False)])
 def test_nach_30_tagen_verschwindet_das_geraet_auch_aus_der_liste(auth_client, app_ctx,
                                                                  tage, bleibt):
