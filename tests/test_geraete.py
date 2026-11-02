@@ -299,6 +299,18 @@ def test_nach_30_tagen_ohne_nutzung_ist_das_geraet_abgemeldet(auth_client, app_c
     assert (Geraet.query.count() == 1) is gilt
 
 
+@pytest.mark.parametrize('tage, bleibt', [(29, True), (31, False)])
+def test_nach_30_tagen_verschwindet_das_geraet_auch_aus_der_liste(auth_client, app_ctx,
+                                                                 tage, bleibt):
+    """Ein verlorener oder verkaufter Rechner meldet sich nie wieder. Die
+    Liste darf ihn nach 30 Tagen trotzdem nicht mehr zeigen (Review #52)."""
+    _neues_geraet(app_ctx)
+    Geraet.query.one().zuletzt_benutzt_am = zeit.jetzt_utc() - timedelta(days=tage)
+    db.session.commit()
+    assert (len(auth_client.get('/api/geraete').get_json()) == 1) is bleibt
+    assert (Geraet.query.count() == 1) is bleibt
+
+
 def test_das_geraet_eines_stillgelegten_kontos_401(auth_client, app_ctx, anon_client):
     token = _neues_geraet(app_ctx)
     User.query.filter_by(username=TEST_USER).one().is_active = False
