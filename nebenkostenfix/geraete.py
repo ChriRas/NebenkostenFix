@@ -36,7 +36,7 @@ import hashlib
 import secrets
 import time
 from datetime import timedelta
-from urllib.parse import urlencode, urlsplit, urlunsplit
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from flask import (has_request_context, jsonify, make_response, redirect, request,
                    session, url_for)
@@ -130,9 +130,12 @@ def anmelden_mit_haekchen(user: User) -> str:
 
 
 def ziel_mit_abholcode(ziel: str, code: str) -> str:
+    # Ein alter Code fliegt raus: die Oberfläche lässt ihn in der Adresse
+    # stehen, und nach einem 401 kommt er mit dem Ziel zurück.
     teile = urlsplit(ziel)
-    abfrage = '&'.join(filter(None, (teile.query, urlencode({ADRESS_PARAMETER: code}))))
-    return urlunsplit(teile._replace(query=abfrage))
+    paare = [(k, v) for k, v in parse_qsl(teile.query, keep_blank_values=True)
+             if k != ADRESS_PARAMETER]
+    return urlunsplit(teile._replace(query=urlencode(paare + [(ADRESS_PARAMETER, code)])))
 
 
 def _geraet_zum_token(roh: str) -> Geraet | None:
