@@ -237,7 +237,7 @@ async function zeigeAngemeldetenBenutzer() {
         // ueber die Einrichtung offen.
         const offen = !!daten.ohne_anmeldung;
         ['angemeldeterBenutzer', 'kopf-abmelden', 'konto-liste',
-            'konto-passwort-bereich', 'zugriffsschluessel-karte'].forEach(kennung => {
+            'konto-passwort-bereich', 'zugriffsschluessel-karte', 'geraete-karte'].forEach(kennung => {
             const teil = document.getElementById(kennung);
             if (teil) teil.hidden = offen;
         });
@@ -357,6 +357,7 @@ function initApp() {
     fetchVermieterdaten();
     ladeKonten();
     ladeZugriffsschluessel();
+    ladeGeraete();
     ladeSicherungsStatus();
     serverAnzeige();
     ladeUmzug();
@@ -612,6 +613,7 @@ function initTabs() {
                     fetchVermieterdaten();
                     ladeKonten();
                     ladeZugriffsschluessel();
+                    ladeGeraete();
                     ladeSicherungsStatus();
                     ladeUmzug();
                     ladeGesperrteMieter();
@@ -2743,6 +2745,7 @@ function zeigeEinstellungsgruppe(gruppe) {
     // Phase 54: die Kostenarten-Liste lädt, wenn ihre Gruppe gezeigt wird.
     if (gruppe === 'kostenarten') ladeKostenarten();
     if (gruppe === 'konto') ladeZugriffsschluessel();
+    if (gruppe === 'konto') ladeGeraete();
 }
 window.zeigeEinstellungsgruppe = zeigeEinstellungsgruppe;
 
@@ -6646,6 +6649,55 @@ async function zugriffsschluesselWiderrufen(id) {
         ladeZugriffsschluessel();
     } catch (e) {
         showError(meldungZu(e, 'Der Zugriffsschlüssel konnte nicht gelöscht werden.'));
+    }
+}
+
+// --- Angemeldete Geräte (#52) ---
+// Rechner, auf denen die Desktop-App mit „Angemeldet bleiben“ angemeldet
+// ist. Meldet man das eigene ab, endet auch die Sitzung hier; der Weg über
+// /login?abgemeldet=1 sagt der App, dass sie ihr Token löschen soll.
+
+async function ladeGeraete() {
+    try {
+        const res = await fetch('/api/geraete');
+        if (!res.ok) throw await serverFehler(res);
+        const liste = await res.json();
+        document.getElementById('geraete-zeilen').innerHTML = liste.length === 0
+            ? '<tr><td colspan="5" class="text-muted" style="padding: 8px;">Kein Rechner angemeldet. '
+                + 'Meldet sich die Desktop-App mit „Angemeldet bleiben“ an, steht der Rechner hier.</td></tr>'
+            : liste.map(g => `<tr>
+            <td style="padding: 8px;">${escapeHtml(g.name)}${g.dieses_geraet
+                ? ' <span class="text-muted">(dieses Gerät)</span>' : ''}</td>
+            <td style="padding: 8px;">${escapeHtml(g.konto || '')}</td>
+            <td style="padding: 8px;">${escapeHtml(g.angelegt_am || '')}</td>
+            <td style="padding: 8px;">${escapeHtml(g.zuletzt_benutzt || '')}</td>
+            <td class="spalte-knopf"><button class="btn-secondary" data-name="${escapeHtml(g.name)}"
+                onclick="geraetAbmelden(${Number(g.id)}, ${g.dieses_geraet ? 'true' : 'false'}, this.dataset.name)">Abmelden</button></td>
+        </tr>`).join('');
+    } catch (e) {
+        console.error('Fehler beim Laden der angemeldeten Geräte', e);
+    }
+}
+
+// Der Name kommt über data-name, nicht in den onclick-Text: so braucht er
+// kein Escaping für JavaScript. frage() setzt ihn als Text.
+async function geraetAbmelden(id, dieses, name) {
+    const ja = await frage(dieses
+        ? 'Sie werden auch hier abgemeldet. Beim nächsten Start fragt die App wieder nach dem Passwort.'
+        : `„${name}“ ist sofort abgemeldet. Die App fragt dort beim nächsten Start wieder nach dem Passwort.`,
+    'Abmelden', true, 'Gerät abmelden?');
+    if (!ja) return;
+    try {
+        const res = await fetch(`/api/geraete/${id}`, { method: 'DELETE' });
+        if (!res.ok) throw await serverFehler(res);
+        if (dieses) {
+            window.location.assign('/login?abgemeldet=1');
+            return;
+        }
+        showSuccess('Gerät abgemeldet.');
+        ladeGeraete();
+    } catch (e) {
+        showError(meldungZu(e, 'Das Gerät konnte nicht abgemeldet werden.'));
     }
 }
 

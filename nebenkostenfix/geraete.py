@@ -191,6 +191,11 @@ def _aufraeumen() -> None:
     # bekommen.
     loeschen([z.geraet_id for z in abgelaufen.filter_by(zweck='abholen')])
     abgelaufen.delete(synchronize_session=False)
+    # 30 Tage ohne Nutzung: abgemeldet. Hier und nicht erst beim Erneuern,
+    # denn ein verlorener Rechner meldet sich nie wieder und stuende sonst
+    # fuer immer in der Liste.
+    loeschen([z.id for z in db.session.query(Geraet.id).filter(
+        Geraet.zuletzt_benutzt_am < jetzt - OHNE_NUTZUNG)])
     # Ersetzte Tokens nur 30 Tage: ohne Grenze wuechse die Tabelle mit jedem
     # Start. Eine Kopie, die erst danach wieder auftaucht, zaehlt nur noch
     # als Fehlversuch; das Geraet selbst bleibt dann angemeldet.
@@ -293,15 +298,10 @@ def init_geraete(app, sitzung_beginnen, sicheres_ziel, ohne_anmeldung_aktiv,
                 loeschen([kopie.geraet_id])
             db.session.commit()
             return _abgelehnt(anmeldeschutz_ordner(), roh)
-        jetzt = zeit.jetzt_utc()
-        abgelaufen = jetzt - geraet.zuletzt_benutzt_am > OHNE_NUTZUNG
-        if abgelaufen or not geraet.user.is_active:
-            if abgelaufen:
-                app.logger.info('Gerät „%s“ war 30 Tage nicht in Gebrauch und ist '
-                                'abgemeldet.', geraet.name)
-                loeschen([geraet.id])
+        if not geraet.user.is_active:
             db.session.commit()
             return _abgelehnt(anmeldeschutz_ordner(), roh)
+        jetzt = zeit.jetzt_utc()
         token = PRAEFIX + secrets.token_urlsafe(32)
         db.session.add(GeraetErsetzt(hash=geraet.hash, geraet_id=geraet.id))
         geraet.hash = _hash(token)
