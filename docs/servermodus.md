@@ -112,9 +112,10 @@ und nach der Leerlauf-Grenze selbst an:
   ohne Nutzung, nach einem Passwortwechsel und nach dem Einspielen einer Sicherung fragt
   die App wieder nach dem Passwort.
 - Mit Häkchen schützt die Leerlauf-Grenze einen unbeaufsichtigten Rechner nicht mehr: Die
-  App meldet sich danach selbst wieder an. Wer den Rechner unbeaufsichtigt lässt, sperrt ihn
-  oder meldet sich ab. Deshalb gehört das Häkchen nur auf einen Rechner, den sonst niemand
-  benutzt.
+  App meldet sich beim nächsten Klick selbst wieder an, und die Seite warnt nicht mehr, dass
+  sie abmeldet.
+  Wer den Rechner unbeaufsichtigt lässt, sperrt ihn oder meldet sich ab. Deshalb gehört das
+  Häkchen nur auf einen Rechner, den sonst niemand benutzt.
 - Über `http://` geht das Gerätetoken bei jedem Start unverschlüsselt durchs Netz, wie sonst
   das Passwort, nur länger gültig. Außerhalb des eigenen Netzes nur mit `https://`.
 - Bei der Anmeldeschleife über `http://` (siehe oben) versucht die App die stille Anmeldung
