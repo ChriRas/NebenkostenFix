@@ -1153,6 +1153,9 @@ def init_auth(app):
             'desktop': bool(app.config.get('DESKTOP')),
             # NK-162: die Oberfläche warnt fünf Minuten vor der Abmeldung.
             'leerlauf_s': _leerlauf_s(),
+            # #52: eine Geraete-Sitzung meldet die App nach dem Leerlauf still
+            # wieder an; die Oberflaeche warnt dann nicht.
+            'geraet': session.get(geraete.SITZUNG_KEY) is not None,
             # Mit welchem Zugriffsschluessel ein Programm hier ist, sonst None.
             'schluessel': {'name': schluessel.name, 'umfang': schluessel.umfang}
                           if (schluessel := zugriffsschluessel.aktueller()) else None,

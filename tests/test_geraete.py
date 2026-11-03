@@ -473,6 +473,21 @@ def test_die_leerlauf_grenze_gilt_auch_fuer_die_geraete_sitzung(auth_client, app
     assert client.get('/api/properties').status_code == 401
 
 
+def test_auth_me_nennt_die_geraete_sitzung(auth_client, app_ctx):
+    """Nach der Leerlauf-Grenze meldet die App eine Geräte-Sitzung still
+    wieder an. Die Oberfläche warnt dann nicht „Sie werden abgemeldet“."""
+    client, _ = _geraete_sitzung(app_ctx, _neues_geraet(app_ctx))
+    assert client.get('/api/auth/me').get_json()['geraet'] is True
+    # Schon gleich nach der Anmeldung mit Häkchen, vor dem Abholen.
+    mit_haken = app_ctx.app.test_client()
+    _anmelden(mit_haken)
+    assert mit_haken.get('/api/auth/me').get_json()['geraet'] is True
+    # Ohne Häkchen, im Browser: wie bisher.
+    ohne = app_ctx.app.test_client()
+    _anmelden(ohne, haken=False)
+    assert ohne.get('/api/auth/me').get_json()['geraet'] is False
+    assert auth_client.get('/api/auth/me').get_json()['geraet'] is False
+
 def test_der_letzte_login_wird_vermerkt(auth_client, app_ctx):
     token = _neues_geraet(app_ctx)
     konto = User.query.filter_by(username=TEST_USER).one()
