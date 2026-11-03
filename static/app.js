@@ -1774,6 +1774,11 @@ function initBarrierearm() {
 const LEERLAUF_WARNUNG_MS = 5 * 60 * 1000;
 let leerlaufMs = 60 * 60 * 1000;
 let letzteBedienung = Date.now();
+// #52: Mit „Angemeldet bleiben“ meldet die Desktop-App sich nach der Grenze
+// beim nächsten Klick still wieder an. „Sie werden abgemeldet“ stimmte dann
+// nicht, und ginge die Seite selbst zur Anmeldung, lüde sie nach jeder Grenze
+// neu: Das Fenster blitzte im Leerlauf ständig.
+let leerlaufStill = false;
 
 async function initLeerlauf() {
     try {
@@ -1786,6 +1791,7 @@ async function initLeerlauf() {
                 return;
             }
             if (ich.leerlauf_s) leerlaufMs = ich.leerlauf_s * 1000;
+            leerlaufStill = ich.geraet === true;
         }
     } catch (e) {
         // Standard 60 Minuten
@@ -1805,7 +1811,7 @@ async function initLeerlauf() {
 
 function leerlaufPruefen() {
     const hinweis = document.getElementById('leerlauf-hinweis');
-    if (!hinweis) return;
+    if (!hinweis || leerlaufStill) return;
     const still = Date.now() - Math.max(window.nkLetzteAnfrage, letzteBedienung);
     const rest = leerlaufMs - still;
     if (rest <= 0) {

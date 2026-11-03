@@ -15,7 +15,7 @@ from __future__ import annotations
 import pytest
 
 from tests.test_zugriffsschluessel_oberflaeche import (
-    DOM, SEITE, WURZEL, _funktionsrumpf, _node, braucht_node)
+    DOM, SEITE, WURZEL, _funktionsrumpf, _konstante, _node, braucht_node)
 
 
 def _karte():
@@ -146,3 +146,70 @@ def test_das_handbuch_erklaert_die_liste():
 def test_der_logout_der_seite_geht_ueber_abgemeldet():
     """Daran erkennt die Desktop-App das Abmelden (#52)."""
     assert "window.location.assign('/login?abgemeldet=1');" in _funktionsrumpf('abmelden')
+
+
+# --- Leerlauf-Hinweis ----------------------------------------------------------
+# Mit Häkchen meldet die App sich nach der Leerlauf-Grenze still wieder an.
+# „Sie werden abgemeldet“ stimmt dann nicht, und der Knopf hieß wie das
+# Häkchen: „Angemeldet bleiben“ (App-Test #52).
+
+LEERLAUF = (DOM + _konstante('LEERLAUF_WARNUNG_MS')
+            + 'let leerlaufMs = 60 * 60 * 1000; let letzteBedienung = 0; let leerlaufStill = false;\n')
+
+
+@braucht_node
+@pytest.mark.parametrize('geraet', [True, False])
+def test_die_seite_merkt_sich_die_geraete_sitzung(geraet):
+    code = LEERLAUF + _funktionsrumpf('initLeerlauf') + f'''
+document.addEventListener = () => {{}}; const setInterval = () => {{}};
+const leerlaufPruefen = () => {{}}; const window = {{}};
+const fetch = async () => ({{ ok: true, json: async () => ({{ leerlauf_s: 120, geraet: {str(geraet).lower()} }}) }});
+initLeerlauf().then(() => console.log(JSON.stringify({{ still: leerlaufStill, ms: leerlaufMs }})));
+'''
+    assert _node(code) == {'still': geraet, 'ms': 120000}
+
+
+def _pruefen(still, rest_ms):
+    code = LEERLAUF + _funktionsrumpf('leerlaufPruefen') + f'''
+leerlaufStill = {str(still).lower()};
+elemente['leerlauf-hinweis'] = {{ hidden: true }};
+let ziel = null; let gesichert = 0; const entwurfSichern = () => {{ gesichert++; }};
+const window = {{ nkLetzteAnfrage: Date.now() - (leerlaufMs - {rest_ms}),
+                  location: {{ pathname: '/einstellungen', assign: (z) => {{ ziel = z; }} }} }};
+leerlaufPruefen();
+console.log(JSON.stringify({{ verborgen: elemente['leerlauf-hinweis'].hidden,
+    text: (elemente['leerlauf-text'] || {{}}).textContent || '', ziel, gesichert }}));
+'''
+    return _node(code)
+
+
+@braucht_node
+def test_ohne_geraet_warnt_die_seite_wie_bisher():
+    erg = _pruefen(False, 60 * 1000)
+    assert erg['verborgen'] is False
+    assert 'in 1 Minute abgemeldet' in erg['text']
+
+
+@braucht_node
+def test_mit_geraet_warnt_die_seite_nicht():
+    erg = _pruefen(True, 60 * 1000)
+    assert erg['verborgen'] is True and erg['ziel'] is None
+
+
+@braucht_node
+def test_mit_geraet_bleibt_die_seite_nach_der_grenze_stehen():
+    """Ginge die Seite selbst zur Anmeldung, meldete die App sich still an,
+    die Seite lüde neu, und nach der nächsten Grenze ginge es von vorn: Das
+    Fenster blitzte im Leerlauf ständig (App-Test #52). Die Sitzung läuft auf
+    dem Server trotzdem ab; erst der nächste Klick bekommt 401, und
+    zurAnmeldung sichert die Eingabe wie bisher."""
+    erg = _pruefen(True, -1000)
+    assert erg['ziel'] is None and erg['gesichert'] == 0
+    assert erg['verborgen'] is True
+
+
+@braucht_node
+def test_ohne_geraet_geht_die_seite_nach_der_grenze_zur_anmeldung():
+    erg = _pruefen(False, -1000)
+    assert erg['ziel'] == '/login?next=%2Feinstellungen'
+    assert erg['gesichert'] == 1
