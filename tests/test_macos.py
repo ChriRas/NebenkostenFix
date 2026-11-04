@@ -11,6 +11,7 @@ Brücke, und der Dateidialog kennt keine Doppelendung.
 from __future__ import annotations
 
 import base64
+import inspect
 import os
 import re
 import subprocess
@@ -625,6 +626,36 @@ def test_menue_ruft_die_seite_ohne_eval(system, monkeypatch, tmp_path, modus, me
     ablauf = starten(monkeypatch, tmp_path)
     _aktion(ablauf, menue, titel)()
     assert ablauf['fenster'].skripte == [skript]
+
+
+# Die Skripte der evaluate_js-Aufrufe im Menü von 0.18.0 (785679f).
+SKRIPTE_WIE_IN_0_18 = [
+    ('lokal', 'Datei', 'Drucken', 'window.print()'),
+    ('lokal', 'Datei', 'Mit einem Server verbinden …', 'zeigeServerKarte()'),
+    ('lokal', 'Hilfe', f'Über {desktop.TITEL}', "zeigeHilfe('hilfe-ueber')"),
+    ('server', 'Datei', 'Drucken', 'window.print()'),
+]
+
+
+@pytest.mark.parametrize('modus, menue, titel, skript', SKRIPTE_WIE_IN_0_18)
+def test_unter_windows_gibt_jeder_menuepunkt_dasselbe_skript_wie_bisher(
+        system, monkeypatch, tmp_path, modus, menue, titel, skript):
+    """Unter win32 schickt das Menü dasselbe Skript wie in 0.18.0, nur über
+    run_js statt evaluate_js. pywebview 6.2.1 gibt beides unter Windows an
+    ExecuteScriptAsync, run_js nur ohne den Mantel aus eval."""
+    system('win32')
+    starten = _fenster_starten if modus == 'lokal' else _server_fenster_starten
+    ablauf = starten(monkeypatch, tmp_path)
+    _aktion(ablauf, menue, titel)()
+    assert ablauf['fenster'].skripte == [skript]
+
+
+def test_die_tabelle_kennt_jeden_menuepunkt_mit_skript():
+    """Ein neuer Menüpunkt, der die Seite aufruft, muss in die Tabelle oben."""
+    aufrufe = sum(inspect.getsource(f).count('.run_js(')
+                  for f in (desktop.fenster_starten, desktop.server_fenster_starten))
+    assert aufrufe == len(SKRIPTE_WIE_IN_0_18)
+    assert '.evaluate_js(' not in inspect.getsource(desktop)
 
 
 def test_servermodus_unter_macos_mit_deutschen_standardmenues(system, monkeypatch, tmp_path):
