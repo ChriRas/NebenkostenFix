@@ -57,6 +57,24 @@ def test_rundgang_deckt_die_anlegen_dialoge_ab():
     assert oeffner <= gefahren, sorted(oeffner - gefahren)
 
 
+def test_rundgang_oeffnet_jeden_dialog():
+    """#41: ``openAnschreibenModal`` fuhr der Rundgang nie an, der kaputte
+    Dialog fiel keinem auf. Ausnahme: das Beispielhaus hat keinen faelligen
+    Abrechnungsvorschlag, ohne den ``openBillingSelectionModal`` nichts zeigt."""
+    oeffner = set(re.findall(r'function (open\w+Modal)\(', SKRIPT)) - {'openBillingSelectionModal'}
+    gefahren = {aufruf.split('(')[0] for aufruf in rundgang.DIALOGE.values()}
+    assert oeffner <= gefahren, sorted(oeffner - gefahren)
+
+
+def test_rundgang_prueft_dass_der_dialog_aufgeht():
+    """#41 warf keinen JS-Fehler: der Fehler landete im ``catch`` und als rote
+    Meldung, der Dialog blieb zu. Beides muss ein Befund sein."""
+    assert '.modal-overlay.active' in rundgang.DIALOG_NACHHER_JS
+    assert '.toast-fehler' in rundgang.DIALOG_NACHHER_JS
+    quelle = (WURZEL / 'scripts' / 'rundgang.py').read_text(encoding='utf-8')
+    assert 'gang.dialog(name, aufruf)' in quelle
+
+
 def test_rundgang_in_drei_breiten():
     assert sorted(breite for breite, _ in rundgang.BREITEN) == [390, 768, 1440]
 
@@ -169,3 +187,15 @@ def test_readme_bilder_kommen_aus_dem_rundgang():
         assert re.search(rf'function {name}\(', SKRIPT), name
     workflow = (WURZEL / '.github' / 'workflows' / 'rundgang.yml').read_text(encoding='utf-8')
     assert '--readme rundgang-bilder/readme' in workflow
+
+
+def test_rundgang_bestaetigt_den_haftungshinweis_mit_verstanden():
+    """#45: Ein versteckter Knopf vor „Verstanden“ ließ den Klick auf den
+    ersten Knopf bis zum Timeout warten. Der Rundgang zielt deshalb auf
+    den Hauptknopf; im Dialog bleibt „Verstanden“ der einzige."""
+    quelle = (WURZEL / 'scripts' / 'rundgang.py').read_text(encoding='utf-8')
+    assert "seite.click('#haftung-modal [data-autofokus]')" in quelle
+    assert "seite.click('#haftung-modal button')" not in quelle
+    dialog = SEITE[SEITE.index('id="haftung-modal"'):SEITE.index('id="frage-modal"')]
+    knoepfe = re.findall(r'<button[^>]*data-autofokus[^>]*>([^<]*)<', dialog)
+    assert knoepfe == ['Verstanden']

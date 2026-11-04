@@ -182,6 +182,27 @@ def test_unbenutzt_kann_weg_mit_kostenprofilen(auth_client):
     assert TenantCostProfile.query.filter_by(category_id=kat.id).count() == 0
 
 
+
+def test_kostenart_einer_festgesetzten_abrechnung_bleibt(auth_client):
+    """Ohne Prüfung erbte die nächste neue Kostenart die ID, und die alte
+    Abrechnung zeigte deren Namen (SQLite vergibt die rowid neu)."""
+    from nebenkostenfix.models import BillingReportCategory, TenantBillingReport
+    assert _anlegen(auth_client, name='Quartierservice').status_code == 201
+    kat = CostCategory.query.filter_by(name='Quartierservice').one()
+    mieter = f.tenant(f.apt(f.house(), 'EG', 50), 'Mieter A', D(2024, 1, 1), None)
+    bericht = TenantBillingReport(tenant_id=mieter.id, start_date=D(2024, 1, 1),
+                                  end_date=D(2024, 12, 31), created_at=D(2025, 5, 1),
+                                  frist_ende=D(2035, 12, 31))
+    db.session.add(bericht)
+    db.session.flush()
+    db.session.add(BillingReportCategory(report_id=bericht.id, category_id=kat.id,
+                                         start_date=D(2024, 1, 1), end_date=D(2024, 12, 31)))
+    db.session.commit()
+    antwort = auth_client.delete(f'/api/categories/{kat.id}')
+    assert antwort.status_code == 409
+    assert 'Abrechnung' in antwort.get_json()['error']
+    assert db.session.get(CostCategory, kat.id) is not None
+
 def test_seed_legt_nach_um_benennen_keine_dublette_an(auth_client):
     from app import seed_database
     kat = CostCategory.query.filter_by(name='Gartenpflege').first()

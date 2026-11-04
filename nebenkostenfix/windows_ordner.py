@@ -22,6 +22,11 @@ Die Einstellungen (gewählter Datenordner, freigegebene Sicherungsziele)
 stehen in ``%LOCALAPPDATA%\\NebenkostenFix\\einstellungen.ini`` --
 der Installer schreibt den Ordner dorthin, die App liest ihn.
 
+Unter macOS (#44) liegen Einstellungen und Daten in
+``~/Library/Application Support/NebenkostenFix``, die Daten im Unterordner
+``Daten``. „Dokumente“ synchronisiert iCloud mit „Schreibtisch & Dokumente“,
+dieselbe Falle wie OneDrive.
+
 Alles hier ist ohne Windows prüfbar: die Windows-Aufrufe stehen in kleinen
 Funktionen, die Tests ersetzen.
 """
@@ -79,9 +84,18 @@ def dokumente_ordner() -> Path:
     return Path.home() / 'Documents'
 
 
+def _betriebssystem() -> str:
+    from nebenkostenfix import aktualisierung
+    return aktualisierung.betriebssystem()
+
+
 def _lokale_basis() -> Path:
     basis = os.environ.get('LOCALAPPDATA')
-    return Path(basis) if basis else Path.home() / '.local' / 'share'
+    if basis:
+        return Path(basis)
+    if _betriebssystem() == 'darwin':
+        return Path.home() / 'Library' / 'Application Support'
+    return Path.home() / '.local' / 'share'
 
 
 def lokaler_ordner() -> Path:
@@ -96,7 +110,10 @@ def alter_lokaler_ordner() -> Path:
 
 def vorgabe_datenordner() -> Path:
     """Dokumente\\NebenkostenFix -- außer eine ältere Installation hat ihre
-    Daten schon in Dokumente\\Nebenkostenabrechnung (D-95: sie bleiben dort)."""
+    Daten schon in Dokumente\\Nebenkostenabrechnung (D-95: sie bleiben dort).
+    Unter macOS nicht in „Dokumente“ (iCloud, #44)."""
+    if _betriebssystem() == 'darwin':
+        return lokaler_ordner() / 'Daten'
     alt = dokumente_ordner() / ALTER_NAME
     if (alt / 'nebenkosten.db').is_file():
         return alt
@@ -150,6 +167,14 @@ def schreibprobe(ordner: Path) -> str | None:
         probe.unlink()
         return None
     except OSError as fehler:
+        if _betriebssystem() == 'darwin':
+            return (
+                f'{APP_NAME} kann nicht in „{ordner}“ schreiben '
+                f'({fehler.strerror or fehler}).\n\n'
+                'Liegt der Ordner unter „Dokumente“, „Schreibtisch“ oder auf einem '
+                'Wechseldatenträger, erlauben Sie den Zugriff unter '
+                'Systemeinstellungen → Datenschutz & Sicherheit → Dateien und Ordner, '
+                'oder wählen Sie in den Einstellungen einen anderen Datenordner.')
         return (
             f'{APP_NAME} kann nicht in „{ordner}“ schreiben '
             f'({fehler.strerror or fehler}).\n\n'
@@ -193,6 +218,15 @@ def _ini_parser(datei: Path) -> configparser.ConfigParser:
     return parser
 
 
+def _ini_schreiben(datei: Path, parser: configparser.ConfigParser) -> None:
+    """Erst daneben schreiben, dann ersetzen: ein Absturz mittendrin
+    hinterlässt die alte oder die neue Datei, nie eine halbe (#45)."""
+    zwischen = datei.with_name(datei.name + '.tmp')
+    with open(zwischen, 'w', encoding='utf-16') as ausgabe:
+        parser.write(ausgabe)
+    os.replace(zwischen, datei)
+
+
 def _alte_einstellungen_uebernehmen() -> None:
     """Einmalig: die einstellungen.ini einer Installation vor der Umbenennung
     an den neuen Ort (D-95). Die alte bleibt liegen, falls jemand zurückgeht."""
@@ -200,10 +234,8 @@ def _alte_einstellungen_uebernehmen() -> None:
     alt = alter_lokaler_ordner() / 'einstellungen.ini'
     if neu.is_file() or not alt.is_file():
         return
-    parser = _ini_parser(alt)
     neu.parent.mkdir(parents=True, exist_ok=True)
-    with open(neu, 'w', encoding='utf-16') as ausgabe:
-        parser.write(ausgabe)
+    _ini_schreiben(neu, _ini_parser(alt))
 
 
 def einstellungen_lesen() -> dict:
@@ -216,6 +248,8 @@ def einstellungen_lesen() -> dict:
         'datenordner': abschnitt.get('Ordner') or None,
         'sicherungsziele': ziele,
         'onedrive_bestaetigt': abschnitt.get('OneDriveBestaetigt', '') == '1',
+        # #45: Adresse einer NebenkostenFix-Instanz, mit der die App sich verbindet.
+        'server': parser.get('Server', 'Adresse', fallback='') or None,
     }
 
 
@@ -224,7 +258,7 @@ def einstellungen_schreiben(**werte) -> None:
     datei = einstellungen_datei()
     datei.parent.mkdir(parents=True, exist_ok=True)
     parser = _ini_parser(datei)
-    if not parser.has_section('Daten'):
+    if not parser.has_section('Daten') and werte.keys() - {'server'}:
         parser.add_section('Daten')
     if 'datenordner' in werte:
         parser['Daten']['Ordner'] = str(werte['datenordner'])
@@ -232,5 +266,13 @@ def einstellungen_schreiben(**werte) -> None:
         parser['Daten']['Sicherungsziele'] = ZIELTRENNER.join(werte['sicherungsziele'])
     if 'onedrive_bestaetigt' in werte:
         parser['Daten']['OneDriveBestaetigt'] = '1' if werte['onedrive_bestaetigt'] else '0'
-    with open(datei, 'w', encoding='utf-16') as ausgabe:
-        parser.write(ausgabe)
+    if 'server' in werte:
+        if werte['server']:
+            if not parser.has_section('Server'):
+                parser.add_section('Server')
+            parser['Server']['Adresse'] = str(werte['server'])
+        elif parser.has_section('Server'):
+            parser.remove_option('Server', 'Adresse')
+            if not parser.items('Server', raw=True):
+                parser.remove_section('Server')
+    _ini_schreiben(datei, parser)

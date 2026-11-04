@@ -157,3 +157,40 @@ def test_keine_vorauszahlung_vor_dem_faelligkeitstag(app_ctx):
     from nebenkostenfix.models import Payment
     demo.anlegen(heute=date(2026, 5, 2))
     assert max(z.payment_date for z in Payment.query) == date(2026, 4, 3)
+
+
+# Das Beispielhaus wird am Namen erkannt (``ist_beispiel``) und ist von der
+# Aufbewahrungssperre ausgenommen. Ein echtes Haus darf den Namen darum nicht
+# bekommen -- weder beim Anlegen noch beim Umbenennen noch über den Import.
+
+def test_ein_neues_haus_bekommt_den_beispielnamen_nicht(app_ctx, auth_client):
+    from nebenkostenfix.models import Property
+    res = auth_client.post('/api/properties', json={'name': demo.NAME})
+    assert res.status_code == 400
+    assert demo.NAME in res.get_json()['error']
+    assert Property.query.filter_by(name=demo.NAME).count() == 0
+
+
+def test_ein_echtes_haus_wird_nicht_zum_beispiel_umbenannt(app_ctx, auth_client):
+    from billing_factories import house
+    from nebenkostenfix.models import Property, db
+    haus = house('Echtes Haus')
+    res = auth_client.put(f'/api/properties/{haus.id}', json={'name': demo.NAME})
+    assert res.status_code == 400
+    db.session.expire_all()
+    assert db.session.get(Property, haus.id).name == 'Echtes Haus'
+
+
+def test_das_beispiel_selbst_bleibt_bearbeitbar(app_ctx, auth_client):
+    from nebenkostenfix.models import Property
+    assert auth_client.post('/api/analytics/beispiel-immobilie').status_code == 201
+    haus = Property.query.filter_by(name=demo.NAME).one()
+    res = auth_client.put(f'/api/properties/{haus.id}',
+                          json={'name': demo.NAME, 'is_standalone': True})
+    assert res.status_code == 200, res.get_json()
+
+
+def test_der_import_legt_kein_haus_mit_dem_beispielnamen_an(app_ctx):
+    from nebenkostenfix.tabellenimport import ZeilenFehler, _Aufloeser
+    with pytest.raises(ZeilenFehler, match='Beispielhaus'):
+        _Aufloeser().haus(demo.NAME, anlegen=True)
