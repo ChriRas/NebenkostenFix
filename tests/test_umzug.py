@@ -427,7 +427,10 @@ def test_der_umzug_nennt_die_geraete_nicht_als_abweichung(bestand, tmp_path):
     bericht = umzug.uebernehmen(bestand.app, _paket(bestand, tmp_path))
     assert bericht['tabellen']['geraete'] == 0
     assert not set(bericht['abweichend']) & set(GERAETE_TABELLEN)
-    assert any('Angemeldete Geräte' in zeile for zeile in bericht['nicht_im_paket'])
+    # Review zu #57: Die Zeilen stehen im Paket (nur Hashes), das Einspielen
+    # verwirft sie. "Nicht im Paket" wäre ungenau.
+    assert any(zeile.startswith('Angemeldete Geräte übernimmt das Einspielen nicht')
+               for zeile in bericht['nicht_im_paket'])
 
 
 def test_vorhandene_vermieterwerte_bleiben(bestand, tmp_path, monkeypatch):

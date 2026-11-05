@@ -373,7 +373,8 @@ Richtungen.
 
 Große Pakete lädt der Browser in Stücken hoch. Nach einem Abbruch geht es an derselben
 Stelle weiter. Unter Docker können Sie das Paket auch nach `daten/import/` legen. Nicht im
-Paket sind Sitzungsschlüssel, Sicherungsziele, Anmeldesperren und angemeldete Geräte.
+Paket sind Sitzungsschlüssel, Sicherungsziele und Anmeldesperren. Angemeldete Geräte
+übernimmt das Einspielen nicht, in der Desktop-App melden Sie sich einmal neu an.
 
 ### Daten aus Excel übernehmen
 
