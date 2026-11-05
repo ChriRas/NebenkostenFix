@@ -30,6 +30,8 @@ Instanz mit eigenen Konten), in der Windows-App ohne (E-1).
 
 Bewusst nicht im Paket (und im Bericht genannt): Sitzungsschlüssel,
 Sicherungsziele und Datenordner-Wahl, Anmeldesperren, Protokolle, Einmal-Code.
+Angemeldete Geräte stehen im Paket (nur Hashes), das Einspielen verwirft sie
+(#52). Auch das nennt der Bericht.
 """
 
 from __future__ import annotations
@@ -63,7 +65,8 @@ NICHT_IM_PAKET = [
     'Sitzungsschlüssel: Sie melden sich auf diesem Rechner einmal neu an.',
     'Sicherungsziele und die Wahl des Datenordners (Pfade des alten Rechners).',
     'Anmeldesperren, Protokolle und der Einmal-Code der Einrichtung.',
-    'Angemeldete Geräte: In der Desktop-App melden Sie sich einmal neu an.',
+    'Angemeldete Geräte übernimmt das Einspielen nicht: In der Desktop-App melden Sie '
+    'sich einmal neu an.',
 ]
 
 # Leert das Einspielen (backup._einspielen_klartext, #52); kein Unterschied,
