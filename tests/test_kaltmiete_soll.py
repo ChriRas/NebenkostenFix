@@ -87,6 +87,19 @@ def test_ics_enthaelt_die_erhoehung():
 # --- Modell und API --------------------------------------------------------------
 
 @pytest.fixture
+def heute_fest(monkeypatch):
+    """Der Kalender zeigt nur Termine ab heute (``fristenkalender.termine``).
+
+    Ohne festen Tag laufen Tests mit festen Fristdaten ab, sobald das Datum
+    vorbei ist. Der 01.03.2025 liegt vor allen Fristen des Tests, der die
+    Fixture nutzt -- auch vor der des älteren, überholten Stichtags. So
+    prüft er wirklich, dass nur der jüngste Stichtag zählt, und nicht bloß,
+    dass ein älterer schon vorbei ist.
+    """
+    monkeypatch.setattr(zeit, 'jetzt_utc', lambda: datetime(2025, 3, 1, 12, 0, 0))
+
+
+@pytest.fixture
 def mieter(app_ctx):
     haus = f.house()
     return f.tenant(f.apt(haus, 'EG', 50), 'Mieter A', D(2024, 1, 1), D(2024, 3, 31))
@@ -133,7 +146,8 @@ def test_indexmiete_ist_ein_flag_am_stichtag(auth_client, mieter):
     assert d['soll'][0]['indexmiete'] is True
 
 
-def test_die_frist_zaehlt_vom_juengsten_stichtag_nicht_von_der_juengsten_id(auth_client):
+def test_die_frist_zaehlt_vom_juengsten_stichtag_nicht_von_der_juengsten_id(auth_client,
+                                                                           heute_fest):
     """Rückdatiert nachgetragen: die letzte Erhöhung ist der spätere Stichtag,
     nicht der später angelegte Eintrag. Sonst verschiebt die Frist sich um
     Jahre -- ein rückdatiertes Soll trägt die jüngere ID."""

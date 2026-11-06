@@ -1659,7 +1659,11 @@ function initModalBedienung() {
                 overlay.dataset.offen = '';
                 overlay.dataset.geaendert = '';
                 const zurueck = dialogAusloeser.get(overlay);
-                if (zurueck && document.contains(zurueck) && zurueck.focus) zurueck.focus();
+                // Hat der Schließende den Fokus schon außerhalb gesetzt (Serverweg der
+                // Startwahl: ins Adressfeld), bleibt er dort.
+                const jetzt = document.activeElement;
+                const frei = !jetzt || jetzt === document.body || overlay.contains(jetzt);
+                if (frei && zurueck && document.contains(zurueck) && zurueck.focus) zurueck.focus();
                 // Lag das Rechnungsformular als Overlay über dem Eingang, kehrt es danach in die Spalte zurück.
                 if (overlay.id === 'invoice-modal') setTimeout(renderDocuments, 250);
             }

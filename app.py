@@ -4520,6 +4520,13 @@ def add_payment():
     # "invalid literal for int() with base 10".
     eingabe = Eingabe.aus_request()
     tenant_id = eingabe.ganzzahl('tenant_id', pflicht=True)
+    # SQLite setzt den Fremdschluessel ohne PRAGMA foreign_keys nicht durch.
+    # Eine Zahlung fuer eine freie Nummer stuende in keiner Liste (die Liste
+    # verbindet mit tenants) und haengte sich an den naechsten Mieter, der
+    # diese Nummer bekommt -- als seine Vorauszahlung in der Abrechnung.
+    tenant = db.session.get(Tenant, tenant_id)
+    if tenant is None:
+        raise EingabeFehler('Diesen Mieter gibt es nicht.', 'tenant_id')
     amount = eingabe.geldbetrag('amount', pflicht=True)
     # Die Art steuert die Rechnung: /api/tenants/<id>/miete zaehlt nur
     # 'Miete', der Zahlungsstand (Phase 47) nur 'Nebenkostenzahlung', die
@@ -4573,9 +4580,9 @@ def add_payment():
         # Ein Zugriffsschluessel erfasst nur: Gibt es schon ein Soll, legt er
         # weder einen Stichtag an noch berichtigt er einen. Auch ein neuer
         # Stichtag aenderte die Vereinbarung ab seinem Tag (Review zu #48).
-        tenant = db.session.get(Tenant, tenant_id)
+        # Den Mieter hat die Pruefung oben geladen; ohne ihn gibt es 400.
         antwort = {'message': f'{created_count} Zahlungen erfolgreich erfasst'}
-        if (type_ == 'Nebenkostenvorauszahlung' and tenant is not None
+        if (type_ == 'Nebenkostenvorauszahlung'
                 and start_date >= tenant.move_in_date):
             if zugriffsschluessel.aktueller() is None or not tenant.vorauszahlung_soll:
                 soll, _ = _soll_setzen(tenant, start_date, amount)
