@@ -415,6 +415,129 @@ def test_startwahl_vor_allem_anderen_und_nur_wenn_der_server_sie_meldet():
     assert bestaetigt == [[False, [], True], [], True]
 
 
+def test_menuepunkt_server_schliesst_die_offene_startwahl():
+    """#55: Der Menüpunkt legte die Karte hinter die offene Startwahl, der
+    Fokus lag unsichtbar im Adressfeld. Jetzt derselbe Weg wie ihr Server-Knopf."""
+    probe = (_DOM + _huelle_block() + 'let startwahlFertig = null;\n'
+             + _funktion('startwahlZeigen') + _funktion('startwahlServer') + _funktion('zeigeServerKarte') + f'''
+        const tabs = [];
+        const wechsleZuTab = t => tabs.push(t);
+        const zeigeEinstellungsgruppe = g => tabs.push(g);
+        window.pywebview = {{api: {_LOKALE_API}}};
+        const stand = () => [element('startwahl-modal').classList.contains('active'),
+                             !element('btn-startwahl-zurueck').hidden,
+                             element('server-karte').style.display, fokus.splice(0), tabs.splice(0)];
+        startwahlZeigen();
+        zeigeServerKarte();
+        const offen = stand();
+        element('btn-startwahl-zurueck').hidden = true;
+        element('server-karte').style.display = 'none';
+        zeigeServerKarte();
+        console.log(JSON.stringify([offen, stand()]));
+    ''')
+    offen, zu = _node(probe)
+    # Startwahl offen: sie geht zu, der Rückweg erscheint, die Karte kommt genau einmal.
+    assert offen == [False, True, '', ['server-adresse'], ['settings', 'sicherung']]
+    # Startwahl zu: wie bisher, ohne Rückweg.
+    assert zu == [False, False, '', ['server-adresse'], ['settings', 'sicherung']]
+
+
+def test_serverweg_der_startwahl_laesst_den_fokus_im_adressfeld():
+    """Nach #55: Der Dialogbeobachter (NK-162) gab den Fokus beim Schließen der
+    Startwahl an ihren Auslöser zurück, nach „Zurück zur Startwahl“ also an diesen
+    Knopf, und nahm ihn damit dem Adressfeld wieder weg. Die Probe nutzt den echten
+    Beobachter aus initModalBedienung; er meldet sich wie im Browser als Mikrotask."""
+    probe = '''
+        const fokus = [];
+        let aktivesElement = null;
+        const elemente = {};
+        class MutationObserver {
+            constructor(fn) { this.fn = fn; this.geplant = false; }
+            observe(ziel) { ziel.beobachter.push(this); }
+            disconnect() {}
+            melden() {
+                if (this.geplant) return;
+                this.geplant = true;
+                queueMicrotask(() => { this.geplant = false; this.fn([]); });
+            }
+        }
+        function element(id, eltern = null) {
+            if (elemente[id]) return elemente[id];
+            const klassen = new Set();
+            const el = elemente[id] = {
+                id, eltern, hidden: true, style: {display: 'none'}, dataset: {}, beobachter: [],
+                classList: {
+                    add: k => { klassen.add(k); el.beobachter.forEach(b => b.melden()); },
+                    remove: k => { klassen.delete(k); el.beobachter.forEach(b => b.melden()); },
+                    contains: k => klassen.has(k),
+                },
+                contains(anderes) {
+                    for (let x = anderes; x; x = x.eltern) if (x === el) return true;
+                    return false;
+                },
+                focus() { aktivesElement = el; fokus.push(id); },
+                addEventListener() {}, querySelector: () => null, scrollIntoView() {},
+            };
+            return el;
+        }
+        const modal = element('startwahl-modal');
+        element('startwahl-lokal', modal);
+        const document = {
+            body: element('body'),
+            get activeElement() { return aktivesElement || document.body; },
+            getElementById: element,
+            querySelectorAll: wahl => wahl === '.modal-overlay' ? [modal] : [],
+            addEventListener() {},
+            contains: () => true,
+        };
+        const window = {};
+        const showError = () => {};
+        const meldungZu = (e, ersatz) => ersatz;
+        const setTimeout = fn => fn();
+        const dialogAusloeser = new WeakMap();
+        const ersterFokus = () => element('startwahl-lokal').focus();
+        const tourDialogAbgleichen = () => {};
+        const wechsleZuTab = () => {};
+        const zeigeEinstellungsgruppe = () => {};
+        ''' + _huelle_block() + _funktion('initModalBedienung') + _funktion('startwahlServer') \
+        + _funktion('startwahlZurueck') + _funktion('zeigeServerKarte') + f'''
+        window.pywebview = {{api: {_LOKALE_API}}};
+        const pause = () => new Promise(r => queueMicrotask(r));
+        const zurueckZurWahl = async () => {{
+            element('btn-startwahl-zurueck').focus();
+            startwahlZurueck();
+            await pause();
+            fokus.length = 0;
+        }};
+        (async () => {{
+            initModalBedienung();
+            const ergebnis = [];
+            // Menüpunkt „Mit einem Server verbinden …“ bei wieder offener Startwahl.
+            await zurueckZurWahl();
+            zeigeServerKarte();
+            await pause();
+            ergebnis.push([modal.classList.contains('active'), document.activeElement.id, fokus.splice(0)]);
+            // Ihr eigener Server-Knopf, derselbe Weg.
+            await zurueckZurWahl();
+            startwahlServer();
+            await pause();
+            ergebnis.push([modal.classList.contains('active'), document.activeElement.id, fokus.splice(0)]);
+            // Schließt die Startwahl ohne eigenes Fokusziel, kehrt er wie bisher zum Auslöser zurück.
+            await zurueckZurWahl();
+            element('startwahl-lokal').focus();
+            fokus.length = 0;
+            modal.classList.remove('active');
+            await pause();
+            ergebnis.push([modal.classList.contains('active'), document.activeElement.id, fokus.splice(0)]);
+            console.log(JSON.stringify(ergebnis));
+        }})();
+    '''
+    menue, knopf, ohne_ziel = _node(probe)
+    assert menue == [False, 'server-adresse', ['server-adresse']]
+    assert knopf == [False, 'server-adresse', ['server-adresse']]
+    assert ohne_ziel == [False, 'btn-startwahl-zurueck', ['btn-startwahl-zurueck']]
+
+
 def test_tour_wartet_auf_die_startwahl():
     probe = 'let startHinweiseFertig = false;\nlet tourAutoVersucht = false;\n' + _funktion('tourAutostart') + '''
         const geplant = [];
