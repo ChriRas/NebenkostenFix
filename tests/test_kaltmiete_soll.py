@@ -13,12 +13,12 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 import pytest
 
-from nebenkostenfix import fristenkalender
+from nebenkostenfix import fristenkalender, zeit
 from nebenkostenfix.models import KaltmieteSoll, Tenant, db
 from tests import billing_factories as f
 from tests.test_migrations import WURZEL, _umgebung
@@ -166,8 +166,14 @@ def test_das_modell_ist_doppelt_gesichert(app_ctx, mieter):
     db.session.rollback()
 
 
-def test_der_kalender_nennt_die_erhoehung_pro_mieter_einmal(app_ctx, auth_client):
+def test_der_kalender_nennt_die_erhoehung_pro_mieter_einmal(app_ctx, auth_client,
+                                                            monkeypatch):
     """Nur der jüngste Stichtag zählt: ältere Stichtage sind überholt."""
+    # Der Kalender zeigt nur Termine ab heute. Mit fester Uhr liegen beide
+    # Fristen (01.04.2025 und 01.11.2026) in der Zukunft: Der Test bleibt
+    # nach dem 01.11.2026 grün, und der ältere Stichtag fällt nur weg, weil
+    # er überholt ist.
+    monkeypatch.setattr(zeit, 'jetzt_utc', lambda: datetime(2025, 1, 10, 12, 0, 0))
     haus = f.house()
     bewohner = f.tenant(f.apt(haus, 'EG', 50), 'Mieter A', D(2024, 1, 1))
     url = f'/api/tenants/{bewohner.id}/kaltmiete_soll'
