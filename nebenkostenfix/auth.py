@@ -288,11 +288,17 @@ def _sicheres_ziel(roh):
     Zugelassen ist nur ein Pfad auf dieser Anwendung: er beginnt mit genau
     einem Schraegstrich. // waere protokollrelativ (//boese.example) und /\
     lesen manche Browser genauso.
+
+    Steuerzeichen und Leerraum fallen ebenso heraus: Browser werfen Tab und
+    Zeilenumbruch stillschweigend aus der Adresse, aus ``/<Tab>/boese.example``
+    wird dann ``//boese.example`` (Review zu #57).
     """
     ziel = (roh or '').strip()
     if not ziel.startswith('/'):
         return '/'
     if ziel.startswith('//') or ziel.startswith('/\\'):
+        return '/'
+    if any(ord(zeichen) <= 0x20 or ord(zeichen) == 0x7f for zeichen in ziel):
         return '/'
     if ziel.startswith('/login'):
         # Sonst landet man nach dem Anmelden wieder auf dem Anmeldefeld.
