@@ -107,6 +107,11 @@ def oeffentliche_datei(name: str | None) -> bool:
 
 SESSION_USER_KEY = 'user_id'
 SESSION_NAME_KEY = 'username'
+# Woran eine Sitzung ihr Konto wiedererkennt: dessen Anlagezeit. Die id
+# allein reicht nicht, SQLite vergibt die Nummer eines geloeschten Kontos an
+# das naechste neue wieder; der Name allein auch nicht, das neue Konto darf
+# wieder so heissen. Siehe current_user().
+SESSION_KONTO_KEY = 'konto_angelegt'
 
 
 class AuthConfigError(RuntimeError):
@@ -196,8 +201,25 @@ def _loese_secret_key():
     return _pruefe_schluessel(inhalt, f'der Datei {pfad}'), pfad, neu
 
 
+def _konto_stempel(user) -> str:
+    """Der Stempel, den die Sitzung zu ihrem Konto traegt: die Anlagezeit.
+
+    Sie aendert sich nie, auch nicht beim Passwortwechsel -- darum nicht der
+    Passwort-Hash, sonst beendete ein neues Passwort die eigene Sitzung.
+    """
+    angelegt = user.created_at
+    return angelegt.isoformat() if angelegt is not None else ''
+
+
 def current_user():
-    """Der angemeldete Benutzer oder None."""
+    """Der angemeldete Benutzer oder None.
+
+    Die Sitzung gilt nur fuer genau das Konto, mit dem sie begonnen hat.
+    ``/api/anmeldung/aus`` loescht alle Konten, aber nur die Sitzung des
+    eigenen Browsers; ein neues Konto bekommt danach dieselbe id. Ein zweites
+    Geraet mit alter Sitzung saesse sonst ohne Passwort im neuen Konto.
+    Darum muessen neben der id auch Benutzername und Anlagezeit passen.
+    """
     schluessel = zugriffsschluessel.aktueller()
     if schluessel is not None:
         # Mit Zugriffsschluessel zaehlt die Sitzung nicht, auch wenn der
@@ -207,8 +229,14 @@ def current_user():
     if user_id is None:
         return None
     user = db.session.get(User, user_id)
-    if user is None or not user.is_active:
-        # Konto geloescht oder stillgelegt, waehrend die Sitzung lief.
+    stempel = session.get(SESSION_KONTO_KEY)
+    if (user is None or not user.is_active
+            or session.get(SESSION_NAME_KEY) != user.username
+            or not stempel or stempel != _konto_stempel(user)):
+        # Konto geloescht, stillgelegt oder durch ein neues mit derselben
+        # id ersetzt, waehrend die Sitzung lief. Eine Sitzung aus der Zeit
+        # vor dem Stempel hat keinen und endet hier einmal -- gewollt: ob
+        # sie zum heutigen Konto gehoert, laesst sich nicht mehr sagen.
         session.clear()
         return None
     return user
@@ -806,6 +834,7 @@ def _sitzung_beginnen(user):
     session.clear()
     session[SESSION_USER_KEY] = user.id
     session[SESSION_NAME_KEY] = user.username
+    session[SESSION_KONTO_KEY] = _konto_stempel(user)
     session[SESSION_AKTIV_KEY] = int(time.time())
     session.permanent = False
 

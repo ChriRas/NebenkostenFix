@@ -2877,3 +2877,129 @@ def test_die_anschriftenwanderung_legt_die_spalten_leer_an(tmp_path):
     assert stand["stand"] == KOPFREVISION
     assert "anschrift" not in stand["zurueck"]
     assert stand["namen"] == ["Altmieter", "Erika"]
+
+
+CODE_SCHLUESSEL_WANDERUNG = """
+import json
+from sqlalchemy import inspect, text
+from flask_migrate import downgrade, upgrade
+import app as anwendung
+from nebenkostenfix.models import db
+
+
+def tabellen():
+    return sorted(inspect(db.engine).get_table_names())
+
+
+with anwendung.app.app_context():
+    downgrade(revision="f2a6c8b4d013")
+    vorher = tabellen()
+    db.session.execute(text(
+        "INSERT INTO users (id, username, password_hash, is_active, created_at)"
+        " VALUES (1, 'verwalter', 'kein-echter-hash', 1, '2026-01-01 00:00:00')"))
+    db.session.execute(text(
+        "INSERT INTO properties (id, name, is_standalone) VALUES (1, 'Altbau', 0)"))
+    db.session.commit()
+
+    upgrade()
+    nachher = tabellen()
+    stand = db.session.execute(text("SELECT version_num FROM alembic_version")).scalar()
+    zeilen = db.session.execute(text("SELECT COUNT(*) FROM api_schluessel")).scalar()
+    spalten = [z[1] for z in db.session.execute(
+        text("PRAGMA table_info('api_schluessel')")).all()]
+
+    db.session.execute(text(
+        "INSERT INTO api_schluessel (user_id, name, hash, umfang, angelegt_am)"
+        " VALUES (1, 'Probe', :h, 'lesen', '2026-01-02 00:00:00')"), {"h": "a" * 64})
+    db.session.commit()
+    doppelt_abgelehnt = False
+    try:
+        db.session.execute(text(
+            "INSERT INTO api_schluessel (user_id, name, hash, umfang, angelegt_am)"
+            " VALUES (1, 'Zweiter', :h, 'lesen', '2026-01-02 00:00:00')"), {"h": "a" * 64})
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        doppelt_abgelehnt = True
+
+    downgrade(revision="f2a6c8b4d013")
+    zurueck = tabellen()
+    bestand = [db.session.execute(text("SELECT username FROM users")).scalar(),
+               db.session.execute(text("SELECT name FROM properties")).scalar()]
+
+print(json.dumps({"vorher": vorher, "nachher": nachher, "stand": stand,
+                  "zeilen": zeilen, "spalten": spalten,
+                  "doppelt_abgelehnt": doppelt_abgelehnt,
+                  "zurueck": zurueck, "bestand": bestand}))
+"""
+
+
+def test_die_schluesselwanderung_laesst_den_altbestand_in_ruhe(tmp_path):
+    """PR #48: die Tabelle ``api_schluessel`` kommt leer dazu.
+
+    Konten und Bestand aus der Zeit davor bleiben, wie sie waren; ein
+    Schluesselwert darf nur einmal vorkommen. Der Rueckweg nimmt nur die
+    neue Tabelle weg, Konto und Haus stehen danach noch da.
+    """
+    stand = _lauf(CODE_SCHLUESSEL_WANDERUNG, tmp_path / "schluessel.db", tmp_path)
+
+    assert "api_schluessel" not in stand["vorher"]
+    assert "api_schluessel" in stand["nachher"]
+    assert stand["stand"] == KOPFREVISION
+    assert stand["zeilen"] == 0, "Die Wanderung traegt Schluessel ein."
+    assert set(stand["spalten"]) == {
+        "id", "user_id", "name", "hash", "umfang", "angelegt_am",
+        "zuletzt_benutzt_am"}
+    assert stand["doppelt_abgelehnt"], "Derselbe Hash ging zweimal hinein."
+    assert "api_schluessel" not in stand["zurueck"]
+    assert stand["bestand"] == ["verwalter", "Altbau"]
+
+
+CODE_EINSPIELEN_VOR_SCHLUESSELN = """
+import json, os
+from pathlib import Path
+from sqlalchemy import text
+from flask_migrate import downgrade, upgrade
+import app as anwendung
+from nebenkostenfix import backup
+from nebenkostenfix.models import ApiSchluessel, User, db
+
+ordner = Path(os.environ['DATA_DIR']) / 'probe-sicherungen'
+with anwendung.app.app_context():
+    downgrade(revision="f2a6c8b4d013")
+    db.session.execute(text(
+        "INSERT INTO users (id, username, password_hash, is_active, created_at)"
+        " VALUES (1, 'verwalter', 'kein-echter-hash', 1, '2026-01-01 00:00:00')"))
+    db.session.execute(text(
+        "INSERT INTO properties (name, is_standalone) VALUES ('Musterhaus', 0)"))
+    db.session.commit()
+    archiv = backup.sicherung_erstellen(anwendung.app, ordner)
+    upgrade()
+    db.session.execute(text(
+        "INSERT INTO properties (name, is_standalone) VALUES ('Nach dem Update', 0)"))
+    db.session.commit()
+    bericht = backup.sicherung_einspielen(anwendung.app, archiv)
+    stand = db.session.execute(text("SELECT version_num FROM alembic_version")).scalar()
+    schluessel = ApiSchluessel.query.count()   # die Tabelle muss wieder da sein
+    konten = [u.username for u in User.query.all()]
+    haeuser = [z[0] for z in db.session.execute(text("SELECT name FROM properties")).all()]
+print(json.dumps({"stand": stand, "bericht": bericht, "schluessel": schluessel,
+                  "konten": konten, "haeuser": haeuser}))
+"""
+
+
+def test_eine_sicherung_von_vor_den_schluesseln_laesst_sich_einspielen(tmp_path):
+    """PR #48: ein Archiv von vor ``db48fb4e8716`` kommt ganz zurueck.
+
+    Nach dem Einspielen steht die Anwendung wieder auf dem Kopf, die Tabelle
+    ``api_schluessel`` ist da und leer, Konto und Haus aus der Sicherung
+    sind zurueck, das Haus von nach dem Update ist weg.
+    """
+    ergebnis = _lauf(CODE_EINSPIELEN_VOR_SCHLUESSELN, tmp_path / "vor.db", tmp_path)
+
+    assert ergebnis["bericht"]["alembic_revision"] == "f2a6c8b4d013"
+    assert ergebnis["stand"] == KOPFREVISION
+    assert ergebnis["bericht"]["schemastand_nachher"] == KOPFREVISION
+    assert ergebnis["schluessel"] == 0
+    assert ergebnis["konten"] == ["verwalter"]
+    assert ergebnis["haeuser"] == ["Musterhaus"]
