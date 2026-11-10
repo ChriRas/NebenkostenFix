@@ -322,7 +322,9 @@ def _sicheres_ziel(roh):
 
     Steuerzeichen und Leerraum fallen ebenso heraus: Browser werfen Tab und
     Zeilenumbruch stillschweigend aus der Adresse, aus ``/<Tab>/boese.example``
-    wird dann ``//boese.example`` (Review zu #57).
+    wird dann ``//boese.example`` (Review zu #57). Das geschieht schon auf dem
+    Server: Pythons ``urlsplit`` streicht Tab, CR und LF ebenso, und Werkzeug
+    baut die ``Location`` damit (``iri_to_uri``).
     """
     ziel = (roh or '').strip()
     if not ziel.startswith('/'):
