@@ -1,5 +1,6 @@
 from flask_sqlalchemy import SQLAlchemy
 from datetime import date, datetime
+import secrets
 
 import sqlalchemy as sa
 
@@ -795,13 +796,19 @@ class Geraet(db.Model):
     Erneuerung ersetzt ihn; der alte wandert nach ``geraete_ersetzt``.
     """
     __tablename__ = 'geraete'
-    # Nummern nie wiederverwenden: die Sitzung merkt sich die Nummer, und ein
-    # neues Geraet darf keine abgemeldete Sitzung wiederbeleben.
+    # Nummern trotzdem nicht wiederverwenden (AUTOINCREMENT): die Liste und
+    # das Abmelden darin gehen ueber die Nummer.
     __table_args__ = {'sqlite_autoincrement': True}
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
     name = db.Column(db.String(60), nullable=False)
     hash = db.Column(db.String(64), unique=True, nullable=False)
+    # Daran erkennt eine Sitzung ihr Geraet (Review zu #57), nicht an der
+    # Nummer: Eine aeltere Sicherung bringt den Zaehler der Nummern zurueck,
+    # und eine Sitzung von vor dem Einspielen gaelte sonst fuer ein neues
+    # Geraet desselben Kontos wieder.
+    sitzung = db.Column(db.String(32), unique=True, nullable=False,
+                        default=lambda: secrets.token_hex(16))
     angelegt_am = db.Column(db.DateTime, nullable=False, default=zeit.jetzt_utc)
     zuletzt_benutzt_am = db.Column(db.DateTime, nullable=False, default=zeit.jetzt_utc)
 

@@ -124,7 +124,7 @@ def anmelden_mit_haekchen(user: User) -> str:
     db.session.add(geraet)
     db.session.flush()
     code = _code_anlegen('abholen', geraet.id)
-    session[SITZUNG_KEY] = geraet.id
+    session[SITZUNG_KEY] = geraet.sitzung
     db.session.commit()
     return code
 
@@ -176,14 +176,22 @@ def alle_loeschen() -> None:
     Geraet.query.delete()
 
 
+def zur_sitzung() -> Geraet | None:
+    """Das Geraet, mit dem diese Sitzung begann. Die Sitzung merkt sich dafuer
+    seinen Zufallswert, nicht die Nummer (Review zu #57): Eine aeltere
+    Sicherung bringt den Zaehler der Nummern zurueck."""
+    wert = session.get(SITZUNG_KEY)
+    if not isinstance(wert, str):
+        return None
+    return Geraet.query.filter_by(sitzung=wert).first()
+
+
 def sitzung_gilt(user_id: int) -> bool:
     """Eine Sitzung, die mit einem Geraet begann, endet mit dessen Abmeldung.
-    Die Nummern vergibt SQLite nie zweimal (AUTOINCREMENT); das Konto muss
-    trotzdem passen."""
-    geraet_id = session.get(SITZUNG_KEY)
-    if geraet_id is None:
+    Das Konto muss trotzdem passen."""
+    if session.get(SITZUNG_KEY) is None:
         return True
-    geraet = Geraet.query.filter_by(id=geraet_id).first()
+    geraet = zur_sitzung()
     return geraet is not None and geraet.user_id == user_id
 
 
@@ -257,7 +265,7 @@ def _zeile(geraet: Geraet, eigenes) -> dict:
         'konto': geraet.user.username if geraet.user else None,
         'angelegt_am': zeit.als_ortszeit(geraet.angelegt_am),
         'zuletzt_benutzt': zeit.als_ortszeit(geraet.zuletzt_benutzt_am),
-        'dieses_geraet': geraet.id == eigenes,
+        'dieses_geraet': eigenes is not None and geraet.id == eigenes.id,
     }
 
 
@@ -345,7 +353,7 @@ def init_geraete(app, sitzung_beginnen, sicheres_ziel, ohne_anmeldung_aktiv,
             _zaehlen(anmeldeschutz_ordner(), roh)
             return redirect(url_for('login', next=ziel))
         sitzung_beginnen(geraet.user)
-        session[SITZUNG_KEY] = geraet.id
+        session[SITZUNG_KEY] = geraet.sitzung
         geraet.user.last_login_at = zeit.jetzt_utc()
         db.session.commit()
         return redirect(ziel)
@@ -356,7 +364,7 @@ def init_geraete(app, sitzung_beginnen, sicheres_ziel, ohne_anmeldung_aktiv,
             return jsonify([]), 200
         _aufraeumen()
         db.session.commit()
-        eigenes = session.get(SITZUNG_KEY)
+        eigenes = zur_sitzung()
         eintraege = Geraet.query.order_by(Geraet.angelegt_am).all()
         return jsonify([_zeile(g, eigenes) for g in eintraege]), 200
 
@@ -374,4 +382,4 @@ def init_geraete(app, sitzung_beginnen, sicheres_ziel, ohne_anmeldung_aktiv,
 
 __all__ = ['PRAEFIX', 'APP_KENNUNG', 'SITZUNG_KEY', 'AUSWEIS', 'aus_der_app', 'ausweis',
            'anmelden_mit_haekchen', 'ziel_mit_abholcode', 'loeschen', 'fuer_konto_loeschen',
-           'alle_loeschen', 'sitzung_gilt', 'init_geraete']
+           'alle_loeschen', 'zur_sitzung', 'sitzung_gilt', 'init_geraete']

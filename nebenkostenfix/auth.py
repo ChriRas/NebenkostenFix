@@ -1114,11 +1114,11 @@ def init_auth(app):
             if current_user() is None:
                 return redirect(url_for('login'))
             return redirect('/')
-        geraet_id = session.get(geraete.SITZUNG_KEY)
+        geraet = geraete.zur_sitzung()
         session.clear()
-        if geraet_id is not None:
+        if geraet is not None:
             # #52: wer in der App abmeldet, meint auch das Geraet.
-            geraete.loeschen([geraet_id])
+            geraete.loeschen([geraet.id])
             db.session.commit()
         if _wants_json():
             return jsonify({'status': 'abgemeldet'}), 200

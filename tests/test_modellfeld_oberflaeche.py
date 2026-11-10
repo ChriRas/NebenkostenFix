@@ -271,6 +271,7 @@ AUSNAHMEN = {
     'Geraet': {
         'id': 'Schlüssel.',
         'hash': 'Der Hash des Gerätetokens entsteht im Server; das Token sieht nur die Desktop-App.',
+        'sitzung': 'Zufallswert für die Sitzung, entsteht im Server; die Oberfläche zeigt ihn nie.',
     },
     'Property': {
         'id': 'Schlüssel.',

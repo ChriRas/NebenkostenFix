@@ -3058,8 +3058,9 @@ with anwendung.app.app_context():
 
     # Ein Geraet anlegen, damit sqlite_sequence eine Zeile fuer geraete hat.
     db.session.execute(text(
-        "INSERT INTO geraete (user_id, name, hash, angelegt_am, zuletzt_benutzt_am)"
-        " VALUES (1, 'Notebook', :h, '2026-11-02', '2026-11-02')"), {"h": "b" * 64})
+        "INSERT INTO geraete (user_id, name, hash, sitzung, angelegt_am, zuletzt_benutzt_am)"
+        " VALUES (1, 'Notebook', :h, :s, '2026-11-02', '2026-11-02')"),
+        {"h": "b" * 64, "s": "c" * 32})
     db.session.commit()
     sequenz_nachher = sequenz()
 
@@ -3079,19 +3080,22 @@ print(json.dumps({"vorher": vorher, "nachher": nachher, "schema": schema,
 
 
 def test_die_geraetewanderung_legt_die_drei_tabellen_an(tmp_path):
-    """#52 (Review): Die Sitzung merkt sich das Geraet. Eine Nummer, die
-    SQLite nach dem Loeschen noch einmal vergaebe, belebte eine abgemeldete
-    Sitzung wieder. Das verhindert nur AUTOINCREMENT, und das steht nur im
-    gewanderten Schema, nicht in dem aus create_all()."""
+    """#52 (Review): Die Sitzung merkt sich das Geraet ueber einen
+    Zufallswert (``sitzung``, eindeutig), nicht ueber die Nummer: Eine aeltere
+    Sicherung bringt den Zaehler zurueck (Review zu #57). AUTOINCREMENT bleibt
+    trotzdem, damit eine Nummer nach dem Loeschen nicht gleich wiederkommt.
+    Beides steht nur im gewanderten Schema, nicht in dem aus create_all()."""
     stand = _lauf(CODE_GERAETE_WANDERUNG, tmp_path / "geraete.db", tmp_path)
     assert stand["vorher"] == []
     assert set(stand["nachher"]) == {"geraete", "geraete_ersetzt", "geraete_codes"}
-    for spalte in ("id", "user_id", "name", "hash", "angelegt_am", "zuletzt_benutzt_am"):
+    for spalte in ("id", "user_id", "name", "hash", "sitzung", "angelegt_am",
+                   "zuletzt_benutzt_am"):
         assert spalte in stand["nachher"]["geraete"]
     assert stand["nachher"]["geraete_ersetzt"] == ["hash", "geraet_id", "ersetzt_am"]
     assert stand["nachher"]["geraete_codes"] == ["hash", "zweck", "geraet_id", "gueltig_bis"]
     assert "AUTOINCREMENT" in stand["schema"]
     assert "UNIQUE (hash)" in stand["schema"]
+    assert "UNIQUE (sitzung)" in stand["schema"]
     assert stand["stand"] == KOPFREVISION
     assert stand["sequenz"] == 1
 

@@ -27,6 +27,7 @@ from nebenkostenfix import umzug
 ALT_USER = 'alt-vermieter'
 HAFTUNG = {'version': 1, 'bestaetigt_am': '2026-01-01T00:00:00+00:00'}
 ALT_PASS = 'altes-passwort-123'
+APP = 'Mozilla/5.0 (Windows NT 10.0) AppleWebKit/537.36 NebenkostenFix-Desktop/0.19.0'
 PNG = (b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00'
        b'\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\rIDATx\x9cc\xf8\x0f\x00\x00\x01\x01\x00\x05'
        b'\x18\xd8N\x00\x00\x00\x00IEND\xaeB`\x82')
@@ -420,6 +421,40 @@ def test_eine_eingespielte_sicherung_meldet_alle_geraete_ab(bestand, tmp_path):
     backup.sicherung_einspielen(bestand.app, sicherung)
     zeilen = backup.zaehlwerte(backup.datenbankpfad(bestand.app))
     assert {t: zeilen[t] for t in GERAETE_TABELLEN} == dict.fromkeys(GERAETE_TABELLEN, 0)
+
+
+def _mit_haekchen_anmelden(app):
+    """Wie die Desktop-App mit Häkchen: Die erste Sitzung gehört schon zum
+    Gerät (``geraete.anmelden_mit_haekchen``)."""
+    client = app.test_client()
+    antwort = client.post('/login', query_string={'next': '/'},
+                          data={'username': ALT_USER, 'password': ALT_PASS,
+                                'angemeldet_bleiben': '1'},
+                          headers={'User-Agent': APP})
+    assert antwort.status_code == 302, antwort.get_data(as_text=True)
+    return client
+
+
+def test_eine_aeltere_sicherung_belebt_keine_alte_geraetesitzung(bestand, tmp_path):
+    """Review zu #57: Eine ältere Sicherung bringt den Zähler für die
+    Gerätenummern zurück. Merkte sich die Sitzung die Nummer, gälte eine
+    Sitzung von vor dem Einspielen wieder, sobald dasselbe Konto ein neues
+    Gerät anmeldet."""
+    from nebenkostenfix.models import Geraet, db
+    sicherung = backup.sicherung_erstellen(bestand.app, tmp_path)
+    alt = _mit_haekchen_anmelden(bestand.app)
+    assert alt.get('/api/properties').status_code == 200
+    nummer = Geraet.query.one().id
+
+    backup.sicherung_einspielen(bestand.app, sicherung)
+    db.session.remove()
+    # Keine Anfrage des alten Fensters dazwischen (Notebook zugeklappt):
+    # jede Anfrage leerte die Sitzung, und die Lücke wäre zu.
+
+    _mit_haekchen_anmelden(bestand.app)
+    # Der Zähler kommt aus der Sicherung: dieselbe Nummer wie vorher.
+    assert Geraet.query.one().id == nummer
+    assert alt.get('/api/properties').status_code == 401
 
 
 def test_der_umzug_nennt_die_geraete_nicht_als_abweichung(bestand, tmp_path):
