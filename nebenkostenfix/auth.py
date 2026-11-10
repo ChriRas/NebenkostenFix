@@ -1008,7 +1008,7 @@ def init_auth(app):
 
         if _wants_json():
             return jsonify({'username': user.username}), 200
-        ziel = _sicheres_ziel(request.args.get('next'))
+        ziel = geraete.ziel_ohne_abholcode(_sicheres_ziel(request.args.get('next')))
         if data.get('angemeldet_bleiben') and geraete.aus_der_app():
             # #52: nur der Abholcode kommt in die Adresse, das Token holt
             # die App selbst ab.

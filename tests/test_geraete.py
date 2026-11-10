@@ -110,6 +110,27 @@ def test_im_browser_wirkt_das_haekchen_nicht(auth_client, anon_client):
     assert GeraetCode.query.count() == 0
 
 
+@pytest.mark.parametrize('haken', [False, True])
+def test_ein_fremder_abholcode_im_ziel_faellt_heraus(auth_client, anon_client, haken):
+    """Review zu #57: Die App holt einen Code direkt nach der Anmeldeseite
+    ab. Ein präparierter Link /login?next=/?geraet=… darf ihr dort keinen
+    fremden unterschieben, auch nicht bei einer Anmeldung ohne Häkchen."""
+    antwort = _anmelden(anon_client, haken=haken, ziel='/einstellungen?geraet=fremd&reiter=konto')
+    assert antwort.status_code == 302
+    ort = urlsplit(antwort.headers['Location'])
+    assert ort.path == '/einstellungen'
+    werte = parse_qs(ort.query)
+    assert werte['reiter'] == ['konto']
+    assert werte.get('geraet', []) == ([_eigener_code(werte)] if haken else [])
+
+
+def _eigener_code(werte):
+    """Der eigene Abholcode, den die Anmeldung mit Häkchen anhängt."""
+    (code,) = werte['geraet']
+    assert code != 'fremd' and GeraetCode.query.one().hash == _hash(code)
+    return code
+
+
 def test_mit_haekchen_haengt_ein_abholcode_am_ziel(auth_client, anon_client):
     antwort = _anmelden(anon_client, ziel='/einstellungen?reiter=konto')
     ort = urlsplit(antwort.headers['Location'])

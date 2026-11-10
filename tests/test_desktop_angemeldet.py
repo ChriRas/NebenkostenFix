@@ -241,6 +241,7 @@ def test_der_abholcode_wird_abgeholt(geraetemodus, monkeypatch):
     monkeypatch.setattr(desktop, 'rechnername', lambda: 'Buero-PC')
     assert desktop.main([]) == 0
     (offen,) = geraetemodus.fenster
+    offen.navigiert(geraetemodus.basis + '/login')
     offen.navigiert(geraetemodus.basis + '/?geraet=abholcode')
     assert geraetemodus.server.aufrufe == [
         ('/api/geraete/abholen', {'code': 'abholcode', 'name': 'Buero-PC'})]
@@ -252,6 +253,7 @@ def test_ein_abgeholtes_token_ohne_ablage_laesst_die_sitzung(geraetemodus, monke
     nächsten Klick; das Token hält ohnehin niemand (Review zu Commit 3)."""
     assert desktop.main([]) == 0
     monkeypatch.setattr(geraetemodus.bund, 'set_password', Verweigert().set_password)
+    geraetemodus.fenster[0].navigiert(geraetemodus.basis + '/login')
     geraetemodus.fenster[0].navigiert(geraetemodus.basis + '/?geraet=abholcode')
     assert geraetemodus.server.pfade() == ['/api/geraete/abholen']
 
@@ -261,6 +263,7 @@ def test_ein_altes_token_wird_beim_abholen_widerrufen(geraetemodus):
     Ohne Widerruf stünde der Rechner doppelt in der Liste."""
     assert desktop.main([]) == 0
     geraetemodus.bund.set_password(desktop.DIENST, geraetemodus.basis, 'nkg_alt')
+    geraetemodus.fenster[0].navigiert(geraetemodus.basis + '/login')
     geraetemodus.fenster[0].navigiert(geraetemodus.basis + '/?geraet=abholcode')
     assert geraetemodus.server.aufrufe[1:] == [('/api/geraete/widerrufen', {'token': 'nkg_alt'})]
     assert _token(geraetemodus) == 'nkg_abgeholt'
@@ -271,11 +274,38 @@ def test_ein_abholcode_gilt_nur_einmal(geraetemodus):
     holt nicht noch einmal ab, und von zweien zählt der letzte."""
     assert desktop.main([]) == 0
     (offen,) = geraetemodus.fenster
-    offen.navigiert(geraetemodus.basis + '/?geraet=eins')
-    offen.navigiert(geraetemodus.basis + '/?geraet=eins')
-    offen.navigiert(geraetemodus.basis + '/?geraet=eins&geraet=zwei')
+    for adresse in ('/?geraet=eins', '/?geraet=eins', '/?geraet=eins&geraet=zwei'):
+        offen.navigiert(geraetemodus.basis + '/login')
+        offen.navigiert(geraetemodus.basis + adresse)
     assert [d['code'] for p, d in geraetemodus.server.aufrufe if p.endswith('abholen')] == [
         'eins', 'zwei']
+
+
+@pytest.mark.parametrize('davor', ['/', '/einstellungen?reiter=konto', '/login/../',
+                                   'https://boese.example/login', None])
+def test_ein_abholcode_nur_direkt_nach_der_anmeldeseite(geraetemodus, davor):
+    """Review zu #57: Ein präparierter Link mit ``?geraet=`` mitten in der
+    Arbeit hängte die App sonst an das Gerät eines anderen Kontos, und ihr
+    eigenes Token wäre widerrufen. Auch eine fremde Seite zwischen Anmeldung
+    und Code zählt."""
+    assert desktop.main([]) == 0
+    (offen,) = geraetemodus.fenster
+    geraetemodus.bund.set_password(desktop.DIENST, geraetemodus.basis, 'nkg_alt')
+    offen.navigiert(geraetemodus.basis + '/login')
+    if davor is not None:
+        offen.navigiert(davor if davor.startswith('https://') else geraetemodus.basis + davor)
+    offen.navigiert(geraetemodus.basis + '/?geraet=fremd')
+    abgeholt = [d for p, d in geraetemodus.server.aufrufe if p.endswith('abholen')]
+    assert abgeholt == ([] if davor else [{'code': 'fremd', 'name': desktop.rechnername()}])
+    if davor:
+        assert _token(geraetemodus) == 'nkg_alt'
+
+
+def test_ohne_anmeldeseite_seit_dem_start_holt_die_app_nichts_ab(geraetemodus):
+    assert desktop.main([]) == 0
+    (offen,) = geraetemodus.fenster
+    offen.navigiert(geraetemodus.basis + '/?geraet=fremd')
+    assert geraetemodus.server.aufrufe == []
 
 
 def test_der_start_meldet_still_an(geraetemodus):

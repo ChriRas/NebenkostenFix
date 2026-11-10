@@ -1121,6 +1121,7 @@ def server_fenster_starten(adresse: str) -> int:
     def laden():
         ok, meldung, endadresse = server_pruefen(adresse)
         zustand['spruenge'] = []
+        zustand['vorher'] = None
         if ok:
             zustand['basis'] = bruecke._basis = endadresse
             fenster.set_title(server_titel(endadresse))  # http → https übernommen
@@ -1139,7 +1140,12 @@ def server_fenster_starten(adresse: str) -> int:
         except Exception:  # noqa: BLE001 -- Fenster schon zu
             protokoll.debug('Adresse des Fensters nicht lesbar', exc_info=True)
             return
-        if jetzt and not _gleicher_ursprung(jetzt, zustand['basis']):
+        # Die zuletzt geladene Seite des Servers; eine fremde dazwischen zählt
+        # als keine. Ein Abholcode gilt nur direkt nach der Anmeldeseite.
+        vorher = zustand.get('vorher')
+        eigene = bool(jetzt) and _gleicher_ursprung(jetzt, zustand['basis'])
+        zustand['vorher'] = urllib.parse.urlsplit(jetzt).path if eigene else None
+        if jetzt and not eigene:
             protokoll.warning('Fremde Seite %s, zurück zu %s', jetzt, zustand['basis'])
             # Leitet „/“ selbst weiter (Anmelde-Proxy), käme sie immer wieder.
             zeit = time.monotonic()
@@ -1152,14 +1158,19 @@ def server_fenster_starten(adresse: str) -> int:
             fenster.load_url(zustand['basis'] + '/')
             return
         if jetzt:
-            anmeldung_beachten(jetzt, zustand['basis'])
+            anmeldung_beachten(jetzt, zustand['basis'], vorher)
 
-    def anmeldung_beachten(jetzt, basis):
+    def anmeldung_beachten(jetzt, basis, vorher):
         # #52: nur Seiten des Servers, die Ursprungsprüfung steht davor.
         teile = urllib.parse.urlsplit(jetzt)
         abfrage = urllib.parse.parse_qs(teile.query)
         if abfrage.get('geraet'):
-            still.abholen(basis, abfrage['geraet'][-1])
+            # Review zu #57: Ein präparierter Link mitten in der Arbeit hängte
+            # die App sonst an das Gerät eines anderen Kontos.
+            if vorher == '/login':
+                still.abholen(basis, abfrage['geraet'][-1])
+            else:
+                protokoll.warning('Gerätecode nicht direkt nach der Anmeldung, nicht abgeholt.')
         elif teile.path == '/login' and 'abgemeldet' in abfrage:
             still.abmelden(basis)
         elif teile.path == '/login' and abfrage.get('next'):
