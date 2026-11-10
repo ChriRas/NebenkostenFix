@@ -162,7 +162,8 @@ def test_ein_nie_abgeholtes_geraet_verschwindet(auth_client, anon_client, app_ct
 
 def test_eine_abgemeldete_sitzung_lebt_nicht_wieder_auf(auth_client, app_ctx):
     """Review: SQLite vergab die Nummer eines gelöschten Geräts neu, und die
-    alte Sitzung galt wieder. Die Sitzung merkt sich nur die Nummer."""
+    alte Sitzung galt wieder. Jetzt merkt sich die Sitzung einen Zufallswert
+    des Geräts; den Fall mit einer älteren Sicherung prüft test_umzug.py."""
     client, _ = _geraete_sitzung(app_ctx, _neues_geraet(app_ctx))
     nummer = Geraet.query.one().id
     assert auth_client.delete(f'/api/geraete/{nummer}').status_code == 200
@@ -575,7 +576,11 @@ def test_die_liste_nennt_die_geraete_ohne_token_und_hash(auth_client, app_ctx):
     assert eintrag['angelegt_am'] and eintrag['zuletzt_benutzt']
     assert eintrag['dieses_geraet'] is False
     text = antwort.get_data(as_text=True)
-    assert token not in text and Geraet.query.one().hash not in text
+    geraet = Geraet.query.one()
+    assert token not in text and geraet.hash not in text
+    # Wer den Wert der Sitzung kennt, kann sich mit dem Sitzungsschlüssel ein
+    # Cookie bauen; er bleibt deshalb auf dem Server.
+    assert geraet.sitzung not in text
 
 
 def test_die_liste_markiert_dieses_geraet(auth_client, app_ctx):

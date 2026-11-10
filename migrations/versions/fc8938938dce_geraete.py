@@ -10,7 +10,8 @@ Die vierunddreissigste Wanderung: die Tabellen ``geraete``,
 Mit dem Haekchen „Angemeldet bleiben“ bekommt die Desktop-App ein
 Geraetetoken, mit dem sie sich still neu anmeldet
 (``nebenkostenfix/geraete.py``). In ``geraete`` steht nur der SHA-256 des
-aktuellen Tokens, dazu Rechnername und wann es zuletzt benutzt wurde.
+aktuellen Tokens, dazu Rechnername und wann es zuletzt benutzt wurde, und
+der Zufallswert, an dem eine Sitzung ihr Geraet erkennt.
 ``geraete_ersetzt`` haelt die ersetzten Tokens fuer die Erkennung von
 Kopien, ``geraete_codes`` die kurzlebigen Codes zum Abholen und Anmelden,
 beides ebenfalls nur als Hash.
@@ -35,9 +36,11 @@ def upgrade() -> None:
         sa.Column('user_id', sa.Integer(), sa.ForeignKey('users.id'), nullable=False),
         sa.Column('name', sa.String(length=60), nullable=False),
         sa.Column('hash', sa.String(length=64), nullable=False, unique=True),
+        # Daran erkennt die Sitzung ihr Geraet, nicht an der Nummer.
+        sa.Column('sitzung', sa.String(length=32), nullable=False, unique=True),
         sa.Column('angelegt_am', sa.DateTime(), nullable=False),
         sa.Column('zuletzt_benutzt_am', sa.DateTime(), nullable=False),
-        # Die Sitzung merkt sich die Nummer: nie wiederverwenden.
+        # Nummern trotzdem nicht wiederverwenden.
         sqlite_autoincrement=True,
     )
     op.create_index('ix_geraete_user_id', 'geraete', ['user_id'])
