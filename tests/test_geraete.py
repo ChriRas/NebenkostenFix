@@ -95,6 +95,30 @@ def test_in_der_app_gibt_es_das_haekchen_vorgabe_aus(auth_client, anon_client):
     assert 'checked' not in zeile
 
 
+HTTP_HINWEIS = 'Ohne https nur im eigenen Netz ankreuzen.'
+
+
+@pytest.mark.parametrize('ua, basis, hinter_https, erwartet', [
+    (APP, 'http://localhost', None, True),
+    (APP, 'https://localhost', None, False),
+    (APP, 'http://localhost', '1', False),
+    (BROWSER, 'http://localhost', None, False),
+])
+def test_bei_http_raet_die_anmeldeseite_zum_eigenen_netz(auth_client, anon_client,
+                                                        monkeypatch, ua, basis,
+                                                        hinter_https, erwartet):
+    """Review zu #57: Über http geht das Gerätetoken bei jedem Start
+    unverschlüsselt durchs Netz. Hinter einem Proxy mit https (BEHIND_HTTPS)
+    sieht der Server selbst nur http, dort gehört der Hinweis nicht hin."""
+    if hinter_https:
+        monkeypatch.setenv('BEHIND_HTTPS', hinter_https)
+    else:
+        monkeypatch.delenv('BEHIND_HTTPS', raising=False)
+    seite = anon_client.get('/login', base_url=basis,
+                            headers={'User-Agent': ua}).get_data(as_text=True)
+    assert (HTTP_HINWEIS in seite) is erwartet
+
+
 def test_ohne_haekchen_bleibt_die_anmeldung_wie_bisher(auth_client, anon_client):
     antwort = _anmelden(anon_client, haken=False, ziel='/einstellungen')
     assert antwort.status_code == 302
