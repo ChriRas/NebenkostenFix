@@ -799,6 +799,15 @@ def test_pywebview_hat_die_stellen_fuer_die_anpassung():
     assert hasattr(cocoa.BrowserView.AppDelegate, 'applicationShouldTerminate_')
 
 
+def test_pywebview_hat_run_js():
+    """Das Menü schickt seine Skripte mit ``run_js`` (siehe oben), die
+    Attrappe hier bietet es immer an. Fällt es mit einem Update von pywebview
+    weg, wird das im macOS- und im Windows-Job rot statt erst beim Klick ins
+    Menü (Review zu #59). Lokal ohne pywebview wird der Test übersprungen."""
+    webview = pytest.importorskip('webview')
+    assert callable(getattr(webview.Window, 'run_js', None))
+
+
 def test_macos_anpassung_nur_einmal(monkeypatch):
     """Ein zweiter Aufruf würde die ObjC-Klasse neu anlegen (objc.error) und
     den Menüaufbau doppelt umhüllen (Review C, R5)."""
