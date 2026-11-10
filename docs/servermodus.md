@@ -110,6 +110,10 @@ und nach der Leerlauf-Grenze selbst an:
   Anmeldeinformationen, Eintrag `NebenkostenFix`), nie in einer Datei, nie in einer Adresse
   und nie in der Seite. Bei jedem Start tauscht die App es gegen ein neues. Taucht ein schon
   ersetztes Token wieder auf, ist es kopiert worden: Der Server meldet den Rechner ab.
+  Geht die Antwort auf diesen Tausch unterwegs verloren, hat der Server schon getauscht, die
+  App aber noch das alte Token. Beim nächsten Versuch sieht das aus wie eine Kopie: Der
+  Rechner ist abgemeldet, und die App fragt einmal nach dem Passwort. Das ist gewollt, im
+  Zweifel lieber abmelden.
 - **Abmelden** oben rechts auf der Seite oder **Datei → Abmelden** löscht das Token.
   Datei → Abmelden tut das auch, wenn der Server gerade nicht erreichbar ist. Auf dem Server
   verfällt das Gerät dann nach 30 Tagen, oder man meldet es in der Liste ab.
@@ -122,7 +126,8 @@ und nach der Leerlauf-Grenze selbst an:
   Wer den Rechner unbeaufsichtigt lässt, sperrt ihn oder meldet sich ab. Deshalb gehört das
   Häkchen nur auf einen Rechner, den sonst niemand benutzt.
 - Über `http://` geht das Gerätetoken bei jedem Start unverschlüsselt durchs Netz, wie sonst
-  das Passwort, nur länger gültig. Außerhalb des eigenen Netzes nur mit `https://`.
+  das Passwort, nur länger gültig. Außerhalb des eigenen Netzes nur mit `https://`. Die
+  Anmeldeseite der App sagt das unter dem Häkchen, außer mit `BEHIND_HTTPS=1`.
 - Bei der Anmeldeschleife über `http://` (siehe oben) versucht die App die stille Anmeldung
   höchstens dreimal in der Minute, dann bleibt die Anmeldeseite stehen.
 

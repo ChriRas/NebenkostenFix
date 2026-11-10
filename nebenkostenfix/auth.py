@@ -397,11 +397,18 @@ LOGIN_PAGE = _seitenkopf('Anmeldung') + """<form method="post" class="anmelde-ka
 # einen Rechner.
 BLEIBEN_FELD = """<label class="haken"><input type="checkbox" name="angemeldet_bleiben" value="1"> Angemeldet bleiben</label>
  <p class="hinweis">Nur ankreuzen, wenn sonst niemand diesen Rechner benutzt. Die App meldet sich dann beim Start selbst an.</p>"""
+# Review zu #57: Ueber http geht das Geraetetoken bei jedem Start
+# unverschluesselt durchs Netz. Hinter einem Proxy mit https sieht der Server
+# selbst nur http (kein ProxyFix); dort steht BEHIND_HTTPS.
+BLEIBEN_HTTP = """
+ <p class="hinweis">Ohne https nur im eigenen Netz ankreuzen.</p>"""
 
 
 def _login_page(fehler=None):
     block = f'<p class="fehler">{html.escape(fehler)}</p>' if fehler else ''
     bleiben = BLEIBEN_FELD if geraete.aus_der_app() else ''
+    if bleiben and not request.is_secure and not _hinter_https():
+        bleiben += BLEIBEN_HTTP
     return LOGIN_PAGE.replace('__BLEIBEN__', bleiben).replace('__FEHLER__', block)
 
 
