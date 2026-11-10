@@ -27,6 +27,8 @@ Versionsnummer. Sie landet im Ordner „Downloads“.
 
 ![Fenster der heruntergeladenen Datei: links NebenkostenFix, rechts der Ordner „Programme“, darunter die Installationsanleitung](../bilder/mac-dmg-fenster.png)
 
+Unten liegt die Installationsanleitung als PDF. Sie können sie jederzeit öffnen.
+
 Starten Sie die App immer aus „Programme“, nicht aus dem Fenster der heruntergeladenen Datei.
 
 ## 4. Der erste Start

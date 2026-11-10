@@ -195,3 +195,16 @@ def test_installieren_und_ersetzen_mit_bild():
     assert '../bilder/mac-ersetzen.png' in neue_version
     assert '**Ersetzen**' in neue_version
     assert 'fragt macOS beim nächsten Start wieder nach' in neue_version
+
+
+def test_das_fenster_im_bild_nennt_auch_die_anleitung(monkeypatch):
+    """Im Fenster des DMG liegt unten die Anleitung als PDF. Ihr Symbol zeigt
+    Finder nach der Standard-App für PDF, mit Acrobat rot umrandet wie eine
+    Markierung (Review zu #59). Der Text nennt sie deshalb, mit dem Namen aus
+    dem DMG."""
+    monkeypatch.syspath_prepend(str(WURZEL / 'packaging' / 'macos'))
+    import dmg
+    nach_dem_bild = _abschnitt('## 3. Installieren').split('mac-dmg-fenster.png', 1)[1]
+    name = Path(dmg.ANLEITUNG_NAME).stem
+    assert dmg.ANLEITUNG_NAME == f'{name}.pdf'
+    assert f'Unten liegt die {name} als PDF' in ' '.join(nach_dem_bild.split())
