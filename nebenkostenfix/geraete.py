@@ -129,12 +129,23 @@ def anmelden_mit_haekchen(user: User) -> str:
     return code
 
 
-def ziel_mit_abholcode(ziel: str, code: str) -> str:
-    # Ein alter Code fliegt raus: die Oberfläche lässt ihn in der Adresse
-    # stehen, und nach einem 401 kommt er mit dem Ziel zurück.
+def ziel_ohne_abholcode(ziel: str) -> str:
+    """Das Ziel nach der Anmeldung ohne ``?geraet=``. Die App holt einen Code
+    direkt nach der Anmeldeseite ab; ein präparierter Link /login?next=/?geraet=…
+    schöbe ihr dort sonst einen fremden unter (Review zu #57). Ein alter
+    eigener fliegt ebenso raus: die Oberfläche lässt ihn in der Adresse
+    stehen, und nach einem 401 kommt er mit dem Ziel zurück."""
     teile = urlsplit(ziel)
-    paare = [(k, v) for k, v in parse_qsl(teile.query, keep_blank_values=True)
-             if k != ADRESS_PARAMETER]
+    paare = parse_qsl(teile.query, keep_blank_values=True)
+    if all(k != ADRESS_PARAMETER for k, _ in paare):
+        return ziel
+    return urlunsplit(teile._replace(
+        query=urlencode([(k, v) for k, v in paare if k != ADRESS_PARAMETER])))
+
+
+def ziel_mit_abholcode(ziel: str, code: str) -> str:
+    teile = urlsplit(ziel_ohne_abholcode(ziel))
+    paare = parse_qsl(teile.query, keep_blank_values=True)
     return urlunsplit(teile._replace(query=urlencode(paare + [(ADRESS_PARAMETER, code)])))
 
 
@@ -381,5 +392,5 @@ def init_geraete(app, sitzung_beginnen, sicheres_ziel, ohne_anmeldung_aktiv,
 
 
 __all__ = ['PRAEFIX', 'APP_KENNUNG', 'SITZUNG_KEY', 'AUSWEIS', 'aus_der_app', 'ausweis',
-           'anmelden_mit_haekchen', 'ziel_mit_abholcode', 'loeschen', 'fuer_konto_loeschen',
+           'anmelden_mit_haekchen', 'ziel_ohne_abholcode', 'ziel_mit_abholcode', 'loeschen', 'fuer_konto_loeschen',
            'alle_loeschen', 'zur_sitzung', 'sitzung_gilt', 'init_geraete']
