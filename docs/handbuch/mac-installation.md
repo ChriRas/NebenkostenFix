@@ -14,8 +14,9 @@ Bilder unten zeigen, was Sie dabei sehen.
 
 ## 2. Herunterladen
 
-Laden Sie die Datei `NebenkostenFix-…-macOS-arm64.dmg` herunter. Die Punkte stehen für die
-Versionsnummer. Sie landet im Ordner „Downloads“.
+Laden Sie auf der [Download-Seite](https://github.com/Nerbry72/NebenkostenFix/releases/latest)
+die Datei `NebenkostenFix-…-macOS-arm64.dmg` herunter. Sie steht dort unter „Assets“. Die
+Punkte stehen für die Versionsnummer. Die Datei landet im Ordner „Downloads“.
 
 ## 3. Installieren
 

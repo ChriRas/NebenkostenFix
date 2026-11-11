@@ -17,12 +17,14 @@ import desktop
 from nebenkostenfix import aktualisierung
 from nebenkostenfix import auth
 from nebenkostenfix import haftung
+from nebenkostenfix import marke
 from nebenkostenfix import windows_ordner
 from tests.test_macos_paket import _info_plist
 
 WURZEL = Path(__file__).resolve().parents[1]
 ANLEITUNG = WURZEL / 'docs' / 'handbuch' / 'mac-installation.md'
 FAQ = WURZEL / 'docs' / 'handbuch' / 'faq.md'
+README = WURZEL / 'README.md'
 DIALOGE = ('mac-nicht-geoeffnet', 'mac-dennoch-oeffnen', 'mac-administrator', 'mac-ersetzen')
 # Ausgeschnittene Fenster: Dialoge von macOS und das Fenster des DMG
 FENSTER = (*DIALOGE, 'mac-dmg-fenster')
@@ -208,3 +210,39 @@ def test_das_fenster_im_bild_nennt_auch_die_anleitung(monkeypatch):
     name = Path(dmg.ANLEITUNG_NAME).stem
     assert dmg.ANLEITUNG_NAME == f'{name}.pdf'
     assert f'Unten liegt die {name} als PDF' in ' '.join(nach_dem_bild.split())
+
+
+def test_die_anleitung_fuehrt_zum_dmg_im_release():
+    """Seit das Release das DMG mitbringt (Review zu #59), führt Abschnitt 2
+    dorthin. Der Dateiname ist der, den macos.yml baut."""
+    abschnitt = ' '.join(_abschnitt('## 2. Herunterladen').split())
+    assert f'({marke.REPO_URL}/releases/latest)' in abschnitt
+    workflow = (WURZEL / '.github' / 'workflows' / 'macos.yml').read_text(encoding='utf-8')
+    endung = re.search(r'dist/NebenkostenFix-\$\{\{ steps\.version\.outputs\.wert \}\}(\S+\.dmg)',
+                       workflow).group(1)
+    assert f'`NebenkostenFix-…{endung}`' in abschnitt
+
+
+def _readme_abschnitt(titel: str) -> str:
+    text = README.read_text(encoding='utf-8')
+    anfang = text.index(f'\n{titel}\n')
+    # Bis zur nächsten Überschrift derselben oder einer höheren Ebene, ab ##.
+    ebene = len(titel.split(' ', 1)[0])
+    ende = min((i for i in (text.find(f'\n{"#" * n} ', anfang + 1)
+                            for n in range(2, ebene + 1)) if i != -1),
+               default=len(text))
+    return ' '.join(text[anfang:ende].split())
+
+
+def test_das_readme_nennt_die_mac_app():
+    """Mit dem DMG im Release gibt es NebenkostenFix in drei Formen."""
+    installation = _readme_abschnitt('## Installation')
+    assert 'in drei Formen' in installation
+    assert '| | Windows-App | Mac-App | Docker |' in installation
+    mac = _readme_abschnitt('### Mac-App')
+    for text in ('(docs/handbuch/mac-installation.md)', f'({marke.REPO_URL}/releases/latest)',
+                 '`~/Library/Application Support/NebenkostenFix/Daten`', 'shasum -a 256',
+                 'Apple-Chip', 'macOS 15'):
+        assert text in mac, text
+    assert '**Mac-App:**' in _readme_abschnitt('## Updates')
+    assert 'NebenkostenFix-<version>-macOS-arm64.dmg' in _readme_abschnitt('### Versionen und Releases')
