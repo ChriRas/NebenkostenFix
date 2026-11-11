@@ -241,8 +241,11 @@ def test_das_readme_nennt_die_mac_app():
     assert '| | Windows-App | Mac-App | Docker |' in installation
     mac = _readme_abschnitt('### Mac-App')
     for text in ('(docs/handbuch/mac-installation.md)', f'({marke.REPO_URL}/releases/latest)',
-                 '`~/Library/Application Support/NebenkostenFix/Daten`', 'shasum -a 256',
-                 'Apple-Chip', 'macOS 15'):
+                 '`~/Library/Application Support/NebenkostenFix/Daten`',
+                 'shasum -a 256 ~/Downloads/NebenkostenFix-*-macOS-arm64.dmg',
+                 'Zeile für das DMG in `SHA256SUMS.txt`', 'Apple-Chip', 'macOS 15'):
         assert text in mac, text
+    # Keine erfundene Versionsnummer: die nächste vergibt der Maintainer.
+    assert not re.search(r'NebenkostenFix-\d', mac)
     assert '**Mac-App:**' in _readme_abschnitt('## Updates')
     assert 'NebenkostenFix-<version>-macOS-arm64.dmg' in _readme_abschnitt('### Versionen und Releases')

@@ -181,8 +181,10 @@ braucht sie weder Python noch Docker noch eine Kommandozeile.
 Die Prüfsumme jedes DMG steht im Release (`SHA256SUMS.txt`):
 
 ```bash
-shasum -a 256 ~/Downloads/NebenkostenFix-0.20.0-macOS-arm64.dmg
+shasum -a 256 ~/Downloads/NebenkostenFix-*-macOS-arm64.dmg
 ```
+
+Das Ergebnis muss mit der Zeile für das DMG in `SHA256SUMS.txt` übereinstimmen.
 
 ### Docker
 
