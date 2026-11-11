@@ -125,13 +125,79 @@ def _desktop_abhaengigkeiten(plattform: str) -> set[str]:
     return namen
 
 
+PYOBJC = {'pyobjc-core', 'pyobjc-framework-Cocoa', 'pyobjc-framework-Quartz',
+          'pyobjc-framework-WebKit', 'pyobjc-framework-Security',
+          'pyobjc-framework-UniformTypeIdentifiers'}
+
+
 @pytest.mark.parametrize('plattform, erwartet', [
     ('win32', {'waitress', 'pywebview', 'pyinstaller'}),    # wie bisher
-    ('darwin', {'waitress', 'pywebview', 'pyinstaller'}),
+    ('darwin', {'waitress', 'pywebview', 'pyinstaller'} | PYOBJC),
     ('linux', {'waitress'}),
 ])
 def test_desktop_abhaengigkeiten_je_system(plattform, erwartet):
     assert _desktop_abhaengigkeiten(plattform) == erwartet
+
+
+def _anforderungen_desktop() -> dict[str, Requirement]:
+    liste = {}
+    for zeile in _text(WURZEL / 'requirements-desktop.txt').splitlines():
+        zeile = zeile.split('#', 1)[0].strip()
+        if zeile:
+            anforderung = Requirement(zeile)
+            liste[re.sub(r'[-_.]+', '-', anforderung.name).lower()] = anforderung
+    return liste
+
+
+def _pyobjc_pins() -> dict[str, str]:
+    pins = {}
+    for name, anforderung in _anforderungen_desktop().items():
+        if name.startswith('pyobjc'):
+            (angabe,) = anforderung.specifier
+            assert angabe.operator == '==', name
+            assert anforderung.marker.evaluate({'sys_platform': 'darwin'}), name
+            assert not anforderung.marker.evaluate({'sys_platform': 'win32'}), name
+            pins[name] = angabe.version
+    return pins
+
+
+def test_pyobjc_ist_einheitlich_gepinnt():
+    """pywebview verlangt pyobjc nur mit ``>=9.0``. Ohne Pin brächte jeder
+    Bau, was gerade neu ist, und die Lizenztexte im DMG passten nicht mehr
+    sicher (Review zu #62)."""
+    pins = _pyobjc_pins()
+    assert set(pins) == {n.lower() for n in PYOBJC}
+    assert len(set(pins.values())) == 1, pins
+
+
+def test_lizenzkommentar_nennt_die_gepinnte_pyobjc_version():
+    """Die Ersatztexte in ``nebenkostenfix/lizenzen/`` stammen aus genau
+    der Version, die gebaut wird."""
+    (version,) = set(_pyobjc_pins().values())
+    text = _text(WURZEL / 'nebenkostenfix' / 'drittlizenzen.py')
+    assert re.findall(r'pyobjc (\d+(?:\.\d+)*) ', text) == [version]
+    assert re.findall(r'License\.txt @ v(\S+)', text) == [version]
+
+
+def test_pywebview_verlangt_unter_macos_nichts_ungepinntes():
+    """Läuft, wo pywebview installiert ist (Jobs ``macos`` und
+    ``windows``): Bringt eine neue pywebview-Version eine weitere
+    Abhängigkeit für macOS, fällt das hier auf."""
+    from importlib import metadata
+
+    try:
+        verlangt = metadata.requires('pywebview') or []
+    except metadata.PackageNotFoundError:
+        pytest.skip('pywebview ist nicht installiert')
+    gepinnt = {name for name, a in _anforderungen_desktop().items()
+               if any(s.operator == '==' for s in a.specifier)}
+    for zeile in verlangt:
+        anforderung = Requirement(zeile)
+        if anforderung.marker is None or 'extra' in str(anforderung.marker):
+            continue
+        if anforderung.marker.evaluate({'sys_platform': 'darwin'}) \
+                and not anforderung.marker.evaluate({'sys_platform': 'win32'}):
+            assert re.sub(r'[-_.]+', '-', anforderung.name).lower() in gepinnt, zeile
 
 
 # --- Workflow ----------------------------------------------------------------
