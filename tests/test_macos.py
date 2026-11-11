@@ -54,8 +54,9 @@ def aufrufe(monkeypatch):
     def run(befehl, **optionen):
         liste.append((befehl, optionen))
         return types.SimpleNamespace(returncode=aufrufe_rueckgabe['code'],
-                                     stdout=aufrufe_rueckgabe['aus'], stderr='')
-    aufrufe_rueckgabe = {'code': 0, 'aus': ''}
+                                     stdout=aufrufe_rueckgabe['aus'],
+                                     stderr=aufrufe_rueckgabe['fehler'])
+    aufrufe_rueckgabe = {'code': 0, 'aus': '', 'fehler': ''}
     monkeypatch.setattr(subprocess, 'run', run)
     return types.SimpleNamespace(liste=liste, rueckgabe=aufrufe_rueckgabe)
 
@@ -196,6 +197,31 @@ def test_standardprogramm_unter_macos_mit_open(system, aufrufe, tmp_path):
     befehl, optionen = aufrufe.liste[0]
     assert befehl == ['/usr/bin/open', '--', str(tmp_path / '-a Rechner')]
     assert optionen.get('check') is False and not optionen.get('shell')
+
+
+def test_standardprogramm_unter_macos_meldet_fehler_ins_protokoll(system, aufrufe, caplog, tmp_path):
+    """Scheitert ``open``, steht es im Protokoll (Review zu #62). Ein
+    Fenster öffnet sich dafür nicht."""
+    system('darwin')
+    aufrufe.rueckgabe['code'] = 1
+    aufrufe.rueckgabe['fehler'] = 'The file does not exist.\n'
+    with caplog.at_level('WARNING', logger=desktop.protokoll.name):
+        desktop.standardprogramm_oeffnen(tmp_path / 'weg.pdf')
+    (eintrag,) = caplog.records
+    assert eintrag.levelname == 'WARNING'
+    text = eintrag.getMessage()
+    assert str(tmp_path / 'weg.pdf') in text and 'Code 1' in text
+    assert 'The file does not exist.' in text
+    befehl, optionen = aufrufe.liste[0]
+    assert optionen.get('capture_output') is True and optionen.get('text') is True
+    assert optionen.get('check') is False and not optionen.get('shell')
+
+
+def test_standardprogramm_unter_macos_ohne_fehler_ohne_eintrag(system, aufrufe, caplog, tmp_path):
+    system('darwin')
+    with caplog.at_level('WARNING', logger=desktop.protokoll.name):
+        desktop.standardprogramm_oeffnen(tmp_path)
+    assert caplog.records == []
 
 
 def test_standardprogramm_unter_linux_tut_nichts(system, aufrufe, tmp_path):

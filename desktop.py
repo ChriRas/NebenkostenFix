@@ -245,7 +245,12 @@ def standardprogramm_oeffnen(pfad) -> None:
         os.startfile(pfad)  # nosec B606
     elif system == 'darwin':
         # Bandit-Ausnahme (B603): fester Pfad; „--“, damit kein Pfad als Option gilt
-        subprocess.run(['/usr/bin/open', '--', str(pfad)], check=False)  # nosec B603
+        lauf = subprocess.run(['/usr/bin/open', '--', str(pfad)],  # nosec B603
+                              capture_output=True, text=True, check=False)
+        if lauf.returncode != 0:
+            # Kein Fenster: Die Nutzer sehen, dass nichts aufgeht.
+            protokoll.warning('open %s: Code %s, %s', pfad, lauf.returncode,
+                              (lauf.stderr or '').strip())
 
 
 def datenordner_bestimmen(fragen: bool = True, vorgabe: str | None = None) -> Path:
