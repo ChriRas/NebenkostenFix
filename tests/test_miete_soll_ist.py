@@ -8,11 +8,12 @@ halten die parametrisierte Erinnerung fest. Alle Werte sind erfunden.
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 
 import pytest
 
 from nebenkostenfix import vorauszahlung as vz
+from nebenkostenfix import zeit
 from nebenkostenfix.models import Payment, db
 from tests import billing_factories as f
 from tests.test_migrations import WURZEL
@@ -115,7 +116,10 @@ def test_die_ansicht_zeigt_teilzahlung_und_erinnerung(auth_client, mieter):
     assert '02/2024: fällig 700,00 €, gezahlt 70,00 €, offen 630,00 €' in d['erinnerung']
 
 
-def test_kuenftige_stufen_sind_geplant(auth_client, app_ctx):
+def test_kuenftige_stufen_sind_geplant(auth_client, app_ctx, monkeypatch):
+    # „Geplant“ heißt: nach heute. Ohne festen Tag wäre die Stufe zum
+    # 01.01.2027 ab diesem Tag nicht mehr geplant und der Test rot.
+    monkeypatch.setattr(zeit, 'jetzt_utc', lambda: datetime(2026, 6, 15, 12, 0, 0))
     haus = f.house()
     m = f.tenant(f.apt(haus, 'OG', 60), 'Mieter B', D(2026, 1, 1), None)
     auth_client.post(f'/api/tenants/{m.id}/kaltmiete_soll',

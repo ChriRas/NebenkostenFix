@@ -25,16 +25,12 @@ Die Nebenkostenabrechnung für private Vermieter. Kostenlos, und Ihre Daten blei
 
 ## Neuerungen in dieser Version
 
-Version 0.17.0: Anschriften im Brief, ein neu aufgebautes PDF und Rechnungen nach Jahr. Die Rechenregeln sind unverändert.
+Version 0.19.0: Programme wie ein KI-Assistent kommen auf Wunsch mit einem Zugriffsschlüssel an Ihre Daten. Die Rechenregeln sind unverändert.
 
-- Mieter haben eine Wohnungsanschrift und eine Zustellanschrift für die Zeit nach dem Auszug, der Vermieter eine Anschrift für den Briefkopf. Welche gilt, entscheidet die App nach dem Auszugsdatum.
-- Die Abrechnung beginnt mit dem Brief, danach folgt ein Übersichtsblatt mit allen Kostenpositionen und den Summen bis zum Ergebnis. Erst dahinter stehen die einzelnen Berechnungen.
-- Das ganze PDF hat ein Erscheinungsbild. Der Rechenweg steht als Tabelle, Beträge überall mit Tausenderpunkt.
-- Unter Kosten wählen Sie ein Jahr und sehen die Summe der Auswahl. Die Zeitleiste folgt dem Filter und zeigt die Summe je Jahr.
-- Bei Sammelbelegen übernehmen Sie das Rechnungsdatum auf Wunsch für alle Rechnungen des Belegs.
-- Behoben: Die Statistik nannte jede Heizung „Gas“, auch eine Wärmepumpe. Der Bereich heißt jetzt „Wärme“.
-- Behoben: Die IBAN brach im Zahlungshinweis mitten durch, und der Brief nannte das Ergebnis zweimal.
-- Behoben: In schmalen Fenstern liefen Texte über ihren Rand.
+- Neu: Unter Einstellungen → Konto legen Sie Zugriffsschlüssel für Programme ohne Browser an, nur zum Lesen oder zum Lesen und Erfassen. Vorhandenes ändert ein Schlüssel nicht, und Sie können ihn jederzeit widerrufen.
+- Behoben: Eine Zahlung für einen Mieter, den es nicht gibt, wird abgewiesen, statt später beim nächsten neuen Mieter aufzutauchen.
+- Behoben: Der Menüpunkt „Mit einem Server verbinden …“ schließt eine offene Startwahl und zeigt die Serverkarte.
+- Behoben: Ein präparierter Anmeldelink führt nicht mehr auf eine fremde Seite.
 
 ## Produktmerkmale
 

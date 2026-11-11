@@ -529,6 +529,13 @@ def test_login_required_dekorator_sperrt_auch_ausserhalb(app_ctx):
     "http://boese.example",
     "javascript:alert(1)",
     "boese.example",
+    # Review zu #57: Browser werfen Tab und Zeilenumbruch aus der Adresse,
+    # aus /<Tab>/boese.example wird //boese.example.
+    "/%09/boese.example/x",
+    "/%0a/boese.example/x",
+    "/%0d/boese.example/x",
+    "/%20/boese.example/x",
+    "/%7f/boese.example/x",
 ])
 def test_next_fuehrt_niemals_aus_dem_programm_heraus(app_ctx, boeses_ziel):
     """Der Wert kommt vom Aufrufer, und der baut sich seinen Link selbst.

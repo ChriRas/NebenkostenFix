@@ -36,6 +36,12 @@ class BeispielExistiert(Exception):
         self.property_id = property_id
 
 
+# Den Namen vergibt nur ``anlegen()``: ein echtes Haus mit diesem Namen wäre
+# sonst von der Aufbewahrungssperre ausgenommen und ginge mit „Beispiel löschen“.
+NAME_VERGEBEN = (f'Den Namen „{NAME}“ trägt nur das Beispielhaus. '
+                 'Bitte wählen Sie einen anderen Namen.')
+
+
 def ist_beispiel(haus) -> bool:
     """Ob eine Immobilie das Beispielhaus ist (fester Name, siehe oben)."""
     return haus is not None and haus.name == NAME
