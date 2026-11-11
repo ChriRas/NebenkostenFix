@@ -3,8 +3,8 @@
 Bau und Proben laufen in ``.github/workflows/macos.yml`` auf einem
 macOS-Runner. Hier steht, was sich vorher statisch sagen lässt: Spec und
 Info.plist, gleiche Positivliste wie unter Windows, Icon, Marker der
-Abhängigkeiten und dass das Release (Schritt 3) den Workflow noch nicht
-kennt.
+Abhängigkeiten und wie das Release den Bau aufruft. Was das Release mit dem
+DMG macht, steht in ``tests/test_release_macos.py``.
 """
 
 from __future__ import annotations
