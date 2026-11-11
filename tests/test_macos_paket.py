@@ -141,14 +141,34 @@ def _workflow() -> dict:
     return yaml.safe_load(_text(WORKFLOW))
 
 
-def test_workflow_freiwillig_bei_pull_requests_und_von_hand():
-    """Kein Pflicht-Check und nicht im Release (Schritt 2 von #44)."""
+def test_workflow_bei_pull_requests_von_hand_und_aus_dem_release():
+    """Bei Pull Requests und von Hand freiwillig, kein Pflicht-Check. Das
+    Release ruft den Bau wie bei Windows mit ``nur_paket`` auf (Review zu #59)."""
     workflow = _workflow()
     ausloeser = workflow.get('on') or workflow.get(True)
-    assert set(ausloeser) == {'pull_request', 'workflow_dispatch'}
+    assert set(ausloeser) == {'pull_request', 'workflow_dispatch', 'workflow_call'}
     assert set(ausloeser['pull_request']['branches']) == {'main', 'feature/macos'}
+    assert ausloeser['workflow_call']['inputs'] == {
+        'nur_paket': {'type': 'boolean', 'default': False}}
     assert workflow['permissions'] == {'contents': 'read'}
-    assert 'macos.yml' not in _text(WURZEL / '.github' / 'workflows' / 'release.yml')
+
+
+def test_nur_paket_laesst_nur_die_tests_aus():
+    """Die Tests sind im Pull Request schon gelaufen. Umzug, Bau und Proben
+    laufen auch im Release."""
+    jobs = _workflow()['jobs']
+    assert jobs['tests']['if'] == '${{ !inputs.nur_paket }}'
+    assert 'if' not in jobs['umzug-linux'] and 'if' not in jobs['paket']
+
+
+def test_eigene_gruppe_auch_wenn_das_release_aufruft():
+    """Aufgerufen sieht der Workflow in ``github.workflow`` den Namen des
+    Aufrufers. Mit derselben Gruppe wie windows.yml landeten beide im Release
+    in ``release-<run_id>``, und ``cancel-in-progress`` bräche einen ab."""
+    concurrency = _workflow()['concurrency']
+    assert concurrency['group'].startswith('macos-')
+    assert 'github.workflow' not in concurrency['group']
+    assert concurrency['cancel-in-progress'] is True
 
 
 def _filter_trifft(muster: list[str], pfad: str) -> bool:
