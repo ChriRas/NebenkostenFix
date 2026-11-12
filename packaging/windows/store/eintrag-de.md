@@ -25,12 +25,10 @@ Die Nebenkostenabrechnung für private Vermieter. Kostenlos, und Ihre Daten blei
 
 ## Neuerungen in dieser Version
 
-Version 0.19.0: Programme wie ein KI-Assistent kommen auf Wunsch mit einem Zugriffsschlüssel an Ihre Daten. Die Rechenregeln sind unverändert.
+Version 0.19.1: Fehlerbehebungen bei Anmeldung und Zugriffsschlüsseln. Die Rechenregeln sind unverändert.
 
-- Neu: Unter Einstellungen → Konto legen Sie Zugriffsschlüssel für Programme ohne Browser an, nur zum Lesen oder zum Lesen und Erfassen. Vorhandenes ändert ein Schlüssel nicht, und Sie können ihn jederzeit widerrufen.
-- Behoben: Eine Zahlung für einen Mieter, den es nicht gibt, wird abgewiesen, statt später beim nächsten neuen Mieter aufzutauchen.
-- Behoben: Der Menüpunkt „Mit einem Server verbinden …“ schließt eine offene Startwahl und zeigt die Serverkarte.
-- Behoben: Ein präparierter Anmeldelink führt nicht mehr auf eine fremde Seite.
+- Behoben: Eine alte Anmeldung auf einem zweiten Gerät gilt nicht mehr für ein später neu angelegtes Konto, auch wenn es denselben Namen trägt. Wer mit Anmeldung arbeitet, meldet sich nach dem Update einmal neu an.
+- Behoben: Ein Zugriffsschlüssel gilt nur noch für das Konto, für das er angelegt wurde. Bestehende Schlüssel gelten weiter.
 
 ## Produktmerkmale
 

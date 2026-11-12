@@ -2386,6 +2386,155 @@ async function zaehlerPflegePruefen() {
     pruefe('NK-258: keine Fehlermeldung im glatten Lauf', meldungen.length === 0);
 }
 
+// --- Zugriffsschlüssel: Karte, Anlegen, Liste, Löschen ----------------------
+// Unter Einstellungen → Konto legt man Schlüssel für Programme ohne Browser
+// an. Der Rauchtest geht den Weg einmal ganz, mit gestubbtem fetch und einem
+// erfundenen Namen: die Karte steht in der Gruppe „Konto“ und ist mit Konto
+// zu sehen, ein Schlüssel geht als POST hinaus, die Box zeigt ihn einmal, die
+// Liste nennt ihn maskiert mit Knopf „Löschen“, und der Knopf löscht genau
+// diesen Schlüssel erst nach der Rückfrage per DELETE.
+async function zugriffsschluesselPruefen() {
+    const funktion = name => {
+        const m = appQuelle.match(new RegExp(`(async )?function ${name}\\([^)]*\\) \\{[\\s\\S]*?\\n\\}`));
+        if (!m) throw new Error(`${name} nicht gefunden`);
+        return m[0];
+    };
+    const umfangText = appQuelle.match(/const UMFANG_TEXT = [^\n]*\n/);
+    if (!umfangText) throw new Error('UMFANG_TEXT nicht gefunden');
+    const quelltext = umfangText[0] + funktion('ladeZugriffsschluessel')
+        + funktion('zugriffsschluesselAnlegen') + funktion('zugriffsschluesselWiderrufen');
+    // Anlegen und Löschen laden die Liste ohne await nach: erst warten, bis
+    // alle Mikroaufgaben durch sind.
+    const ruhe = () => new Promise(r => setImmediate(r));
+    const lauf = (felder, antworten, ja = true) => {
+        const aufrufe = [], fehlerMeldungen = [], erfolge = [], fragen = [];
+        const dokument = {
+            getElementById(id) {
+                if (!(id in felder)) felder[id] = {};
+                const f = felder[id];
+                if (!('value' in f)) f.value = '';
+                if (!('innerHTML' in f)) f.innerHTML = '';
+                if (!('hidden' in f)) f.hidden = false;
+                f.focus = () => { f.fokus = true; };
+                f.select = () => { f.markiert = true; };
+                return f;
+            },
+        };
+        const holen = (url, opt = {}) => {
+            aufrufe.push({ url, methode: opt.method || 'GET', koerper: opt.body });
+            const [status, daten] = antworten.shift() || [200, {}];
+            return Promise.resolve({ ok: status < 400, status, json: () => Promise.resolve(daten) });
+        };
+        const fns = new Function('document', 'fetch', 'showError', 'showSuccess', 'serverFehler',
+            'meldungZu', 'escapeHtml', 'frage',
+            quelltext + '; return { ladeZugriffsschluessel, zugriffsschluesselAnlegen, zugriffsschluesselWiderrufen };')(
+            dokument, holen, m => fehlerMeldungen.push(m), m => erfolge.push(m),
+            async () => new Error('Server'), (e, ersatz) => ersatz,
+            t => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'),
+            async (text, knopf, gefahr, titel) => { fragen.push({ text, knopf, gefahr, titel }); return ja; });
+        return { fns, aufrufe, fehlerMeldungen, erfolge, fragen, felder };
+    };
+
+    // 1. Die Karte: in den Einstellungen, Gruppe „Konto“, mit Feldern und Knopf.
+    const karteAnfang = html.indexOf('id="zugriffsschluessel-karte"');
+    const karte = karteAnfang < 0 ? '' : html.slice(karteAnfang, html.indexOf('id="zugriffsschluessel-neu"', karteAnfang) + 200);
+    pruefe('Zugriffsschlüssel: die Karte steht unter Einstellungen in der Gruppe „Konto“',
+        karteAnfang > html.indexOf('id="tab-settings"') && html.indexOf('id="tab-settings"') > 0
+        && /<div data-gruppe="konto" class="dashboard-card glass-panel" id="zugriffsschluessel-karte">/.test(html)
+        && /<h3>Zugriffsschlüssel<\/h3>/.test(karte));
+    pruefe('Zugriffsschlüssel: Name, Umfang und „Schlüssel anlegen“ stehen in der Karte, die Box ist zu',
+        /<input type="text" id="zugriffsschluessel-name" maxlength="60"/.test(karte)
+        && /<option value="lesen">Nur lesen<\/option>/.test(karte)
+        && /<option value="erfassen">Lesen und erfassen<\/option>/.test(karte)
+        && /onclick="zugriffsschluesselAnlegen\(\)">Schlüssel anlegen<\/button>/.test(karte)
+        && /id="zugriffsschluessel-neu" hidden>/.test(karte));
+    pruefe('Zugriffsschlüssel: die Gruppe „Konto“ lädt die Liste',
+        /if \(gruppe === 'konto'\) ladeZugriffsschluessel\(\);/.test(funktion('zeigeEinstellungsgruppe')));
+
+    // Mit Konto ist die Karte zu sehen, im offenen Modus nicht (NK-201).
+    const anfang = appQuelle.indexOf('async function zeigeAngemeldetenBenutzer() {');
+    if (anfang < 0) throw new Error('zeigeAngemeldetenBenutzer nicht gefunden');
+    let tiefe = 0, ende = -1;
+    for (let i = anfang; i < appQuelle.length; i++) {
+        if (appQuelle[i] === '{') tiefe++;
+        else if (appQuelle[i] === '}') { tiefe--; if (!tiefe) { ende = i + 1; break; } }
+    }
+    const kopf = async (daten) => {
+        const teile = {};
+        await new Function('document', 'fetch', 'showError', 'serverFehler', 'meldungZu',
+            appQuelle.slice(anfang, ende) + '; return zeigeAngemeldetenBenutzer();')(
+            { getElementById(id) { if (!(id in teile)) teile[id] = { textContent: '', hidden: undefined }; return teile[id]; } },
+            () => Promise.resolve({ ok: true, json: () => Promise.resolve(daten) }),
+            () => {}, async () => new Error('Server'), (e, e2) => e2);
+        return teile;
+    };
+    const mitKonto = await kopf({ username: 'testkonto', ohne_anmeldung: false, leerlauf_s: null, desktop: false });
+    const offen = await kopf({ username: null, ohne_anmeldung: true, leerlauf_s: null, desktop: false });
+    pruefe('Zugriffsschlüssel: mit Konto ist die Karte zu sehen, im offenen Modus nicht',
+        mitKonto['zugriffsschluessel-karte'].hidden === false
+        && offen['zugriffsschluessel-karte'].hidden === true);
+
+    // 2. Leere Liste.
+    const leer = lauf({}, [[200, []]]);
+    await leer.fns.ladeZugriffsschluessel();
+    pruefe('Zugriffsschlüssel: ohne Schlüssel ein Hinweis statt einer leeren Tabelle',
+        leer.aufrufe.length === 1 && leer.aufrufe[0].url === '/api/zugriffsschluessel'
+        && leer.aufrufe[0].methode === 'GET'
+        && leer.felder['zugriffsschluessel-zeilen'].innerHTML.includes('Noch kein Zugriffsschlüssel angelegt.'));
+
+    // 3. Ohne Namen geht nichts hinaus.
+    const ohneName = lauf({ 'zugriffsschluessel-name': { value: '   ' } }, []);
+    await ohneName.fns.zugriffsschluesselAnlegen();
+    pruefe('Zugriffsschlüssel: ohne Namen keine Anfrage, eine Meldung',
+        ohneName.aufrufe.length === 0 && ohneName.fehlerMeldungen.length === 1);
+
+    // 4. Anlegen mit erfundenem Namen; die Liste zeigt ihn danach.
+    const name = 'Testprogramm <Laptop>';
+    const klartext = 'nkf_BEISPIEL-nur-im-Rauchtest';
+    const zeile = { id: 7, name, umfang: 'erfassen', konto: 'testkonto', angelegt_am: '01.01.2026 10:00', zuletzt_benutzt: null };
+    const neu = lauf({ 'zugriffsschluessel-name': { value: '  ' + name + '  ' }, 'zugriffsschluessel-umfang': { value: 'erfassen' },
+        'zugriffsschluessel-neu': { hidden: true } }, [[201, { ...zeile, schluessel: klartext }], [200, [zeile]]]);
+    await neu.fns.zugriffsschluesselAnlegen();
+    await ruhe();
+    const post = neu.aufrufe[0] || {};
+    pruefe('Zugriffsschlüssel: Anlegen schickt POST /api/zugriffsschluessel mit Name und Umfang',
+        post.url === '/api/zugriffsschluessel' && post.methode === 'POST'
+        && post.koerper === JSON.stringify({ name, umfang: 'erfassen' }));
+    pruefe('Zugriffsschlüssel: die Box zeigt den Schlüssel einmal, markiert, das Namensfeld ist leer',
+        neu.felder['zugriffsschluessel-neu'].hidden === false
+        && neu.felder['zugriffsschluessel-wert'].value === klartext
+        && neu.felder['zugriffsschluessel-wert'].fokus === true
+        && neu.felder['zugriffsschluessel-wert'].markiert === true
+        && neu.felder['zugriffsschluessel-name'].value === ''
+        && neu.erfolge.length === 1 && neu.fehlerMeldungen.length === 0);
+    const zeilen = neu.felder['zugriffsschluessel-zeilen'].innerHTML;
+    pruefe('Zugriffsschlüssel: nach dem Anlegen steht der Name maskiert in der Liste, mit Umfang, Konto und „nie“',
+        neu.aufrufe.length === 2 && neu.aufrufe[1].url === '/api/zugriffsschluessel' && neu.aufrufe[1].methode === 'GET'
+        && zeilen.includes('Testprogramm &lt;Laptop&gt;') && !zeilen.includes('<Laptop>')
+        && zeilen.includes('Lesen und erfassen') && zeilen.includes('testkonto') && zeilen.includes('>nie<'));
+    pruefe('Zugriffsschlüssel: die Liste zeigt den Klartext nicht, nur den Knopf „Löschen“ der Zeile',
+        !zeilen.includes(klartext) && /zugriffsschluesselWiderrufen\(7\)">Löschen<\/button>/.test(zeilen));
+
+    // 5. Der Knopf der Zeile löscht genau diesen Schlüssel, erst nach der Rückfrage.
+    const knopfId = Number((zeilen.match(/zugriffsschluesselWiderrufen\((\d+)\)/) || [])[1]);
+    const nein = lauf({}, [], false);
+    await nein.fns.zugriffsschluesselWiderrufen(knopfId);
+    pruefe('Zugriffsschlüssel: bei Nein auf die Rückfrage geht keine Anfrage hinaus',
+        nein.fragen.length === 1 && nein.aufrufe.length === 0);
+    const weg = lauf({}, [[200, { status: 'widerrufen' }], [200, []]]);
+    await weg.fns.zugriffsschluesselWiderrufen(knopfId);
+    await ruhe();
+    const frageLoeschen = weg.fragen[0] || {};
+    pruefe('Zugriffsschlüssel: Löschen fragt mit rotem Knopf „Löschen“ nach',
+        weg.fragen.length === 1 && frageLoeschen.knopf === 'Löschen' && frageLoeschen.gefahr === true
+        && frageLoeschen.titel === 'Zugriffsschlüssel löschen?');
+    pruefe('Zugriffsschlüssel: Löschen schickt DELETE für genau diesen Schlüssel und lädt die Liste neu',
+        weg.aufrufe.length === 2 && weg.aufrufe[0].url === '/api/zugriffsschluessel/7'
+        && weg.aufrufe[0].methode === 'DELETE' && weg.aufrufe[1].methode === 'GET'
+        && weg.felder['zugriffsschluessel-zeilen'].innerHTML.includes('Noch kein Zugriffsschlüssel angelegt.')
+        && weg.erfolge.length === 1 && weg.fehlerMeldungen.length === 0);
+}
+
 (async () => {
     // NK-201/NK-204/NK-118/NK-216/NK-217/NK-226/NK-227/NK-230/NK-258/NK-261/
     // NK-262/NK-263/NK-267/NK-265 und Phase 54 (eigene Kostenarten): jede
@@ -2416,6 +2565,7 @@ async function zaehlerPflegePruefen() {
         ['fluchtPruefen', 'Phase 66: Fluchtlinien-Prüfung'],
         ['zeitleisteBelegPruefen', 'Phase 67: Beleg-Link in der Zeitleiste'],
         ['anschriftenPruefen', 'Phase 58: Anschriften-Prüfung'],
+        ['zugriffsschluesselPruefen', 'Zugriffsschlüssel-Prüfung'],
     ];
     for (const [name, label] of schritte) {
         try {

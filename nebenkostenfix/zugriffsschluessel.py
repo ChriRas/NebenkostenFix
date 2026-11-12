@@ -34,6 +34,7 @@ from __future__ import annotations
 import hashlib
 import secrets
 import time
+from datetime import datetime, timezone
 
 from flask import has_request_context, jsonify, make_response, request
 
@@ -146,6 +147,37 @@ def _hash(schluessel: str) -> str:
     return hashlib.sha256(schluessel.encode()).hexdigest()
 
 
+def _utc_sekunde(zeitpunkt: datetime) -> datetime:
+    """Auf die volle Sekunde in UTC. Naive Zeit ist UTC (``zeit.jetzt_utc``)."""
+    if zeitpunkt.tzinfo is None:
+        zeitpunkt = zeitpunkt.replace(tzinfo=timezone.utc)
+    return zeitpunkt.astimezone(timezone.utc).replace(microsecond=0)
+
+
+def aelter_als_das_konto(zeile: ApiSchluessel) -> bool:
+    """Wurde der Schluessel vor seinem Konto angelegt?
+
+    Dann gehoerte er einem frueheren Konto mit derselben id: ``user_id`` hat
+    kein ``ondelete``, und SQLite setzt den Fremdschluessel nicht durch. Wer
+    ein Konto direkt in der Datenbank loescht, laesst den Schluessel stehen,
+    und das naechste neue Konto bekaeme ihn mit (wie die Sitzung in
+    ``auth.current_user``). Verglichen wird auf die Sekunde: ein Schluessel
+    aus derselben Sekunde wie das Konto bleibt gueltig. Fehlt eine der
+    beiden Zeiten, laesst sich nichts sagen, und der Schluessel gilt wie
+    bisher.
+
+    Bewusste Grenze: Wurde das Konto angelegt, als die Systemuhr vorging,
+    und ist die Uhr seitdem zurueckgestellt, liegt ein neu angelegter
+    Schluessel vor der Anlagezeit des Kontos. Er wird abgelehnt, bis die Uhr
+    die Anlagezeit wieder eingeholt hat.
+    """
+    konto = zeile.user.created_at if zeile.user is not None else None
+    angelegt = zeile.angelegt_am
+    if konto is None or angelegt is None:
+        return False
+    return _utc_sekunde(angelegt) < _utc_sekunde(konto)
+
+
 def aktueller() -> ApiSchluessel | None:
     """Der Schluessel der laufenden Anfrage, sonst None."""
     if not has_request_context():
@@ -164,7 +196,10 @@ def anfrage_pruefen(app, ordner):
     zeile = None
     if len(roh) <= 100:
         zeile = ApiSchluessel.query.filter_by(hash=_hash(roh)).first()
-    if zeile is None or zeile.user is None or not zeile.user.is_active:
+    # Ein Schluessel, der aelter ist als sein Konto, gehoerte einem frueheren
+    # Konto mit derselben id und zaehlt wie ein falscher.
+    if (zeile is None or zeile.user is None or not zeile.user.is_active
+            or aelter_als_das_konto(zeile)):
         # Gezaehlt wird je Adresse und je Anfang des Schluessels: wer
         # denselben falschen Schluessel wiederholt, ist nach GRENZE_KONTO
         # gesperrt, wer beliebige probiert, nach GRENZE_IP. Die Adresse hat
@@ -295,5 +330,5 @@ def alle_loeschen() -> int:
 
 
 __all__ = ['SCHLUESSEL_LESEN', 'SCHLUESSEL_ERFASSEN', 'NIE_PER_SCHLUESSEL', 'PRUEFEN',
-           'im_kopf', 'anfrage_pruefen', 'aktueller', 'init_zugriffsschluessel',
-           'alle_loeschen']
+           'im_kopf', 'anfrage_pruefen', 'aktueller', 'aelter_als_das_konto',
+           'init_zugriffsschluessel', 'alle_loeschen']
