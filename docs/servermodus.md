@@ -120,6 +120,9 @@ und nach der Leerlauf-Grenze selbst an:
 - Die Liste steht in den Einstellungen unter Konto → **Angemeldete Geräte**. Nach 30 Tagen
   ohne Nutzung, nach einem Passwortwechsel und nach dem Einspielen einer Sicherung fragt
   die App wieder nach dem Passwort.
+- Ein Gerät gilt nur für das Konto, mit dem es angemeldet wurde. Wird ein Konto direkt in
+  der Datenbank gelöscht und danach ein neues angelegt, meldet der Server die Geräte des
+  alten Kontos ab, wie bei den Zugriffsschlüsseln.
 - Mit Häkchen schützt die Leerlauf-Grenze einen unbeaufsichtigten Rechner nicht mehr: Die
   App meldet sich beim nächsten Klick selbst wieder an, und die Seite warnt nicht mehr, dass
   sie abmeldet.
