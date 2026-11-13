@@ -26,8 +26,11 @@ Erneuern, Widerrufen und Anmelden stehen nicht in ``PUBLIC_ENDPOINTS``:
 durch, ob der stimmt, prueft die Route selbst.
 
 Den Weg bietet der Server nur der App an (``APP_KENNUNG`` im User-Agent);
-im Browser und unter Docker aendert sich nichts. Die Kennung ist kein
-Schutz, nur ein Hinweis, ob das Haekchen Sinn ergibt.
+im Browser und unter Docker aendert sich nichts. Gegen jemanden, der selbst
+Anfragen schickt, ist die Kennung kein Schutz, nur ein Hinweis, ob das
+Haekchen Sinn ergibt. Beim Einmalcode dient sie dagegen als Riegel gegen
+Login-CSRF: Dort schickt der Browser des Opfers die Anfrage, und dessen
+User-Agent bestimmt der Angreifer nicht (``aus_dem_fenster_der_app``).
 """
 
 from __future__ import annotations
@@ -64,6 +67,25 @@ AUSWEIS = {
 
 def aus_der_app() -> bool:
     return has_request_context() and APP_KENNUNG in request.headers.get('User-Agent', '')
+
+
+# Was die App selbst laedt, schickt ``Sec-Fetch-Site: none`` (``load_url``)
+# oder ``same-origin``; gemessen mit WKWebView, Plan 18 S0. Ein Link von
+# einer fremden Seite schickt ``cross-site``. Fehlt der Kopf, entscheidet
+# allein die Kennung.
+EIGENE_HERKUNFT = frozenset({'', 'none', 'same-origin'})
+
+
+def aus_dem_fenster_der_app() -> bool:
+    """Kommt die Anfrage aus dem Fenster der App, nicht ueber einen Link?
+
+    Gegen Login-CSRF beim Einmalcode (Review zu #57): Den Link oeffnet der
+    Browser des Opfers. Dessen User-Agent bestimmt der Angreifer nicht, fuer
+    diesen Fall ist die Kennung also ein Riegel. Dazu ``Sec-Fetch-Site``,
+    falls die App selbst einem fremden Link folgt.
+    """
+    herkunft = request.headers.get('Sec-Fetch-Site', '').strip().lower()
+    return aus_der_app() and herkunft in EIGENE_HERKUNFT
 
 
 def ausweis() -> str | None:
@@ -311,7 +333,7 @@ def _zeile(geraet: Geraet, eigenes) -> dict:
 
 
 def init_geraete(app, sitzung_beginnen, sicheres_ziel, ohne_anmeldung_aktiv,
-                 anmeldeschutz_ordner):
+                 anmeldeschutz_ordner, current_user):
     """Die Routen. Die Helfer kommen aus ``auth`` herein, damit dieses Modul
     ``auth`` nicht importiert (auth importiert dieses)."""
 
@@ -393,6 +415,23 @@ def init_geraete(app, sitzung_beginnen, sicheres_ziel, ohne_anmeldung_aktiv,
             db.session.commit()
             _zaehlen(anmeldeschutz_ordner(), roh)
             return redirect(url_for('login', next=ziel))
+        # Login-CSRF (Review zu #57): Der Code ist jetzt verbraucht. Einen
+        # Fehlversuch zaehlt keiner der beiden Riegel, das Opfer hat nichts
+        # falsch gemacht.
+        if not aus_dem_fenster_der_app():
+            db.session.commit()
+            app.logger.warning(
+                'Einmalcode nicht eingelöst: nicht aus dem Fenster der App '
+                '(Sec-Fetch-Site %s).', request.headers.get('Sec-Fetch-Site', '-'))
+            return redirect(url_for('login', next=ziel))
+        angemeldet = current_user()
+        if angemeldet is not None and angemeldet.id != geraet.user_id:
+            db.session.commit()
+            app.logger.warning('Einmalcode eines anderen Kontos verworfen, die '
+                               'bestehende Sitzung bleibt.')
+            return redirect(ziel)
+        app.logger.info('Gerät „%s“ still angemeldet (Sec-Fetch-Site %s).', geraet.name,
+                        request.headers.get('Sec-Fetch-Site', '-'))
         sitzung_beginnen(geraet.user)
         session[SITZUNG_KEY] = geraet.sitzung
         geraet.user.last_login_at = zeit.jetzt_utc()
@@ -423,4 +462,5 @@ def init_geraete(app, sitzung_beginnen, sicheres_ziel, ohne_anmeldung_aktiv,
 
 __all__ = ['PRAEFIX', 'APP_KENNUNG', 'SITZUNG_KEY', 'AUSWEIS', 'aus_der_app', 'ausweis',
            'anmelden_mit_haekchen', 'ziel_ohne_abholcode', 'ziel_mit_abholcode', 'loeschen', 'fuer_konto_loeschen',
-           'alle_loeschen', 'zur_sitzung', 'verwaist', 'sitzung_gilt', 'init_geraete']
+           'alle_loeschen', 'zur_sitzung', 'verwaist', 'sitzung_gilt', 'aus_dem_fenster_der_app',
+           'init_geraete']
