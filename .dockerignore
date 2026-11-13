@@ -35,6 +35,9 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 .coverage
+.coverage.*
+.coverage-kern
+.coverage-kern.*
 htmlcov/
 .venv/
 venv/

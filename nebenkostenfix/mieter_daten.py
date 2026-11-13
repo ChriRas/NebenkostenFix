@@ -9,7 +9,7 @@ weiter im Belegordner liegt, ist nicht geloescht.
 Was hier "der Mieter" ist, ist genau umrissen:
 
     tenants-Zeile, Kostenprofile, Haushaltsgroessen, Vorauszahlungs-Soll,
-    Zahlungen, Abrechnungsberichte (einfach und detailliert) und die Lesungen an den
+    Kaltmiete-Soll, Zahlungen, Abrechnungsberichte (einfach und detailliert) und die Lesungen an den
     Zaehlern seiner Wohnung samt Lesenachweisen.
 
 Nicht dazu gehoert die Messhistorie: Lesungen und Zaehler haengen an der
@@ -134,6 +134,10 @@ def export_erstellen(tenant) -> tuple[bytes, dict]:
         'kostenprofile': [_zeile(p) for p in tenant.cost_profiles],
         'haushaltsgroessen': [_zeile(h) for h in tenant.haushaltsgroessen],
         'vorauszahlung_soll': [_zeile(v) for v in tenant.vorauszahlung_soll],
+        # Phase 49: die vereinbarte Kaltmiete ab Stichtag haengt genauso am
+        # Mieter (Kaskade beim Loeschen); sortiert nach gueltig_ab ueber das
+        # order_by der Beziehung.
+        'kaltmiete_soll': [_zeile(k) for k in tenant.kaltmiete_soll],
         'zahlungen': zahlungen,
         'abrechnungsberichte': berichte,
         'ablesungen': [_zeile(l) for l in _lesungen_des_mieters(tenant)],

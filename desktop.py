@@ -356,6 +356,13 @@ VERSCHLUESSELUNG = ('Eine verschlüsselte Verbindung ist nicht möglich. Läuft 
 WEITERLEITUNG = ('Der Server leitet auf eine andere Adresse weiter ({ziel}). Bitte tragen '
                  'Sie diese Adresse direkt ein.')
 OHNE_PFAD = 'Bitte nur die Adresse ohne Pfad eintragen, zum Beispiel https://server:8080.'
+NUR_PUNYCODE = ('Die Adresse enthält ein Zeichen wie ß, das nicht überall gleich gelesen wird. '
+                'Bitte tragen Sie sie in der Punycode-Schreibweise ein (beginnt mit xn--).')
+# Zeichen, die IDNA 2003 (Pythons Codec ``idna``) anders abbildet als IDNA 2008/UTS 46
+# (WebView2, DENIC): ß und ẞ werden zu „ss“, ς zu σ, ZWNJ und ZWJ fallen weg. Aus
+# straße.example würde so strasse.example, also eine fremde Domain. Solche Hosts lehnt
+# adresse_normieren ab; die Punycode-Form (xn--strae-oqa.example) geht unverändert durch.
+IDNA_ABWEICHEND = frozenset('ßẞς‌‍')
 FREMDE_SEITE = 'Die Verbindung lässt sich nur in den Einstellungen dieser App ändern.'
 STANDARDPORT = {'http': 80, 'https': 443}
 ZURUECK_FRAGE = ('Zurück zu den Daten auf diesem Rechner? Die Verbindung zum Server wird '
@@ -410,12 +417,26 @@ def adresse_normieren(text) -> str | None:
     if ':' in host:
         host = f'[{host}]'  # IPv6
     else:
+        # Auf der Eingabe geprüft, nicht auf ``hostname``: Python schreibt ΛΌΓΟΣ klein als
+        # λόγος mit ς, WebView2 und der Codec lesen dort beide σ.
+        if not IDNA_ABWEICHEND.isdisjoint(teile.netloc):
+            return None
         # WebView2 meldet Umlautdomains als Punycode; sonst wäre jede Seite fremd.
         try:
             host = host.encode('idna').decode('ascii')
         except UnicodeError:
             return None
     return f'{schema}://{host}' + (f':{port}' if port is not None else '')
+
+
+def _ungueltig_meldung(adresse) -> str:
+    """Warum ``adresse_normieren`` nein sagt. Den Hinweis auf Punycode gibt es nur,
+    wenn die Adresse ohne die Zeichen aus ``IDNA_ABWEICHEND`` gültig wäre."""
+    text = str(adresse or '')
+    ersetzt = ''.join('a' if zeichen in IDNA_ABWEICHEND else zeichen for zeichen in text)
+    if ersetzt != text and adresse_normieren(ersetzt):
+        return NUR_PUNYCODE
+    return OHNE_PFAD
 
 
 def _ursprung(url) -> tuple | None:
@@ -479,7 +500,7 @@ def server_pruefen(adresse, zeit: float = 5, _weiter: bool = True):
     NebenkostenFix? ``/api/health`` ist seit 0.9.0 gleich."""
     basis = adresse_normieren(adresse)
     if basis is None:
-        return False, OHNE_PFAD, None
+        return False, _ungueltig_meldung(adresse), None
     oeffner = urllib.request.build_opener(_KeineWeiterleitung)
     try:
         # Bandit-Ausnahme (B310): adresse_normieren lässt nur http und https zu

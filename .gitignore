@@ -15,6 +15,13 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# Datendateien der Abdeckung, je Arbeitsbaum (pyproject.toml data_file,
+# Makefile-Ziel kern) samt Teildateien paralleler Messung.
+.coverage
+.coverage.*
+.coverage-kern
+.coverage-kern.*
+
 # Docker
 # .dockerignore gehoert ins Repository (NK-023): ohne sie kopiert
 # COPY . . die .env samt SECRET_KEY und NAS-Passwort ins Abbild.

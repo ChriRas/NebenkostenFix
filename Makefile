@@ -34,12 +34,15 @@ schwelle:
 # eine andere Karte. Hier zaehlt, dass jeder Zweig, der Geld verteilt, einmal
 # genommen wurde. Die Datendatei liegt getrennt, sonst ueberschreibt dieser
 # Lauf die des Gesamtlaufs und `make schwelle` misst die falsche Menge.
+# Sie liegt im Arbeitsbaum (relativ, je worktree eine) und heisst bewusst
+# nicht .coverage.kern: alles namens .coverage.* loescht und mischt pytest-cov
+# als Teil der Gesamtmessung (tests/test_coverage_pfade.py).
 # Die Dateien stehen einzeln da, damit nur Kerntests zaehlen -- ein
 # Integrationstest wuerde Zweige gratis mitnehmen, die niemand geprueft hat.
 # WER EINE NEUE KERNTESTDATEI ANLEGT, TRAEGT SIE HIER EIN. Sonst faellt die
 # Zweigabdeckung um den ungetesteten Block, obwohl die Tests gruen sind.
 kern:
-	env PYTHONDONTWRITEBYTECODE=1 COVERAGE_FILE=/tmp/.coverage.kern $(PY) -m pytest \
+	env PYTHONDONTWRITEBYTECODE=1 COVERAGE_FILE=.coverage-kern $(PY) -m pytest \
 	  -o addopts="" -p no:cacheprovider \
 	  tests/test_rechenkern.py tests/test_billing_engine_characterization.py \
 	  tests/test_heizkostenverteilung.py tests/test_warmwassertrennung.py \
