@@ -24,7 +24,9 @@ Die Tabellen-Erfassung der Rechnungen (``/api/import/rechnungen/tabelle``)
 schickt ihre Zeilen direkt, ohne Datei -- derselbe Prüf- und Anlegeweg.
 
 Datum: ``31.12.2025``, ``31.12.25``, ``2025-12-31`` oder eine Excel-Datumszelle.
-Betrag: ``1.234,56``, ``1234,56``, ``1234.56``, mit oder ohne ``€``.
+Betrag: ``1.234,56``, ``1234,56``, ``1234.56``, ``1.200``, mit oder ohne ``€``.
+Ein einzelner Punkt mit genau drei Ziffern dahinter trennt bei Beträgen
+Tausender (``1.200`` = 1.200,00 €), bei Zählerständen bleibt er Dezimalpunkt.
 """
 
 from __future__ import annotations
@@ -268,12 +270,25 @@ def als_datum(wert, titel: str) -> date:
     raise ZeilenFehler(f'{titel}: „{text}“ ist kein Datum (z. B. 31.12.2025).')
 
 
-def _zahlentext(text: str) -> str:
+# Ein Betrag wie „1.200“ oder „-12.500“: genau ein Punkt, davor eine bis drei
+# Ziffern ohne führende Null, dahinter genau drei. Als Geld kann der Punkt
+# hier nur Tausender trennen, drei Nachkommastellen hat kein Betrag.
+_EIN_TAUSENDERPUNKT = re.compile(r'[-+]?[1-9]\d{0,2}\.\d{3}')
+
+
+def _zahlentext(text: str, *, betrag: bool = False) -> str:
+    """Text einer Zahl aus der Tabelle, so dass ``Decimal``/``float`` ihn lesen.
+
+    Mit ``betrag=True`` gilt ein einzelner Punkt mit genau drei Ziffern
+    dahinter als Tausenderpunkt („1.200“ ist 1200). Ohne den Schalter bleibt
+    er ein Dezimalpunkt -- ein Zählerstand „123.456“ m³ hat drei
+    Nachkommastellen.
+    """
     text = text.replace('€', '').replace('EUR', '').replace(' ', '').replace(' ', '')
     text = text.replace("'", '')
     if ',' in text:
         return text.replace('.', '').replace(',', '.')
-    if text.count('.') > 1:
+    if text.count('.') > 1 or (betrag and _EIN_TAUSENDERPUNKT.fullmatch(text)):
         return text.replace('.', '')
     return text
 
@@ -281,7 +296,7 @@ def _zahlentext(text: str) -> str:
 def als_betrag(wert, titel: str) -> Decimal:
     if isinstance(wert, bool):
         raise ZeilenFehler(f'{titel}: hier steht ja/nein statt eines Betrags.')
-    roh = repr(wert) if isinstance(wert, float) else _zahlentext(als_text(wert))
+    roh = repr(wert) if isinstance(wert, float) else _zahlentext(als_text(wert), betrag=True)
     try:
         return runde(roh)
     except GeldFehler:

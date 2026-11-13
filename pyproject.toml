@@ -18,7 +18,12 @@ omit = [
   "migrations/*",
   "scripts/*",
 ]
-data_file = "/tmp/nkfix-coverage"
+# Relativ, also im Arbeitsbaum, in dem pytest startet (im Container /app).
+# Ein fester Pfad unter /tmp war fuer alle git-worktrees dieselbe Datei:
+# pytest-cov loescht beim Start <datei> und <datei>.* und fuehrt am Ende
+# zusammen, parallele Laeufe zerschossen sich so die Messung
+# (tests/test_coverage_pfade.py). `make schwelle` liest diese Datei.
+data_file = ".coverage"
 
 # Gestaffelte Schwelle (NK-017, Entscheidung D26).
 # Gemessen nach dem Merge von NK-003: 27,85 % projektweit, billing_engine.py 86 %.

@@ -55,11 +55,16 @@ Server im eigenen Fenster, wie ein Browser, nur ohne Adressleiste.
    Scheitert das, weil der Server nur unverschlüsselt läuft, bietet sie `http://` mit
    Rückfrage an.
    Ein Pfad (`/nk`), Benutzername oder Passwort in der Adresse werden abgelehnt.
+   Umlautdomains wie `bücher.example` gehen. Domains mit ß, ẞ, ς oder unsichtbaren
+   Verbindern (ZWNJ, ZWJ) lehnt die App ab: Python schreibt sie nach IDNA 2003 um (aus
+   `straße.example` würde die fremde Domain `strasse.example`), WebView2 nach IDNA 2008
+   nicht. Solche Domains tragen Sie in der Punycode-Schreibweise ein, etwa
+   `xn--strae-oqa.example`.
 3. Den Haken setzen und **Verbinden** wählen. Bei `http://` fragt die App noch
    einmal nach.
 4. Die App fragt `/api/health` ab. Antwortet dort ein NebenkostenFix, trägt sie die
    Adresse ein und startet neu. Sonst bleibt alles, wie es war, und die Karte nennt rot
-   mit Warnsymbol den Grund (nicht erreichbar, kein NebenkostenFix, Zertifikat, Weiterleitung, Pfad).
+   mit Warnsymbol den Grund (nicht erreichbar, kein NebenkostenFix, Zertifikat, Weiterleitung, Pfad, ß ohne Punycode).
 
 Weiterleitungen folgt die Prüfung nicht, mit einer Ausnahme: `http://host` → `https://host`
 auf demselben Host (Standardports) übernimmt sie selbst.

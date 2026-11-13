@@ -25,10 +25,11 @@ Die Nebenkostenabrechnung für private Vermieter. Kostenlos, und Ihre Daten blei
 
 ## Neuerungen in dieser Version
 
-Version 0.19.1: Fehlerbehebungen bei Anmeldung und Zugriffsschlüsseln. Die Rechenregeln sind unverändert.
+Version 0.19.2: Fehlerbehebungen bei Serveradresse, Datenauskunft und Tabellenimport. Die Rechenregeln sind unverändert.
 
-- Behoben: Eine alte Anmeldung auf einem zweiten Gerät gilt nicht mehr für ein später neu angelegtes Konto, auch wenn es denselben Namen trägt. Wer mit Anmeldung arbeitet, meldet sich nach dem Update einmal neu an.
-- Behoben: Ein Zugriffsschlüssel gilt nur noch für das Konto, für das er angelegt wurde. Bestehende Schlüssel gelten weiter.
+- Behoben: Eine Serveradresse mit ß führt nicht mehr still zu einer fremden Domain. Die App lehnt sie ab und bittet um die Punycode-Schreibweise (beginnt mit xn--).
+- Behoben: Die Datenauskunft nach Art. 15 DSGVO je Mieter enthält jetzt auch die vereinbarte Kaltmiete mit Stichtag.
+- Behoben: Der Tabellenimport liest einen Betrag wie „1.200“ als 1.200,00 € statt als 1,20 €.
 
 ## Produktmerkmale
 

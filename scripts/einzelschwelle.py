@@ -71,18 +71,27 @@ def messen(regeln: dict[str, float],
     Auswahl zurueck -- bei einer einzelnen Datei also deren eigene Zahl,
     gerechnet von coverage selbst. Ein eigener Nachbau der Rechnung wuerde
     frueher oder spaeter von dem abweichen, was ``make check`` anzeigt.
+
+    Datendatei und Dateinamen gelten relativ zur Projektwurzel (dem Ordner
+    der ``pyproject.toml``), nicht zum Arbeitsverzeichnis: coverage loest
+    beides sonst gegen das Verzeichnis auf, aus dem das Skript gestartet wird.
     """
     from coverage import Coverage
     from coverage.exceptions import CoverageException
 
+    wurzel = pyproject.resolve().parent
+    datei = Path(Coverage(config_file=str(pyproject)).config.data_file)
+    if not datei.is_absolute():
+        datei = wurzel / datei
     gemessen: dict[str, float | None] = {}
     for name in regeln:
-        cov = Coverage(config_file=str(pyproject))
+        cov = Coverage(data_file=str(datei), config_file=str(pyproject))
         cov.load()
         try:
             # Die Ausgabe des Reports wandert ins Leere: hier zaehlt nur die
             # Zahl, die Tabelle hat pytest-cov schon gedruckt.
-            gemessen[name] = cov.report(include=[name], file=io.StringIO())
+            gemessen[name] = cov.report(include=[str(wurzel / name)],
+                                        file=io.StringIO())
         except CoverageException:
             gemessen[name] = None
     return gemessen
