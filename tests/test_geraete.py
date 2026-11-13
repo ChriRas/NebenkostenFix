@@ -32,6 +32,8 @@ from tests.conftest import TEST_PASSWORD, TEST_USER
 
 APP = 'Mozilla/5.0 (Windows NT 10.0) AppleWebKit/537.36 NebenkostenFix-Desktop/0.19.0'
 BROWSER = 'Mozilla/5.0 (Windows NT 10.0) AppleWebKit/537.36 Chrome/141.0 Safari/537.36'
+# Den Einmalcode loest nur die App ein (Login-CSRF, Review zu #57).
+APP_KOPF = {'User-Agent': APP}
 
 
 def _anmelden(client, haken=True, ua=APP, ziel='/', **formular):
@@ -71,7 +73,7 @@ def _geraete_sitzung(app_ctx, token, ziel='/'):
     assert antwort.status_code == 200, antwort.get_data(as_text=True)
     daten = antwort.get_json()
     angemeldet = client.get('/geraete/anmelden',
-                            query_string={'code': daten['code'], 'next': ziel})
+                            query_string={'code': daten['code'], 'next': ziel}, headers=APP_KOPF)
     assert angemeldet.status_code == 302, angemeldet.get_data(as_text=True)
     return client, daten['token']
 
@@ -434,7 +436,7 @@ def test_der_einmalcode_beginnt_eine_sitzung(auth_client, app_ctx):
     daten = _erneuern(client, token).get_json()
     assert client.get('/api/properties').status_code == 401
     antwort = client.get('/geraete/anmelden',
-                         query_string={'code': daten['code'], 'next': '/einstellungen'})
+                         query_string={'code': daten['code'], 'next': '/einstellungen'}, headers=APP_KOPF)
     assert antwort.status_code == 302
     assert antwort.headers['Location'].endswith('/einstellungen')
     assert client.get('/api/properties').status_code == 200
@@ -445,9 +447,9 @@ def test_der_einmalcode_gilt_nur_einmal(auth_client, app_ctx):
     token = _neues_geraet(app_ctx)
     code = _erneuern(app_ctx.app.test_client(), token).get_json()['code']
     assert app_ctx.app.test_client().get('/geraete/anmelden',
-                                         query_string={'code': code}).status_code == 302
+                                         query_string={'code': code}, headers=APP_KOPF).status_code == 302
     zweiter = app_ctx.app.test_client()
-    antwort = zweiter.get('/geraete/anmelden', query_string={'code': code, 'next': '/x'})
+    antwort = zweiter.get('/geraete/anmelden', query_string={'code': code, 'next': '/x'}, headers=APP_KOPF)
     assert '/login' in antwort.headers['Location']
     assert zweiter.get('/api/properties').status_code == 401
 
@@ -459,7 +461,7 @@ def test_der_einmalcode_verfaellt(auth_client, app_ctx):
     for zeile in GeraetCode.query.all():
         zeile.gueltig_bis = zeit.jetzt_utc() - timedelta(seconds=1)
     db.session.commit()
-    client.get('/geraete/anmelden', query_string={'code': code})
+    client.get('/geraete/anmelden', query_string={'code': code}, headers=APP_KOPF)
     assert client.get('/api/properties').status_code == 401
 
 
@@ -467,7 +469,7 @@ def test_der_abholcode_ist_kein_einmalcode(auth_client, anon_client, app_ctx):
     """Die beiden Codes haben verschiedene Aufgaben und taugen nicht für die andere."""
     code = _abholcode(_anmelden(anon_client))
     client = app_ctx.app.test_client()
-    client.get('/geraete/anmelden', query_string={'code': code})
+    client.get('/geraete/anmelden', query_string={'code': code}, headers=APP_KOPF)
     assert client.get('/api/properties').status_code == 401
     assert _abholen(client, code).status_code == 201
 
@@ -477,14 +479,14 @@ def test_das_ziel_bleibt_im_programm(auth_client, app_ctx):
     client = app_ctx.app.test_client()
     code = _erneuern(client, token).get_json()['code']
     antwort = client.get('/geraete/anmelden',
-                         query_string={'code': code, 'next': 'https://boese.example/'})
+                         query_string={'code': code, 'next': 'https://boese.example/'}, headers=APP_KOPF)
     assert urlsplit(antwort.headers['Location']).netloc in ('', 'localhost')
     assert 'boese' not in antwort.headers['Location']
 
 
 def test_ein_falscher_einmalcode_fuehrt_zur_anmeldung_mit_ziel(auth_client, anon_client):
     antwort = anon_client.get('/geraete/anmelden',
-                              query_string={'code': 'falsch', 'next': '/einstellungen'})
+                              query_string={'code': 'falsch', 'next': '/einstellungen'}, headers=APP_KOPF)
     assert antwort.status_code == 302
     ort = urlsplit(antwort.headers['Location'])
     assert ort.path == '/login'
@@ -497,7 +499,7 @@ def test_der_einmalcode_eines_stillgelegten_kontos(auth_client, app_ctx):
     code = _erneuern(client, token).get_json()['code']
     User.query.filter_by(username=TEST_USER).one().is_active = False
     db.session.commit()
-    antwort = client.get('/geraete/anmelden', query_string={'code': code})
+    antwort = client.get('/geraete/anmelden', query_string={'code': code}, headers=APP_KOPF)
     assert urlsplit(antwort.headers['Location']).path == '/login'
     assert client.get('/api/properties').status_code == 401
 

@@ -123,6 +123,9 @@ und nach der Leerlauf-Grenze selbst an:
 - Ein Gerät gilt nur für das Konto, mit dem es angemeldet wurde. Wird ein Konto direkt in
   der Datenbank gelöscht und danach ein neues angelegt, meldet der Server die Geräte des
   alten Kontos ab, wie bei den Zugriffsschlüsseln.
+- Die stille Anmeldung nimmt der Server nur aus dem Fenster der App an. Ein Link aus einer
+  Mail oder von einer anderen Seite meldet niemanden an, und wer im Browser schon mit einem
+  anderen Konto angemeldet ist, bleibt es.
 - Mit Häkchen schützt die Leerlauf-Grenze einen unbeaufsichtigten Rechner nicht mehr: Die
   App meldet sich beim nächsten Klick selbst wieder an, und die Seite warnt nicht mehr, dass
   sie abmeldet.

@@ -1292,7 +1292,7 @@ def init_auth(app):
     zugriffsschluessel.init_zugriffsschluessel(
         app, current_user, ohne_anmeldung_aktiv, FEHLTEXT_KONTO)
     geraete.init_geraete(app, _sitzung_beginnen, _sicheres_ziel, ohne_anmeldung_aktiv,
-                         _anmeldeschutz_ordner)
+                         _anmeldeschutz_ordner, current_user)
     _huelle_routen(app)
     _register_cli(app)
     return app

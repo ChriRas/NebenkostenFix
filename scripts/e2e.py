@@ -552,8 +552,10 @@ class Lauf:
             raise Abbruch(f'Erneuern antwortet {status}.')
 
         neu = fenster()
+        # Den Einmalcode loest der Server nur fuer die App ein (Login-CSRF).
         umleitung(neu, urllib.request.Request(self._url(
-            '/geraete/anmelden?' + urllib.parse.urlencode({'code': erneuert['code']}))))
+            '/geraete/anmelden?' + urllib.parse.urlencode({'code': erneuert['code']})),
+            headers={'User-Agent': kennung}))
         with neu.open(self._url('/api/auth/me'), timeout=60) as antwort:
             wer = json.loads(antwort.read())
         if wer.get('username') != KONTO:
