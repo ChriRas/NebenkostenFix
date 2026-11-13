@@ -41,7 +41,7 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from flask import (has_request_context, jsonify, make_response, redirect, request,
                    session, url_for)
 
-from nebenkostenfix import anmeldeschutz, zeit
+from nebenkostenfix import anmeldeschutz, zeit, zugriffsschluessel
 from nebenkostenfix.models import Geraet, GeraetCode, GeraetErsetzt, User, db
 
 PRAEFIX = 'nkg_'
@@ -197,13 +197,39 @@ def zur_sitzung() -> Geraet | None:
     return Geraet.query.filter_by(sitzung=wert).first()
 
 
+def verwaist(geraet: Geraet) -> bool:
+    """Gehoert das Geraet zu keinem oder einem spaeter angelegten Konto?
+
+    ``geraete.user_id`` hat wie ``api_schluessel.user_id`` kein ``ondelete``,
+    und SQLite setzt den Fremdschluessel nicht durch. Wird ein Konto direkt
+    in der Datenbank geloescht, bleibt sein Geraet stehen, und das naechste
+    neue Konto bekommt dieselbe id. Dieselbe Regel wie bei den Schluesseln
+    (``zugriffsschluessel.aelter_als_das_konto``, Review zu #57): Ein Geraet
+    aus der Zeit vor seinem Konto zaehlt wie ein falsches Token.
+    """
+    return geraet.user is None or zugriffsschluessel.aelter_als_das_konto(geraet)
+
+
+def _gilt(geraet: Geraet | None) -> bool:
+    """Darf das Geraet abholen, erneuern oder anmelden? Ein verwaistes meldet
+    es dabei gleich ab."""
+    if geraet is None:
+        return False
+    if verwaist(geraet):
+        loeschen([geraet.id])
+        return False
+    return geraet.user.is_active
+
+
 def sitzung_gilt(user_id: int) -> bool:
     """Eine Sitzung, die mit einem Geraet begann, endet mit dessen Abmeldung.
-    Das Konto muss trotzdem passen."""
+    Das Konto muss trotzdem passen, und das Geraet darf nicht aelter sein als
+    das Konto (``verwaist``). Den Kontostempel prueft ``auth.current_user``
+    getrennt; jede der beiden Pruefungen haelt fuer sich."""
     if session.get(SITZUNG_KEY) is None:
         return True
     geraet = zur_sitzung()
-    return geraet is not None and geraet.user_id == user_id
+    return geraet is not None and geraet.user_id == user_id and not verwaist(geraet)
 
 
 def _aufraeumen() -> None:
@@ -223,6 +249,10 @@ def _aufraeumen() -> None:
     # als Fehlversuch; das Geraet selbst bleibt dann angemeldet.
     GeraetErsetzt.query.filter(GeraetErsetzt.ersetzt_am < jetzt - OHNE_NUTZUNG).delete(
         synchronize_session=False)
+    # Geraete eines geloeschten Kontos: sonst stuenden sie in der Liste unter
+    # dem Namen des neuen Kontos mit derselben id (Review zu #57). Hoechstens
+    # HOECHSTENS je Konto, darum reicht der Vergleich in Python.
+    loeschen([g.id for g in Geraet.query.all() if verwaist(g)])
 
 
 def _platz_machen(user_id: int) -> None:
@@ -293,7 +323,7 @@ def init_geraete(app, sitzung_beginnen, sicheres_ziel, ohne_anmeldung_aktiv,
         _aufraeumen()
         zeile = _code_einloesen(roh, 'abholen')
         geraet = db.session.get(Geraet, zeile.geraet_id) if zeile else None
-        if geraet is None or not geraet.user.is_active:
+        if not _gilt(geraet):
             db.session.commit()
             return _abgelehnt(anmeldeschutz_ordner(), roh)
         token = PRAEFIX + secrets.token_urlsafe(32)
@@ -320,7 +350,7 @@ def init_geraete(app, sitzung_beginnen, sicheres_ziel, ohne_anmeldung_aktiv,
                 loeschen([kopie.geraet_id])
             db.session.commit()
             return _abgelehnt(anmeldeschutz_ordner(), roh)
-        if not geraet.user.is_active:
+        if not _gilt(geraet):
             db.session.commit()
             return _abgelehnt(anmeldeschutz_ordner(), roh)
         jetzt = zeit.jetzt_utc()
@@ -359,7 +389,7 @@ def init_geraete(app, sitzung_beginnen, sicheres_ziel, ohne_anmeldung_aktiv,
         _aufraeumen()
         zeile = _code_einloesen(roh, 'anmelden')
         geraet = db.session.get(Geraet, zeile.geraet_id) if zeile else None
-        if geraet is None or not geraet.user.is_active:
+        if not _gilt(geraet):
             db.session.commit()
             _zaehlen(anmeldeschutz_ordner(), roh)
             return redirect(url_for('login', next=ziel))
@@ -393,4 +423,4 @@ def init_geraete(app, sitzung_beginnen, sicheres_ziel, ohne_anmeldung_aktiv,
 
 __all__ = ['PRAEFIX', 'APP_KENNUNG', 'SITZUNG_KEY', 'AUSWEIS', 'aus_der_app', 'ausweis',
            'anmelden_mit_haekchen', 'ziel_ohne_abholcode', 'ziel_mit_abholcode', 'loeschen', 'fuer_konto_loeschen',
-           'alle_loeschen', 'zur_sitzung', 'sitzung_gilt', 'init_geraete']
+           'alle_loeschen', 'zur_sitzung', 'verwaist', 'sitzung_gilt', 'init_geraete']
