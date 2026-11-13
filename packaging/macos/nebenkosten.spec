@@ -86,7 +86,7 @@ app = BUNDLE(
     coll,
     name='NebenkostenFix.app',
     icon=str(WURZEL / 'packaging' / 'macos' / 'nebenkostenfix.icns'),
-    bundle_identifier='de.nebenkostenfix.app',
+    bundle_identifier='org.nebenkostenfix.app',
     version=SOFTWARE_VERSION,
     info_plist={
         # Ohne Namen hiesse das App-Menue „Python“.

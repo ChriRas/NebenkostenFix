@@ -51,7 +51,7 @@ def _info_plist() -> dict:
 def test_bundle_mit_name_und_kennung_des_maintainers():
     bundle = _bundle()
     assert bundle['name'].value == 'NebenkostenFix.app'
-    assert bundle['bundle_identifier'].value == 'de.nebenkostenfix.app'
+    assert bundle['bundle_identifier'].value == 'org.nebenkostenfix.app'
     assert 'nebenkostenfix.icns' in ast.unparse(bundle['icon'])
 
 
