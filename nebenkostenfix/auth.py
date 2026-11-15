@@ -49,9 +49,10 @@ from urllib.parse import urlsplit
 from datetime import datetime
 
 from nebenkostenfix import zeit
-from functools import wraps
+from functools import lru_cache, wraps
 
 from flask import abort, jsonify, make_response, redirect, request, session, url_for
+from werkzeug.security import check_password_hash, generate_password_hash
 
 from nebenkostenfix import anmeldeschutz
 from nebenkostenfix import einstellungen
@@ -803,6 +804,19 @@ def _anmeldeschutz_ordner():
     return ordner
 
 
+@lru_cache(maxsize=1)
+def _blindhash():
+    """Ein Passwort-Hash, der zu keinem Konto gehoert.
+
+    /login rechnet ihn, wenn es kein aktives Konto zum Namen gibt, damit die
+    Antwort nicht schneller kommt als bei einem falschen Passwort. Er entsteht
+    einmal pro Prozess aus einem Zufallswert, mit demselben Verfahren wie
+    ``User.set_password``: so kostet die Pruefung gleich viel wie bei einem
+    echten Konto, und kein Hash steht im Code.
+    """
+    return generate_password_hash(secrets.token_hex(32))
+
+
 def _passwort_bestaetigen(user, passwort, fehltext, status):
     """Die Passwortprobe in einer Sitzung: Passwort wechseln, Anmeldung
     ausschalten. Liefert None, wenn das Passwort stimmt, sonst die Antwort.
@@ -975,9 +989,16 @@ def init_auth(app):
             return antwort
 
         user = User.query.filter_by(username=username).first()
-        # Immer beide Pruefungen durchlaufen, damit ein falscher Benutzername
-        # nicht schneller antwortet als ein falsches Passwort.
-        ok = user is not None and user.is_active and user.check_password(password)
+        # Genau eine Passwortpruefung in jedem Fall, damit ein unbekannter
+        # Name oder ein stillgelegtes Konto nicht schneller antwortet als ein
+        # falsches Passwort -- sonst verriete die Laufzeit die Kontennamen
+        # (NK-128). Ohne aktives Konto wird gegen den Blindhash gerechnet und
+        # das Ergebnis verworfen.
+        if user is not None and user.is_active:
+            ok = user.check_password(password)
+        else:
+            check_password_hash(_blindhash(), password)
+            ok = False
         if not ok:
             anzahl = anmeldeschutz.fehlversuch(ordner, username, adresse)
             time.sleep(anmeldeschutz.wartezeit(anzahl))
