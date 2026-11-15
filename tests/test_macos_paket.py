@@ -3,8 +3,8 @@
 Bau und Proben laufen in ``.github/workflows/macos.yml`` auf einem
 macOS-Runner. Hier steht, was sich vorher statisch sagen lässt: Spec und
 Info.plist, gleiche Positivliste wie unter Windows, Icon, Marker der
-Abhängigkeiten und dass das Release (Schritt 3) den Workflow noch nicht
-kennt.
+Abhängigkeiten und wie das Release den Bau aufruft. Was das Release mit dem
+DMG macht, steht in ``tests/test_release_macos.py``.
 """
 
 from __future__ import annotations
@@ -51,7 +51,7 @@ def _info_plist() -> dict:
 def test_bundle_mit_name_und_kennung_des_maintainers():
     bundle = _bundle()
     assert bundle['name'].value == 'NebenkostenFix.app'
-    assert bundle['bundle_identifier'].value == 'de.nebenkostenfix.app'
+    assert bundle['bundle_identifier'].value == 'org.nebenkostenfix.app'
     assert 'nebenkostenfix.icns' in ast.unparse(bundle['icon'])
 
 
@@ -125,13 +125,79 @@ def _desktop_abhaengigkeiten(plattform: str) -> set[str]:
     return namen
 
 
+PYOBJC = {'pyobjc-core', 'pyobjc-framework-Cocoa', 'pyobjc-framework-Quartz',
+          'pyobjc-framework-WebKit', 'pyobjc-framework-Security',
+          'pyobjc-framework-UniformTypeIdentifiers'}
+
+
 @pytest.mark.parametrize('plattform, erwartet', [
     ('win32', {'waitress', 'pywebview', 'pyinstaller'}),    # wie bisher
-    ('darwin', {'waitress', 'pywebview', 'pyinstaller'}),
+    ('darwin', {'waitress', 'pywebview', 'pyinstaller'} | PYOBJC),
     ('linux', {'waitress'}),
 ])
 def test_desktop_abhaengigkeiten_je_system(plattform, erwartet):
     assert _desktop_abhaengigkeiten(plattform) == erwartet
+
+
+def _anforderungen_desktop() -> dict[str, Requirement]:
+    liste = {}
+    for zeile in _text(WURZEL / 'requirements-desktop.txt').splitlines():
+        zeile = zeile.split('#', 1)[0].strip()
+        if zeile:
+            anforderung = Requirement(zeile)
+            liste[re.sub(r'[-_.]+', '-', anforderung.name).lower()] = anforderung
+    return liste
+
+
+def _pyobjc_pins() -> dict[str, str]:
+    pins = {}
+    for name, anforderung in _anforderungen_desktop().items():
+        if name.startswith('pyobjc'):
+            (angabe,) = anforderung.specifier
+            assert angabe.operator == '==', name
+            assert anforderung.marker.evaluate({'sys_platform': 'darwin'}), name
+            assert not anforderung.marker.evaluate({'sys_platform': 'win32'}), name
+            pins[name] = angabe.version
+    return pins
+
+
+def test_pyobjc_ist_einheitlich_gepinnt():
+    """pywebview verlangt pyobjc nur mit ``>=9.0``. Ohne Pin brächte jeder
+    Bau, was gerade neu ist, und die Lizenztexte im DMG passten nicht mehr
+    sicher (Review zu #62)."""
+    pins = _pyobjc_pins()
+    assert set(pins) == {n.lower() for n in PYOBJC}
+    assert len(set(pins.values())) == 1, pins
+
+
+def test_lizenzkommentar_nennt_die_gepinnte_pyobjc_version():
+    """Die Ersatztexte in ``nebenkostenfix/lizenzen/`` stammen aus genau
+    der Version, die gebaut wird."""
+    (version,) = set(_pyobjc_pins().values())
+    text = _text(WURZEL / 'nebenkostenfix' / 'drittlizenzen.py')
+    assert re.findall(r'pyobjc (\d+(?:\.\d+)*) ', text) == [version]
+    assert re.findall(r'License\.txt @ v(\S+)', text) == [version]
+
+
+def test_pywebview_verlangt_unter_macos_nichts_ungepinntes():
+    """Läuft, wo pywebview installiert ist (Jobs ``macos`` und
+    ``windows``): Bringt eine neue pywebview-Version eine weitere
+    Abhängigkeit für macOS, fällt das hier auf."""
+    from importlib import metadata
+
+    try:
+        verlangt = metadata.requires('pywebview') or []
+    except metadata.PackageNotFoundError:
+        pytest.skip('pywebview ist nicht installiert')
+    gepinnt = {name for name, a in _anforderungen_desktop().items()
+               if any(s.operator == '==' for s in a.specifier)}
+    for zeile in verlangt:
+        anforderung = Requirement(zeile)
+        if anforderung.marker is None or 'extra' in str(anforderung.marker):
+            continue
+        if anforderung.marker.evaluate({'sys_platform': 'darwin'}) \
+                and not anforderung.marker.evaluate({'sys_platform': 'win32'}):
+            assert re.sub(r'[-_.]+', '-', anforderung.name).lower() in gepinnt, zeile
 
 
 # --- Workflow ----------------------------------------------------------------
@@ -141,14 +207,34 @@ def _workflow() -> dict:
     return yaml.safe_load(_text(WORKFLOW))
 
 
-def test_workflow_freiwillig_bei_pull_requests_und_von_hand():
-    """Kein Pflicht-Check und nicht im Release (Schritt 2 von #44)."""
+def test_workflow_bei_pull_requests_von_hand_und_aus_dem_release():
+    """Bei Pull Requests und von Hand freiwillig, kein Pflicht-Check. Das
+    Release ruft den Bau wie bei Windows mit ``nur_paket`` auf (Review zu #59)."""
     workflow = _workflow()
     ausloeser = workflow.get('on') or workflow.get(True)
-    assert set(ausloeser) == {'pull_request', 'workflow_dispatch'}
+    assert set(ausloeser) == {'pull_request', 'workflow_dispatch', 'workflow_call'}
     assert set(ausloeser['pull_request']['branches']) == {'main', 'feature/macos'}
+    assert ausloeser['workflow_call']['inputs'] == {
+        'nur_paket': {'type': 'boolean', 'default': False}}
     assert workflow['permissions'] == {'contents': 'read'}
-    assert 'macos.yml' not in _text(WURZEL / '.github' / 'workflows' / 'release.yml')
+
+
+def test_nur_paket_laesst_nur_die_tests_aus():
+    """Die Tests sind im Pull Request schon gelaufen. Umzug, Bau und Proben
+    laufen auch im Release."""
+    jobs = _workflow()['jobs']
+    assert jobs['tests']['if'] == '${{ !inputs.nur_paket }}'
+    assert 'if' not in jobs['umzug-linux'] and 'if' not in jobs['paket']
+
+
+def test_eigene_gruppe_auch_wenn_das_release_aufruft():
+    """Aufgerufen sieht der Workflow in ``github.workflow`` den Namen des
+    Aufrufers. Mit derselben Gruppe wie windows.yml landeten beide im Release
+    in ``release-<run_id>``, und ``cancel-in-progress`` bräche einen ab."""
+    concurrency = _workflow()['concurrency']
+    assert concurrency['group'].startswith('macos-')
+    assert 'github.workflow' not in concurrency['group']
+    assert concurrency['cancel-in-progress'] is True
 
 
 def _filter_trifft(muster: list[str], pfad: str) -> bool:

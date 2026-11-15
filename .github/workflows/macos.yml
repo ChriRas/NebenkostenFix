@@ -1,9 +1,9 @@
 # macOS-Weg (#44, Schritt 2): die Testsuite auf macOS und der Bau der App
 # (PyInstaller, Bundle NebenkostenFix.app, DMG) samt Selbsttest, Umzug
-# Linux -> macOS und einer Probe mit echtem Fenster und Cmd-Q. Freiwillig:
-# kein Pflicht-Check und nicht in release.yml eingebunden. Das DMG ist nur
-# ein Artefakt des Laufs, ad hoc signiert, nicht notarisiert. Nur Apple
-# Silicon, ab macOS 15.
+# Linux -> macOS und einer Probe mit echtem Fenster und Cmd-Q. Bei Pull
+# Requests freiwillig, kein Pflicht-Check. Das Release (release.yml) ruft nur
+# den Bau auf (nur_paket), die Tests sind im Pull Request schon gelaufen. Das
+# DMG ist ad hoc signiert, nicht notarisiert. Nur Apple Silicon, ab macOS 15.
 name: macos
 
 on:
@@ -18,19 +18,27 @@ on:
       - '!packaging/windows/**'
       - 'docs/handbuch/mac-installation.md'
       - 'docs/bilder/mac-*'
+  workflow_call:
+    inputs:
+      nur_paket:
+        type: boolean
+        default: false
   workflow_dispatch:
 
 permissions:
   contents: read
 
-# Neuer Push auf denselben Pull Request bricht den alten Lauf ab.
+# Neuer Push auf denselben Pull Request bricht den alten Lauf ab. Feste
+# Vorsilbe statt github.workflow: Aus release.yml aufgerufen hiesse das
+# "release", wie bei windows.yml, und einer der beiden braeche ab.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  group: macos-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: true
 
 jobs:
   tests:
     name: Tests auf macOS
+    if: ${{ !inputs.nur_paket }}
     runs-on: macos-26
     timeout-minutes: 40
     steps:

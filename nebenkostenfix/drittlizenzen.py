@@ -46,8 +46,9 @@ PYTHON_LIZENZ_URL = 'https://docs.python.org/3/license.html'
 #                    github.com/jtushman/proxy_tools, LICENSE.txt @ ccd35a5
 #   pyobjc-core.txt, pyobjc-framework-security.txt,
 #   pyobjc-framework-uniformtypeidentifiers.txt
-#                    pyobjc 12.2.2 (von pywebview, nur macOS, #44), MIT,
-#                    github.com/ronaldoussoren/pyobjc, <Paket>/License.txt @ v12.2.2
+#                    pyobjc 13.0 (von pywebview, nur macOS, #44), MIT,
+#                    github.com/ronaldoussoren/pyobjc, <Paket>/License.txt @ v13.0
+#                    (gepinnt in requirements-desktop.txt)
 ERSATZ = Path(__file__).resolve().parent / 'lizenzen'
 
 
