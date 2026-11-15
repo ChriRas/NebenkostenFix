@@ -16,7 +16,6 @@ from nebenkostenfix.anschreiben import saetze as anschreiben_saetze
 from nebenkostenfix.girocode_generator import (
     _format_iban_display, build_girocode_elements, vermieter_art, vermieter_ausweis)
 from nebenkostenfix.geld import NULL, text as geld_text
-from nebenkostenfix import betrkv
 from nebenkostenfix import pdf_stil
 from nebenkostenfix import pdf_uebersicht
 from nebenkostenfix.rechenkern import VERMIETERANTEIL_VORSATZ
@@ -659,15 +658,18 @@ class PDFGenerator:
             # TypeError werfen -- genau das ist die Absicht: float und Euro
             # mischen sich hier nicht mehr.
             # Die Rubrik kommt aus dem Katalog (betrkv), nicht mehr aus
-            # Stichwoertern (F-32, NK-121): dieselbe Quelle wie die
-            # Analytics, dieselbe Zuordnung fuer gewachsene Namen.
+            # Stichwoertern (F-32, NK-121). Sie entscheidet
+            # ``pdf_uebersicht.rubrik``, dieselbe Funktion wie fuer das
+            # Uebersichtsblatt (R-DOC-04): eine Heizzeile der Anlage ist
+            # Energie, sonst gilt die gespeicherte Nummer der Kostenart;
+            # nur ohne Bestandszeile bleibt die Vermutung aus dem Namen.
             "Energie": {"items": [], "total": NULL},
             "Wasser & Abwasser": {"items": [], "total": NULL},
             "Betriebskosten": {"items": [], "total": NULL}
         }
         
         for item in line_items:
-            rubrik = betrkv.rubrik(betrkv.zuordnung(item['category']))
+            rubrik = pdf_uebersicht.rubrik(item)
             categories[rubrik]["items"].append(item)
             categories[rubrik]["total"] += item['tenant_cost']
 

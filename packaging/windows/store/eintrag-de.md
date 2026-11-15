@@ -25,11 +25,12 @@ Die Nebenkostenabrechnung für private Vermieter. Kostenlos, und Ihre Daten blei
 
 ## Neuerungen in dieser Version
 
-Version 0.19.2: Fehlerbehebungen bei Serveradresse, Datenauskunft und Tabellenimport. Die Rechenregeln sind unverändert.
+Version 0.20.0: NebenkostenFix gibt es jetzt auch für den Mac, dazu Fehlerbehebungen bei Anmeldung, PDF und Beenden. Die Rechenregeln sind unverändert.
 
-- Behoben: Eine Serveradresse mit ß führt nicht mehr still zu einer fremden Domain. Die App lehnt sie ab und bittet um die Punycode-Schreibweise (beginnt mit xn--).
-- Behoben: Die Datenauskunft nach Art. 15 DSGVO je Mieter enthält jetzt auch die vereinbarte Kaltmiete mit Stichtag.
-- Behoben: Der Tabellenimport liest einen Betrag wie „1.200“ als 1.200,00 € statt als 1,20 €.
+- Neu: Für Macs mit Apple-Chip ab macOS 15 gibt es NebenkostenFix als eigene App, zum Herunterladen auf der Projektseite. Sicherung und Umzugspaket aus der Windows-App nimmt sie ebenso an.
+- Behoben: Die Anmeldung antwortet bei einem unbekannten Benutzernamen nicht mehr schneller als bei einem falschen Passwort. So lässt sich über die Antwortzeit nicht mehr herausfinden, welche Konten es gibt.
+- Behoben: Im PDF steht eine Kostenart in der Aufstellung jetzt unter derselben Rubrik wie auf dem Übersichtsblatt, nach ihrer gespeicherten BetrKV-Nummer. Beträge und Summen ändern sich nicht.
+- Behoben: Beim Beenden fährt die App ihren eingebauten Server geordnet herunter.
 
 ## Produktmerkmale
 

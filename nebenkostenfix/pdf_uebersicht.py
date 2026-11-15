@@ -47,6 +47,24 @@ from nebenkostenfix.rechenkern import DIREKT_ZUGEWIESEN, euro_text
 #: Kern, nicht aus einer eigenen Liste.
 HEIZKOSTENNUMMERN = frozenset(heizung.BETRKV_NR.values())
 
+
+def pruefe_heizkostennummern(rubriken=None) -> None:
+    """Sind die Heizkostennummern genau die Energie-Nummern der Rubriken?
+
+    ``ist_heizkosten`` fragt ``rubrik(posten) == 'Energie'``. Das stimmt
+    nur, solange beide Listen dieselben Nummern nennen; laufen sie
+    auseinander, soll das beim Import auffallen und nicht als Widerspruch
+    zwischen Übersichtsblatt und Aufstellung im PDF.
+    """
+    rubriken = betrkv.RUBRIKEN if rubriken is None else rubriken
+    energie = frozenset(nr for nr, name in rubriken.items() if name == 'Energie')
+    if energie != HEIZKOSTENNUMMERN:
+        raise RuntimeError('HEIZKOSTENNUMMERN und die Rubrik Energie in '
+                           'betrkv.RUBRIKEN nennen verschiedene Nummern.')
+
+
+pruefe_heizkostennummern()
+
 #: Der Schluessel der Heizkostenzeile. Die HeizkostenV schreibt die
 #: Aufteilung in Grund- und Verbrauchskosten vor (§ 7 Abs. 1, § 8); welcher
 #: Anteil wie verteilt wurde, steht im Heizabschnitt des Detailteils.
@@ -74,13 +92,18 @@ class UebersichtFehler(ValueError):
     """Übersichtsblatt und Detailteil nennen verschiedene Summen."""
 
 
-def _katalognummer(kategorie) -> int:
+def katalognummer(kategorie) -> int:
     """Die BetrKV-Nummer der Kostenart, wie sie im Bestand steht.
 
     Der Name verrät sie nicht verlässlich: Eine „Nahwärme" mit Nr. 4 hielt
     ``zuordnung`` für Nr. 17 (Review 0.17.0). Ohne
     Anwendungskontext oder für einen Namen, den es nicht mehr gibt (alte
     Fassung), bleibt die Vermutung aus dem Namen.
+
+    Öffentlich, weil das Übersichtsblatt (``ist_heizkosten``) und die
+    Aufstellung der Kosten (``PDFGenerator.generate``) dieselbe Nummer
+    brauchen: Zwei Quellen ließen dieselbe Kostenart im selben PDF unter
+    zwei Rubriken stehen (R-DOC-04).
     """
     try:
         from nebenkostenfix.models import CostCategory
@@ -107,18 +130,35 @@ def _aus_der_ablesung(posten: dict) -> bool:
                 and posten['tenant_cost'] == posten.get('prorated_amount'))
 
 
+def rubrik(posten: dict) -> str:
+    """Die Rubrik der Aufstellung, in die diese Position gehört.
+
+    Die eine Entscheidung für das ganze PDF (R-DOC-04): Das Übersichtsblatt
+    (``ist_heizkosten``) und die Aufstellung der Kosten
+    (``PDFGenerator.generate``) fragen beide hier. Zwei Wege, weil es zwei
+    Fälle gibt: Eine Zeile, die der Kern über eine Heizungsanlage gerechnet
+    hat, trägt ``billing_type == 'heizkosten'`` -- sie ist Energie, was
+    immer ihr Name vermuten lässt. Sonst entscheidet die gespeicherte
+    Nummer der Kostenart.
+    """
+    if posten.get('billing_type') == 'heizkosten':
+        return 'Energie'
+    return betrkv.rubrik(katalognummer(posten.get('category')))
+
+
 def ist_heizkosten(posten: dict) -> bool:
     """Fällt diese Position unter die HeizkostenV?
 
-    Zwei Wege, weil es zwei Fälle gibt: Eine Zeile, die der Kern über eine
-    Heizungsanlage gerechnet hat, trägt ``billing_type == 'heizkosten'``.
-    Eine Heizkostenrechnung **ohne** zugeordnete Anlage rechnet der Kern
-    nach Fläche (die Warnung W-HEIZKOSTEN-OHNE-ZUORDNUNG sagt das); sie
-    bleibt trotzdem eine Heizkostenposition, und die Nummer verrät es.
+    Eine Zeile, die der Kern über eine Heizungsanlage gerechnet hat, trägt
+    ``billing_type == 'heizkosten'``. Eine Heizkostenrechnung **ohne**
+    zugeordnete Anlage rechnet der Kern nach Fläche (die Warnung
+    W-HEIZKOSTEN-OHNE-ZUORDNUNG sagt das); sie bleibt trotzdem eine
+    Heizkostenposition, und die Nummer verrät es. Beides entscheidet
+    ``rubrik``; Heizkosten sind genau die Rubrik Energie, weil
+    ``HEIZKOSTENNUMMERN`` die Energie-Nummern der Rubriken sind (die
+    Prüfung oben im Modul hält das fest).
     """
-    if posten.get('billing_type') == 'heizkosten':
-        return True
-    return _katalognummer(posten.get('category')) in HEIZKOSTENNUMMERN
+    return rubrik(posten) == 'Energie'
 
 
 def schluessel_text(posten: dict) -> str:
