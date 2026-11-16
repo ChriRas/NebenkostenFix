@@ -322,6 +322,7 @@ from nebenkostenfix.kategorien import init_kategorien
 from flask_migrate import Migrate
 from contextlib import contextmanager
 from nebenkostenfix.validation import Eingabe, EingabeFehler, init_validation, kostenprofile
+from nebenkostenfix.zaehlerkette import vor_dem_wechseltag
 from nebenkostenfix.nutzung import VORGABE as NUTZUNG_VORGABE
 from nebenkostenfix.fehler import init_fehlerbehandlung, protokoll
 from datetime import datetime, timedelta, date
@@ -2225,6 +2226,11 @@ def create_reading():
             f'{", ".join(ABLESUNGSARTEN)}.', 'ablesungsart')
 
     meter = Meter.query.get_or_404(meter_id)
+    # Vor dem Wechseltag gehoert ein Stand an den alten Zaehler: hart, wie die
+    # Gegenrichtung im Wechseldialog, und bevor ein Foto in der Ablage liegt.
+    vorher = vor_dem_wechseltag(meter, reading_date)
+    if vorher:
+        raise EingabeFehler(vorher, 'reading_date')
     frage = _ablesung_pruefen(meter_id, reading_date, value, value_nt)
     if frage and not eingabe.wahrheit('trotzdem'):
         return jsonify({'error': frage, 'nachfrage': True}), 409
@@ -2291,6 +2297,10 @@ def update_reading(id):
     frage = None
     if (reading.reading_date, reading.value, reading.value_nt) != stand_vorher:
         try:
+            if reading.reading_date != stand_vorher[0]:
+                vorher = vor_dem_wechseltag(reading.meter, reading.reading_date)
+                if vorher:
+                    raise EingabeFehler(vorher, 'reading_date')
             frage = _ablesung_pruefen(reading.meter_id, reading.reading_date, reading.value,
                                       reading.value_nt, eigene_id=reading.id)
         except EingabeFehler:

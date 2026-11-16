@@ -731,6 +731,7 @@ def _zeile_zahlungen(z, zu, felder, aufl, hinweise):
 def _zeile_zaehlerstaende(z, zu, felder, aufl, hinweise):
     from nebenkostenfix.heizung import ABLESUNG, ZWISCHENABLESUNG
     from nebenkostenfix.models import Meter, MeterReading, db
+    from nebenkostenfix.zaehlerkette import vor_dem_wechseltag
     haus = aufl.haus(_pflicht_text(z, zu, felder['immobilie'], 100))
     nummer = _pflicht_text(z, zu, felder['zaehlernummer'], 100)
     zaehler = [m for m in Meter.query.filter_by(property_id=haus.id).all()
@@ -743,6 +744,9 @@ def _zeile_zaehlerstaende(z, zu, felder, aufl, hinweise):
     stand_nt = als_zahl(nt_roh, felder['stand_nt'].titel) if als_text(nt_roh) else None
     if stand_nt is not None and not zaehler[0].has_dual_tariff:
         raise ZeilenFehler('Stand Niedertarif: der Zähler hat nur einen Tarif.')
+    vorher = vor_dem_wechseltag(zaehler[0], datum)
+    if vorher:
+        raise ZeilenFehler(f'Ablesedatum: {vorher}')
     if any(r.reading_date == datum for r in zaehler[0].readings):
         raise ZeilenFehler(f'Ablesedatum: für {datum:%d.%m.%Y} gibt es schon einen Stand.')
     zwischen = als_wahrheit(_wert(z, zu, 'zwischenablesung'), felder['zwischenablesung'].titel)
