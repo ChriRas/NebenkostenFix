@@ -217,7 +217,10 @@ def uebersicht(posten: list[dict], *, vorauszahlungen=NULL) -> dict:
 
     Zeilen mit 0,00 € bleiben stehen (Entscheidung zur Vorlage): Für
     den Mieter ist „geprüft, trifft mich nicht" eine Information, eine
-    fehlende Zeile ist keine.
+    fehlende Zeile ist keine. Die Übersicht wirft keinen Posten weg; welche
+    Posten es gibt, entscheidet ``rechne``. Ein positiver Anteil unter einem
+    halben Cent kommt dort als Posten an und steht hier als 0,00 €; ein
+    Gutschriftanteil, der auf 0,00 € rundet, kommt gar nicht erst an.
     """
     zeilen = []
     betriebskosten = NULL

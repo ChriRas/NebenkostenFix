@@ -3575,7 +3575,13 @@ def rechne(vorgang: Vorgang) -> dict:
 
         doc_name, doc_path = beleg_angabe(inv.beleg)
 
-        if tenant_cost > 0 or billing_type in ['direkt', 'ignoriert', 'nur_allgemein']:
+        # Eine Gutschrift (negativer Rechnungsbetrag) ergibt nach Flaeche oder
+        # Personen einen negativen Anteil. Er gehoert auf das Blatt, sonst
+        # bekommt der Mieter die Rueckerstattung nicht. Ein negativer Anteil,
+        # der auf 0,00 rundet, bleibt draussen -- eine Zeile "-0,00 EUR" sagt
+        # nichts. Positive Anteile stehen wie bisher.
+        if (tenant_cost > 0 or runde(tenant_cost) < 0
+                or billing_type in ['direkt', 'ignoriert', 'nur_allgemein']):
             sub_items = []
 
             # Die Unterposten folgen dem Weg, auf dem die Beschreibung entstand

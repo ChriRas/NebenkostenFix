@@ -25,12 +25,11 @@ Die Nebenkostenabrechnung für private Vermieter. Kostenlos, und Ihre Daten blei
 
 ## Neuerungen in dieser Version
 
-Version 0.20.0: NebenkostenFix gibt es jetzt auch für den Mac, dazu Fehlerbehebungen bei Anmeldung, PDF und Beenden. Die Rechenregeln sind unverändert.
+Version 0.20.1: Fehlerbehebungen bei Gutschriften und beim Zählerwechsel, dazu neuere Bibliotheken.
 
-- Neu: Für Macs mit Apple-Chip ab macOS 15 gibt es NebenkostenFix als eigene App, zum Herunterladen auf der Projektseite. Sicherung und Umzugspaket aus der Windows-App nimmt sie ebenso an.
-- Behoben: Die Anmeldung antwortet bei einem unbekannten Benutzernamen nicht mehr schneller als bei einem falschen Passwort. So lässt sich über die Antwortzeit nicht mehr herausfinden, welche Konten es gibt.
-- Behoben: Im PDF steht eine Kostenart in der Aufstellung jetzt unter derselben Rubrik wie auf dem Übersichtsblatt, nach ihrer gespeicherten BetrKV-Nummer. Beträge und Summen ändern sich nicht.
-- Behoben: Beim Beenden fährt die App ihren eingebauten Server geordnet herunter.
+- Behoben: Eine Gutschrift, etwa eine Rückerstattung des Versorgers, die nach Wohnfläche oder Personen umgelegt wird, steht jetzt mit negativem Betrag in der Abrechnung und senkt die Summe des Mieters. Bisher fiel sie beim Mieter still heraus.
+- Behoben: Am neuen Zähler eines Zählerwechsels nimmt die App keinen Stand mehr an, der vor dem Wechseltag liegt. So bleibt der Verbrauch des alten Zählers in der Abrechnung.
+- Die mitgelieferten Bibliotheken sind auf neuem Stand.
 
 ## Produktmerkmale
 
