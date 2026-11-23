@@ -118,7 +118,7 @@ NIE_PER_SCHLUESSEL = frozenset({
     'delete_invoice_document', 'beispielimmobilie_entfernen',
     'delete_haushaltsgroesse', 'delete_heizungsanlage', 'delete_kaltmiete_soll',
     'delete_vorauszahlung_soll', 'loesche_anschreiben_vorlage',
-    'vermieter_logo_loeschen',
+    'vermieter_logo_loeschen', 'pdf_layout_zuruecksetzen',
 })
 
 # Felder, mit denen ein Anlege-Endpunkt nebenbei Bestehendes aendert. Mit

@@ -165,9 +165,10 @@ def test_paket_ist_zip_mit_allem(bestand, tmp_path):
     assert einstellungen['vermieter_umgebung'] == {'name': 'Anna Vermieterin',
                                                    'iban': 'DE02120300000000202051'}
     # Hinweis, Update-Einstellung und der Schalter wandern mit, der Zeitpunkt
-    # der letzten Suche gehoert zum Rechner (NK-174, NK-175, NK-197).
+    # der letzten Suche gehoert zum Rechner (NK-174, NK-175, NK-197). Das
+    # PDF-Layout wandert ebenfalls mit; ohne eigene Wahl steht None.
     assert einstellungen['anwendung'] == {'haftung': HAFTUNG, 'updates_automatisch': False,
-                                          'ohne_anmeldung': False}
+                                          'ohne_anmeldung': False, 'pdf_layout': None}
     # PDFs werden gespeichert, nicht noch einmal komprimiert.
     assert belegeintrag.compress_type == zipfile.ZIP_STORED
 

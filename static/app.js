@@ -2675,7 +2675,9 @@ async function saveTenant() {
         // geschicktes Feld lässt sich nie wieder leeren.
         formData.append('anschrift', document.getElementById('tenant-anschrift').value);
         formData.append('zustellanschrift', document.getElementById('tenant-zustellanschrift').value);
-        if (moveOut) formData.append('move_out_date', moveOut);
+        // Befund vom 17.11.: der Auszug geht immer mit, sonst lässt sich ein
+        // gesetztes Auszugsdatum nie wieder entfernen (leer räumt es aus).
+        formData.append('move_out_date', moveOut);
         if (lastBilled) formData.append('last_billed_until', lastBilled);
         
         const fileInput = document.getElementById('tenant-contract-file');
