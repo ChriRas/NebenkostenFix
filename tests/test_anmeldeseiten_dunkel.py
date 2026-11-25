@@ -49,3 +49,10 @@ def test_anmeldung_hat_einen_dunkelblock_mit_den_farben_der_app():
             geprueft += 1
             assert dunkel_anmeldung.get(name) == dunkel_app[name], name
     assert geprueft >= 10, 'Zu wenige gemeinsame Farben, der Vergleich greift nicht.'
+
+
+def test_dunkelblock_setzt_color_scheme_wie_die_app():
+    # Damit Eingabefelder, Autofill und Scrollleisten mitziehen. Die Anmeldeseiten
+    # bestehen fast nur aus Feldern.
+    for datei, text in (('style.css', STIL), ('anmeldung.css', ANMELDUNG)):
+        assert re.search(r'color-scheme:\s*dark\s*;', _block(text, DUNKEL) or ''), datei
