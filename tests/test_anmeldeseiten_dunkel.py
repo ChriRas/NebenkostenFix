@@ -56,3 +56,11 @@ def test_dunkelblock_setzt_color_scheme_wie_die_app():
     # bestehen fast nur aus Feldern.
     for datei, text in (('style.css', STIL), ('anmeldung.css', ANMELDUNG)):
         assert re.search(r'color-scheme:\s*dark\s*;', _block(text, DUNKEL) or ''), datei
+
+
+def test_dunkelblock_gilt_nur_am_bildschirm_wie_in_der_app():
+    # Gedruckt wird immer hell. Gleich gebaut lassen sich beide Dateien vergleichen.
+    im_bildschirm = r'@media screen\s*\{\s*(/\*.*?\*/\s*)*' + re.escape(DUNKEL)
+    for datei, text in (('style.css', STIL), ('anmeldung.css', ANMELDUNG)):
+        assert re.search(im_bildschirm, text, re.S), datei
+        assert text.count(DUNKEL) == 1, datei
