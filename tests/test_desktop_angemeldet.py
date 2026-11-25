@@ -637,3 +637,13 @@ def test_die_anleitung_zum_servermodus_erklaert_es():
     for wort in ('Angemeldet bleiben', 'Anmeldeinformationsverwaltung', 'Datei → Abmelden',
                  '30 Tage'):
         assert wort in text, wort
+
+
+def test_die_anleitung_zum_servermodus_nennt_den_schluesselbund_von_macos():
+    """Die Mac-App bringt keyring mit. Nach jedem Update fragt macOS einmal,
+    ob die App den Eintrag lesen darf (ad-hoc signiert, die Freigabe hängt am
+    cdhash; Handtest 25.11.2026)."""
+    text = ' '.join((WURZEL / 'docs' / 'servermodus.md').read_text(encoding='utf-8').split())
+    assert 'Unter macOS fehlt' not in text
+    for wort in ('Schlüsselbund', 'Immer erlauben', 'Ablehnen', 'Ablage → Abmelden'):
+        assert wort in text, wort
